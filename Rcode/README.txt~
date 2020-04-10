@@ -1,0 +1,18 @@
+File explanation:
+
+AdaptivePMCMC.R -
+CorrelationStructureExploration.R -
+Main.R -
+ModelSpecIPM.R -
+piecemealFunctions.R -
+PlottingFunctions.R -
+realSheepSMC.R -
+RejectedFunctions.R -
+SimulateData.R -
+SMC.R -
+TablesAndFigures.R -
+TraditionalSolving.R -
+unguFlat.RData -
+UngulateCaseStudy.R -
+ungulateChain.RData -
+Ungulate SMC2.R -
