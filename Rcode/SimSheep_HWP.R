@@ -1,4 +1,4 @@
-directory<-"/home/patten/Documents/Coding/Oxford/SheepModel/"
+directory<-"/home/patten/Documents/Coding/Oxford/MoutonModel/"
 
 source(paste0(directory,'Rcode/AdaptivePMCMC.R'))
 source(paste0(directory,'Rcode/SimulateData.R'))

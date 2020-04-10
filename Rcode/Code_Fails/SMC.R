@@ -540,7 +540,7 @@ particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
 ### TESTING ZONE - PLEASE DELETE WHEN POSSIBLE ###
 ##################################################
 
-directory<-"/home/patten/Documents/Coding/Oxford/SheepModel/"
+directory<-"/home/patten/Documents/Coding/Oxford/MoutonModel/"
 source(paste0(directory,"Rcode/SimulateData.R"))
 source(paste0(directory,"Rcode/piecemealFunctions.R"))
 IPMLTP<-readRDS(paste0(directory,"RDSobjects/IPMLTP"))
