@@ -9,17 +9,17 @@ library(dissPackage3)
 library(xtable)
 library(mcmcse)
 
-# itermax <- 18000
-itermax <- 20
+itermax <- 18000
+# itermax <- 15
 SMC_parts<-7000
 # nchains<-4
 # ncores<-detectCores()
-nchains<-1
-ncores<-3
-if(ncores%%nchains!=0) {
-  print("Warning: #cores/#nchains not divisible, adjusting #chains=1")
-  nchains<-1
-}
+# nchains<-4
+ncores<-4
+# if(ncores%%nchains!=0) {
+#   print("Warning: #cores/#nchains not divisible, adjusting #chains=1")
+#   nchains<-1
+# }
 
 ########################### SPECIFYING THE PRIORS ##############################
 
@@ -123,7 +123,7 @@ breaks <- seq(1.5, 3.55, l=6)[-2]
 # # Get the observations:
 # set.seed(102010)
 # simmedData <- do.call(simulateIBM, simPars)
-simmedData<-readRDS(paste0(directory,"RDSobjects/HWP/simmedData"))
+simmedData<-readRDS(paste0(directory,"RDSobjects/simmedData"))
 max.cens <- simmedData$census.number %>% max
 # Y is [size_distribution , year]
 Y <- getSizeDistns(simmedData, breaks)[,(max.cens-6):max.cens]
@@ -169,7 +169,7 @@ startValues <- list(
 # startValues %<>% unlist
 # SVjitter <- startValues + rnorm(length(startValues), 0, 0.5)
 # saveRDS(SVjitter, paste0(directory,"RDSobjects/HWP/startvals_jitter"))
-SVjitter<-readRDS(paste0(directory,"RDSobjects/HWP/startvals_jitter"))
+SVjitter<-readRDS(paste0(directory,"RDSobjects/startvals_jitter"))
 
 print("Initial Values Log-Likelihood=")
 # print(logTargetIPM(SVjitter, logTargetPars = IPMLTP, returnNeg = T, printProp = F))
@@ -216,63 +216,40 @@ clNeeds = c('logTargetIPM', '%<>%', '%>%', 'sampleNorm', 'returnConstant',
             'detectionNumObs', 'evalPriors', 'sampleStateIPM_red', 'particleFilter',
             'multnomMu', 'linLogit', 'vectorisedSamplerIPM', 'rmvnorm') 
 
-RNGkind("L'Ecuyer-CMRG")
-set.seed(201020)
+
+# proposal <- multvarNormProp; uFunc <- NULL;
+# propPars <- diag(length(SVjitter))/100;
+# #propPars <- readRDS("ObsNumSigma4.1");
+# #propPars <- propCov;
+# lTarg <- logTargetIPM; lTargPars <- IPMLTP;
+# cores <- 4; nChains <- 4;
+# x0 <- SVjitter; itermax<-itermax; prntPars <- T;
+# clNeeds <- clNeeds; packages <- "dissPackage3"
+
+
 # An example of how chains are run, using a stored proposal covariance structure
 # and then stored for iteration:
 ptm <- proc.time()
-Sheepies <- pMH(proposal = multvarNormProp, uFunc = NULL,
+Sheepies <- Nested_pMH(proposal = multvarNormProp, uFunc = NULL,
                          propPars = diag(length(SVjitter))/100,
                          #propPars = readRDS("ObsNumSigma4.1"),
                          #propPars = propCov,
                          lTarg = logTargetIPM, lTargPars = IPMLTP,
-                         cores = 1, nChains = 1,
-                         x0 = SVjitter, itermax=itermax, prntPars = T,
-                         clNeeds = clNeeds, packages = "dissPackage3")
+                         cores = 4, x0 = SVjitter, itermax=itermax,
+                         clNeeds = clNeeds, packages = "dissPackage3", prntPars=TRUE)
 ptm_fin<-proc.time() - ptm;
-print("1cpu, 1chain =")
 print(ptm_fin)
 # user  system elapsed 
 # 0.930   0.743 508.646 
 print(" ")
 
-ptm <- proc.time()
-Sheepies <- pMH(proposal = multvarNormProp, uFunc = NULL,
-                propPars = diag(length(SVjitter))/100,
-                #propPars = readRDS("ObsNumSigma4.1"),
-                #propPars = propCov,
-                lTarg = logTargetIPM, lTargPars = IPMLTP,
-                cores = 4, nChains = 4,
-                x0 = SVjitter, itermax=itermax, prntPars = T,
-                clNeeds = clNeeds, packages = "dissPackage3")
-ptm_fin<-proc.time() - ptm; 
-print("4cpu, 1chain =")
-print(ptm_fin)
-# user  system elapsed 
-# 1.119   0.905 547.417 
-print(" ")
+# Sheepies <- MH(proposal = multvarNormProp, uFunc = NULL,
+#                 propPars = diag(length(SVjitter))/100,
+#                 #propPars = readRDS("ObsNumSigma4.1"),
+#                 #propPars = propCov,
+#                 lTarg = logTargetIPM, lTargPars = IPMLTP,
+#                 x0 = SVjitter, itermax=itermax, prntPars = T)
 
-ptm <- proc.time()
-Sheepies <- pMH(proposal = multvarNormProp, uFunc = NULL,
-                propPars = diag(length(SVjitter))/100,
-                #propPars = readRDS("ObsNumSigma4.1"),
-                #propPars = propCov,
-                lTarg = logTargetIPM, lTargPars = IPMLTP,
-                cores = 4, nChains = 2,
-                x0 = SVjitter, itermax=itermax, prntPars = T,
-                clNeeds = clNeeds, packages = "dissPackage3")
-ptm_fin<-proc.time() - ptm; 
-print("4cpu, 2chains =")
-print(ptm_fin)
-# user  system elapsed 
-# 1.352   1.243 560.048
-print(" ")
-
-# uFunc = multvarPropUpdate, x0 = MLEs$par
-# plot(ungulateChainMult, cols=2:14, width=8.3*3, height=11.7*3,
-#      cex=2, names=plotNames, filePath="")
-# 
-#saveRDS(cov(ungulateChainMult[[1]][10001:20000,-1]), "../RDSobjects/ObsNumSigma4.1")
 tag<-paste0(priorName,"_its",itermax,"_",Sys.Date())
-saveRDS(Sheepies, paste0(directory,"RDSobjects/HWP/",tag))
+saveRDS(Sheepies, paste0(directory,"RDSobjects/",tag))
 
