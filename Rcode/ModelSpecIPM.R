@@ -218,7 +218,7 @@ posteriorGrowthRate <- function(chains, IPMLTP, growthFunc, offSizeFunc, L=0, U,
   
   # combine the chains together:
   samples <- chains[[1]]
-  for (i in 2:length(chains)){samples %<>% rbind(chains[[i]])}
+  if(length(chains)>1) for (i in 2:length(chains)){samples %<>% rbind(chains[[i]])}
   
   registerDoParallel(cluster)
   clusterExport(cluster, c("kernelOneVar", clNeeds))

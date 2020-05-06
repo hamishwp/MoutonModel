@@ -315,95 +315,96 @@ grDiagnostic <- function(chains){
 ######################################################################################
 
 Nested_MH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
-           clNeeds, RcppFile=NULL, prntPars=FALSE, packages = "Rcpp", cores=detectCores()){
-    # purpose : wrapper function which runs MCMC chains in parallel
-    # inputs  : nChains   - The number of chains which should be run
-    #           clNeeds   - The character names of functions which need to be 
-    #                       exported to the cluster.
-    #           RcppFile  - The Rcpp file which must be fourced for required
-    #                       Rcpp code to work
-    #           other     - for all other inputs, refer to the description given
-    #                       in the MH function.
-    # output  : A list containing the output matrices of all chains
-    # note : loads Rcpp onto the cluster by default.
-    
-    # source any required files:
-    if (!is.null(RcppFile)) Rcpp::sourceCpp(RcppFile)
+                      clNeeds, RcppFile=NULL, prntPars=FALSE, packages = "Rcpp", cores=detectCores()){
+  # purpose : wrapper function which runs MCMC chains in parallel
+  # inputs  : nChains   - The number of chains which should be run
+  #           clNeeds   - The character names of functions which need to be 
+  #                       exported to the cluster.
+  #           RcppFile  - The Rcpp file which must be fourced for required
+  #                       Rcpp code to work
+  #           other     - for all other inputs, refer to the description given
+  #                       in the MH function.
+  # output  : A list containing the output matrices of all chains
+  # note : loads Rcpp onto the cluster by default.
   
-    # Create the clusters and initiate paralellisation:
-    cl<-makeCluster(cores)
-    registerDoParallel(cl)
-    clusterExport(cl, clNeeds)
+  # source any required files:
+  if (!is.null(RcppFile)) Rcpp::sourceCpp(RcppFile)
+  
+  # Create the clusters and initiate paralellisation:
+  cl<-makeCluster(cores,outfile="")
+  registerDoParallel(cl)
+  clusterExport(cl, clNeeds)
+  
+  itermax<-ceiling(itermax/cores)*cores+1L
+  xPrev<-x0
+  n <- length(xPrev) + 1
+  output <- matrix(NA, nrow=itermax, ncol=n)
+  xNew <- matrix(NA, nrow=cores, ncol=n-1)
+  lTargNew<-alpha<-c()
+  
+  # Add the initial point, the first column of the output matrix is an 
+  # evaluation of the log Target at the sampled point:
+  output[1, ] <- c(lTarg(xPrev, lTargPars), xPrev)
+  
+  # print("Initial Value in Nested_MH = ");print(output[1,])
+  
+  it <- 2
+  while (it <= itermax){
     
-    itermax<-ceiling(itermax/cores)*cores+1L
-    xPrev<-x0
-    n <- length(xPrev) + 1
-    output <- matrix(NA, nrow=itermax, ncol=n)
-    xNew <- matrix(NA, nrow=cores, ncol=n-1)
-    lTargNew<-alpha<-c()
+    # if(prntPars & (it%%50==0)){print(paste0("Iteration ",it," = "));print(output[it-1,])}
     
-    # Add the initial point, the first column of the output matrix is an 
-    # evaluation of the log Target at the sampled point:
-    output[1, ] <- c(lTarg(xPrev, lTargPars), xPrev)
-    
-    print("Initial Value in Nested_MH = ");print(output[1,])
-    
-    it <- 2
-    while (it <= itermax){
-      
-      if(prntPars & (it%%50==0)){print(paste0("Iteration ",it," = "));print(output[it-1,])}
-      
-      # generate a proposed point:
-      for (c in 1:cores){
-        xNew[c,] <- proposal(xPrev, propPars) 
-      }
-      
-      # calculate the acceptance probability:
-      lTargNew <- foreach(c=1:cores, .packages = packages, .combine = c) %dopar%{
-        
-        to.lTargNew <- tryCatch({lTarg(xNew[c,], lTargPars)}, error=function(e) NA)
-        
-      }
-      
-      lTargOld <- output[it-1, 1]
-      alpha <- exp(lTargNew - lTargOld)
-      
-      # determine acceptance or rejection:
-      u <- runif(cores)
-      
-      for (c in 1:cores){
-        # Check that the log-likelihood was actually calculated
-        if(is.na(lTargNew[c])) {output[it+c-1,] <- output[it+c-2,] ; next}
-        # MH acceptance-rejection:
-        if (u[c]<=alpha[c]) output[it+c-1,] <- c(lTargNew[c], xNew[c,])
-        else output[it+c-1,] <- output[it+c-2,]
-      }
-      
-      # update Xt-1
-      xPrev <- output[it+cores-1,2:n]
-      
-      # update iterator:
-      it <- it + cores
+    # generate a proposed point:
+    for (c in 1:cores){
+      xNew[c,] <- proposal(xPrev, propPars) 
     }
+    
+    # calculate the acceptance probability:
+    lTargNew <- foreach(c=1:cores, .packages = packages, .combine = c) %dopar%{
       
-    # Do the tear down for the parallelisation, we exception handle it simply
-    # to silence a bunch of warnings that indicate which connections to unused
-    # ports are closed by stopping the cluster
-    try(stopCluster(cl), silent = T)
-    return(output)
-
+      to.lTargNew <- tryCatch({lTarg(xNew[c,], lTargPars)}, error=function(e) NA)
+      
+    }
+    
+    lTargOld <- output[it-1, 1]
+    alpha <- exp(lTargNew - lTargOld)
+    
+    # determine acceptance or rejection:
+    u <- runif(cores)
+    
+    for (c in 1:cores){
+      # Check that the log-likelihood was actually calculated
+      if(is.na(lTargNew[c])) {output[it+c-1,] <- output[it+c-2,] ; next}
+      # MH acceptance-rejection:
+      if (u[c]<=alpha[c]) output[it+c-1,] <- c(lTargNew[c], xNew[c,])
+      else output[it+c-1,] <- output[it+c-2,]
+    }
+    
+    # update Xt-1
+    xPrev <- output[it+cores-1,2:n]
+    
+    # update iterator:
+    it <- it + cores
+  }
+  
+  # Do the tear down for the parallelisation, we exception handle it simply
+  # to silence a bunch of warnings that indicate which connections to unused
+  # ports are closed by stopping the cluster
+  try(stopCluster(cl), silent = T)
+  return(output)
+  
 }
 
 Nested_pMH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
-                      uFunc=NULL, prntPars=FALSE, clNeeds, RcppFile=NULL,
-                      packages = "Rcpp", cores=detectCores()){
+                       uFunc=NULL, prntPars=FALSE, clNeeds, RcppFile=NULL,
+                       packages = "Rcpp", cores=detectCores()){
   
   RNGkind("L'Ecuyer-CMRG")
   set.seed(201020)
   
   if (is.null(uFunc)){
-    chain <- Nested_MH(proposal, propPars, lTarg, lTargPars, x0, itermax,
-                       clNeeds, RcppFile, packages, cores)
+    chain <- Nested_MH(proposal = proposal, propPars = propPars, lTarg = lTarg, 
+                       lTargPars = lTargPars, x0 = x0, itermax = itermax,
+                       clNeeds = clNeeds, RcppFile = RcppFile, packages = packages, cores = cores)
     return(chain)
   }
   
@@ -426,8 +427,9 @@ Nested_pMH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
       if (prntPars) print(propPars)
       
       # run the chain:
-      chain <- Nested_MH(proposal, propPars, lTarg, lTargPars, x0, im,
-                   clNeeds, RcppFile, packages, cores)
+      chain <- Nested_MH(proposal = proposal, propPars = propPars, lTarg = lTarg, 
+                         lTargPars = lTargPars, x0 = x0, itermax = im,
+                         clNeeds = clNeeds, RcppFile = RcppFile, packages = packages, cores = cores)
       # add the samples to the output matrix
       output <- rbind(output, chain)
       
@@ -447,4 +449,3 @@ Nested_pMH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
   }
   
 }
-
