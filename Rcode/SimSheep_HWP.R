@@ -1,4 +1,4 @@
-directory<-"/home/patten/Documents/Coding/MoutonModel/"
+directory<-"/home/patten/Documents/Coding/Oxford/MoutonModel/"
 
 list.of.packages <- c("mcmcse","xtable","mvtnorm","magrittr","doParallel")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
@@ -15,13 +15,17 @@ library(dissPackage3)
 library(xtable)
 library(mcmcse)
 
-itermax <- 18000
+namer<-"gro3params_11yrs_vals_ufunc_10000its"
+propCov<-readRDS(paste0(directory,"gro")) #+ diag(13)*1/100
+
+#itermax <- 18000
+itermax <- 10000
 #itermax <- 33
-SMC_parts<-7000
+SMC_parts<-6500
 # nchains<-4
 # ncores<-detectCores()
 # nchains<-4
-ncores<-4
+ncores<-7
 # if(ncores%%nchains!=0) {
 #   print("Warning: #cores/#nchains not divisible, adjusting #chains=1")
 #   nchains<-1
@@ -32,6 +36,7 @@ ncores<-4
 priorName<-"uniform"
 
 priorsIPM<-switch(priorName,uniform=rep("dunif", 14),cauchy=rep("dcauchy", 14),normal=rep("dnorm", 14),stop("Prior distribution not recognised"))
+
 # Setup the prior names:
 listy<-switch(priorName,uniform=list(min=-50, max=50),cauchy=list(location=0,scale=0.15),normal=list(mean=10,sd=10),stop("Prior distribution not recognised"))
 # Setup the prior hyper par values:
@@ -63,6 +68,27 @@ flatPriors <- list(
   # qlogis(probability of detection of an animal):
   obsProb=list(min=1, max=50)
 )
+
+########################### MAKE THE START VALUES ##############################
+startValues <- list(
+  survPars = c(-9.65, 3.77),
+  growthPars = c(1.41, 0.56, log(0.08)),
+  reprPars = c(-7.23, 2.6),
+  offNumPars = 1,
+  offSizePars = c(0.36, 0.71, log(0.16)),
+  Schild = qlogis(0.873), 
+  obsProbPar = 10 # not too close to 50 since this will hurt the chain
+)
+
+########################### AUTOCALCULATE START VALUES ##############################
+
+
+########################### CALCULATE EXPECTATION VALUES ##############################
+# for (i in 1:length(flatPriors)){
+#   
+#   
+#   
+# }
 
 skeleton = list(
   survPars = rep(NA, 2),
@@ -132,7 +158,7 @@ breaks <- seq(1.5, 3.55, l=6)[-2]
 simmedData<-readRDS(paste0(directory,"RDSobjects/simmedData"))
 max.cens <- simmedData$census.number %>% max
 # Y is [size_distribution , year]
-Y <- getSizeDistns(simmedData, breaks)[,(max.cens-6):max.cens]
+Y <- getSizeDistns(simmedData, breaks)[,(max.cens-12):max.cens]
 
 #################### CREATE THE LOGTARGETPARAMETERS OBJECT #####################
 # readRDS(paste0(directory,"RDSobjects/IPMLTP"))
@@ -160,22 +186,16 @@ IPMLTP <- list(
 
 # saveRDS(IPMLTP, "IPMLTP")
 
-########################### MAKE THE START VALUES ##############################
-
-startValues <- list(
-  survPars = c(-9.65, 3.77),
-  growthPars = c(1.41, 0.56, log(0.08)),
-  reprPars = c(-7.23, 2.6),
-  offNumPars = 1,
-  offSizePars = c(0.36, 0.71, log(0.16)),
-  Schild = qlogis(0.873), 
-  obsProbPar = 10 # not too close to 50 since this will hurt the chain
-)
-
-# startValues %<>% unlist
+startValues %<>% unlist
 # SVjitter <- startValues + rnorm(length(startValues), 0, 0.5)
 # saveRDS(SVjitter, paste0(directory,"RDSobjects/HWP/startvals_jitter"))
 SVjitter<-readRDS(paste0(directory,"RDSobjects/startvals_jitter"))
+
+vals<-startValues
+vals[3:5]<-SVjitter[3:5]
+print(vals)
+print(startValues)
+print(SVjitter)
 
 print("Initial Values Log-Likelihood=")
 # print(logTargetIPM(SVjitter, logTargetPars = IPMLTP, returnNeg = T, printProp = F))
@@ -236,15 +256,17 @@ clNeeds = c('logTargetIPM', '%<>%', '%>%', 'sampleNorm', 'returnConstant',
 # An example of how chains are run, using a stored proposal covariance structure
 # and then stored for iteration:
 ptm <- proc.time()
-Sheepies <- Nested_pMH(proposal = multvarNormProp, uFunc = NULL,
-                         propPars = diag(length(SVjitter))/100,
+Sheepies <- Nested_pMH(proposal = multvarNormProp, uFunc = multvarPropUpdate,
+                         #propPars = diag(length(SVjitter))/100,
                          #propPars = readRDS("ObsNumSigma4.1"),
-                         #propPars = propCov,
+                         propPars = propCov,
                          lTarg = logTargetIPM, lTargPars = IPMLTP,
-                         cores = ncores, x0 = SVjitter, itermax=itermax,
+                         cores = ncores, 
+                         x0 = vals, #x0 = unlist(startValues),
+                         itermax=itermax,
                          clNeeds = clNeeds, packages = "dissPackage3", prntPars=TRUE)
 ptm_fin<-proc.time() - ptm;
-print(paste0("ncpus= 7 : ",ptm_fin))
+print(paste0("ncpus= ",ncores," : ",ptm_fin))
 
 # SANN <-  optim(SVjitter, logTargetIPM, logTargetPars = IPMLTP, returnNeg = T,
 #                method = "SANN", control = list(maxit = 1000), printProp = T,
@@ -257,53 +279,61 @@ print(paste0("ncpus= 7 : ",ptm_fin))
 #                 lTarg = logTargetIPM, lTargPars = IPMLTP,
 #                 x0 = SVjitter, itermax=itermax, prntPars = T)
 
-tag<-paste0(priorName,"_its",itermax,"_",Sys.Date(),"_",ceiling(runif(1)*1000))
+tag<-paste0(namer,"_",priorName,"_its",itermax,"_",Sys.Date())
 saveRDS(Sheepies, paste0(directory,"Results/",tag))
-
+# 
 # MLE<-readRDS("./Results/MLE_svjitter")
-# Sheepies<-readRDS("./Results/uniform_its18000_2020-04-18")
+# Sheepies<-list(
+#   readRDS("./Results/uniform_its18000_2020-04-18")[1:18001,],
+#   readRDS("./Results/uniform_its18000_2020-05-08_565"),
+#   readRDS("./Results/uniform_its18000_2020-05-10_565"),
+#   readRDS("./Results/uniform_its18000_2020-05-11_565")
+# )
 # 
-# chosenChain<-list(Sheepies)
 # 
+# chosenChain<-Sheepies
+# class(gro)<- 'pMCMCoutput'
+# class(off)<- 'pMCMCoutput'
+# chosenChain<-list(gro,off)
 # 
-# 
-# 
+# multvarNormProp(unlist(startValues),multvarPropUpdate(off))
 # 
 # getAcceptance(chosenChain)
 # 
 # # make plots for the first three parameters as figures for the writeup:
 # chainFirst3 <- rep(NA, 3) %>% list
-# chainFirst3[[1]] <- chosenChain[[1]][,2:4] 
+# chainFirst3[[1]] <- chosenChain[[1]][,4:6]
 # class(chainFirst3) <- 'pMCMCoutput'
-# F3plotNames <- plotNames[1:3]
+# F3plotNames <- plotNames[4:6]
 # 
-# plot(chainFirst3, cols = 2:3, width=8.3*3*(0.3), height=11.7*1.5*(0.3),
+# plot(chainFirst3, cols = 1:3, width=8.3*3*(0.3), height=11.7*1.5*(0.3),
 #      cex=1, names=F3plotNames, filePath="chainFirst3_")
 # 
 # # plot chain before thinning:
 # plot(chosenChain[[1]], cols=2:14, width=8.3*3, height=11.7*3,
-#      cex=2, names=plotNames, filePath="")
+#      cex=1, names=plotNames, filePath="")
 # 
-# # plot chain after thinning:
-# thinnedChosen <- thinMCMC(chosenChain, alpha = 0.1)
-# plot(thinnedChosen, cols=2:14, width=8.3*3, height=11.7*3,
-#      cex=2, names=plotNames, filePath="")
-# 
-# # sub-plot for the write-up:
-# plot(thinnedChosen, cols=c(2,4,7,10,13,14), width=8, height=8,
-#      cex=2, names=plotNames[c(1,2,4,7,10,13,14)], filePath="")
+# # # plot chain after thinning:
+# # thinnedChosen <- thinMCMC(chosenChain, alpha = 0.1)
+# # plot(thinnedChosen, cols=2:14, width=8.3*3, height=11.7*3,
+# #      cex=2, names=plotNames, filePath="")
+# # 
+# # # sub-plot for the write-up:
+# # plot(thinnedChosen, cols=c(2,4,7,10,13,14), width=8, height=8,
+# #      cex=2, names=plotNames[c(1,2,4,7,10,13,14)], filePath="")
 # 
 # # effective sample sizes for the chains:
-# multiESS(thinnedChosen[[1]][,-1])
+# multiESS((chosenChain[[1]][,4:6]))
+# multiESS((chosenChain[[2]][,10:12]))
 # # combine the thinned chain samples together:
 # combinedChosen <- thinnedChosen[[1]]
-# for (i in 2:4) combinedChosen <- rbind(combinedChosen, thinnedChosen[[i]])
+# for (i in 2:length(chosenChain)) combinedChosen <- rbind(combinedChosen, thinnedChosen[[i]])
 # 
 # # apply link functions:
 # returnSelf <- function(x) x
 # links <- rep('returnSelf', 13)
 # links[c(5,11)] <- 'exp'
-# links[12:13] <- 'plogis'
+# links[c(8,12,13)] <- 'plogis'
 # for (i in 2:14) combinedChosen[,i] <- match.fun(links[i-1])(combinedChosen[,i])
 # 
 # # get the MAP parameters:
@@ -320,9 +350,25 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 # simulated <- c(-9.65, 3.77, 1.41, 0.56, 0.08, -7.23,
 #                2.6, 1, 0.36, 0.71, 0.16, 0.873, 1)
 # 
-# MLE<-MLE$par
+# tMLE<-MLE$par
+# # SVjitter[5]<-exp(SVjitter[5]); SVjitter[11]<-exp(SVjitter[11]);
+# # SVjitter[12]<-plogis(SVjitter[12]); SVjitter[8]<-plogis(SVjitter[8]); SVjitter[13]<-plogis(SVjitter[13]);
+# tMLE[5]<-exp(tMLE[5]); tMLE[11]<-exp(tMLE[11]);
+# tMLE[12]<-plogis(tMLE[12]); tMLE[8]<-plogis(tMLE[8]); tMLE[13]<-plogis(tMLE[13]);
+# # means[5]<-exp(means[5]); means[11]<-exp(means[11]);
+# # means[12]<-plogis(means[12]); means[8]<-plogis(means[8]); means[13]<-plogis(means[13]);
+# # medis[5]<-exp(medis[5]); medis[11]<-exp(medis[11]);
+# # medis[12]<-plogis(medis[12]); medis[8]<-plogis(medis[8]); medis[13]<-plogis(medis[13]);
+# # MAP[5]<-exp(MAP[5]); MAP[11]<-exp(MAP[11]);
+# # MAP[12]<-plogis(MAP[12]); MAP[8]<-plogis(MAP[8]); MAP[13]<-plogis(MAP[13]);
+# # lower[5]<-exp(lower[5]); lower[11]<-exp(lower[11]);
+# # lower[12]<-plogis(lower[12]); lower[8]<-plogis(lower[8]); lower[13]<-plogis(lower[13]);
+# # upper[5]<-exp(upper[5]); upper[11]<-exp(upper[11]);
+# # upper[12]<-plogis(upper[12]); upper[8]<-plogis(upper[8]); upper[13]<-plogis(upper[13]);
 # 
-# summaries <- data.frame(simulated = simulated, MLE=MLE, MAP = MAP, mean = means,
+# # summaries <- data.frame(simulated = simulated, SVjitter=SVjitter, MLE=tMLE, MAP = MAP, mean = means,
+# #                         median = medis, lower = lower, upper = upper)
+# summaries <- data.frame(simulated = simulated, MAP = MAP, mean = means,
 #                         median = medis, lower = lower, upper = upper)
 # 
 # rownames(summaries) <- c("survival.i", "survival.g", "growth.i", "growth.g",
@@ -332,6 +378,7 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 # 
 # xtable(t(summaries)[,c(1:5, 13)])
 # xtable(t(summaries)[,-c(1:5, 13)])
+
 # 
 # # posterior growth rate distn from the samples:
 # cluster <- makeCluster(4)

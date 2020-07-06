@@ -330,11 +330,6 @@ Nested_MH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
   # source any required files:
   if (!is.null(RcppFile)) Rcpp::sourceCpp(RcppFile)
   
-  # Create the clusters and initiate paralellisation:
-  cl<-makeCluster(cores,outfile="")
-  registerDoParallel(cl)
-  clusterExport(cl, clNeeds)
-  
   itermax<-ceiling(itermax/cores)*cores+1L
   xPrev<-x0
   n <- length(xPrev) + 1
@@ -344,14 +339,19 @@ Nested_MH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
   
   # Add the initial point, the first column of the output matrix is an 
   # evaluation of the log Target at the sampled point:
+  lTarg(xPrev, lTargPars)
   output[1, ] <- c(lTarg(xPrev, lTargPars), xPrev)
+  #print("Initial Value in Nested_MH = ");print(output[1,])
   
-  # print("Initial Value in Nested_MH = ");print(output[1,])
+  # Create the clusters and initiate paralellisation:
+  cl<-makeCluster(cores,outfile="")
+  registerDoParallel(cl)
+  clusterExport(cl, clNeeds)
   
   it <- 2
   while (it <= itermax){
     
-    # if(prntPars & (it%%50==0)){print(paste0("Iteration ",it," = "));print(output[it-1,])}
+    if(prntPars & (it%%100==0)){print(paste0("Iteration ",it," = "));print(output[it-1,])}
     
     # generate a proposed point:
     for (c in 1:cores){
@@ -362,10 +362,10 @@ Nested_MH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
     lTargNew <- foreach(c=1:cores, .packages = packages, .combine = c) %dopar%{
       
       to.lTargNew <- tryCatch({lTarg(xNew[c,], lTargPars)}, error=function(e) NA)
-      
     }
     
     lTargOld <- output[it-1, 1]
+    print(lTargOld)
     alpha <- exp(lTargNew - lTargOld)
     
     # determine acceptance or rejection:
@@ -410,7 +410,7 @@ Nested_pMH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
   
   # otherwise, we perform adaptive MCMC:
   else{
-    output <- matrix(NA, nrow=1, byrow=T)
+    output <- NULL
     
     # We perform the MCMC in three phases. An inital warmup phase (lasting 25%
     # of itermax), follOwed by an adaptation phase, where we use the warmup
@@ -424,7 +424,7 @@ Nested_pMH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
     
     for (im in indices){
       # Optionally display the proposal parameters:
-      if (prntPars) print(propPars)
+      # if (prntPars) print(propPars)
       
       # run the chain:
       chain <- Nested_MH(proposal = proposal, propPars = propPars, lTarg = lTarg, 
