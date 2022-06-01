@@ -1,33 +1,29 @@
-# directory<-"/home/patten/Documents/Coding/Oxford/MoutonModel/"
+#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#
+#@@@                                                                           @@@#
+#@@@                      Soay Sheep Bayesian-IPM Model                        @@@#
+#@@@                                                                           @@@#
+#@@@                             Hamish Patten                                 @@@#
+#@@@                      Postdoc - Biodemography Group                        @@@#
+#@@@                        Department of Statistics                           @@@#
+#@@@                          University of Oxford                             @@@#
+#@@@                                                                           @@@#
+#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#
+
 directory<-paste0(getwd(),"/")
+# Load the packages required for the code, and install them if they don't already exist
+source(paste0(directory,'Rcode/GetPackages.R'))
 
-list.of.packages <- c("xtable","magrittr","doParallel","Rfast","mc2d", 
-                      "abind")
-new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
-print(new.packages)
-if(length(new.packages)>0) install.packages(new.packages)
-
-# if(length(list.of.packages[!("mvtnorm" %in% installed.packages()[,"Package"])])){devtools::install_github("rCarto/osrm")}
-
-source(paste0(directory,'Rcode/AdaptivePMCMC.R'))
-source(paste0(directory,'Rcode/SimulateData.R'))
-source(paste0(directory,'Rcode/ModelSpecIPM.R'))
-source(paste0(directory,'Rcode/piecemealFunctions.R'))
-source(paste0(directory,'Rcode/SMC.R'))
-source(paste0(directory,'Rcode/SoaySheepData.R'))
-library(dissPackage3)
-library(xtable)
-# library(mcmcse)
-library(tidyverse)
-library(magrittr)
-
+###################################################################################
+################# Load the parameters required for the simulation #################
+###################################################################################
+# Are we using the real Soay sheep data or are we simulating it?
 simulation<-T
-poptot<-100
-yearing<-10
+# SIMULATION PARAMETERS - UNUSED IF simulation = F
+poptot<-100; yearing<-10 # The total population and the number of years for the simulation
 # Is the population counted one sex or two?
 oneSex<-T
 # Is the observation probability an empirically-based fixed value or sampled as a R.V.?
-fixedObsProb<-F
+fixedObsProb<-T
 # Read in the Soay sheep data
 lSHEEP<-GetSoaySheep(directory,oneSex=oneSex)
 # Number of MCMC simulations
@@ -37,14 +33,22 @@ ncores<-1
 # Define the number of size class bins
 nbks<-10
 # Particle filter initialisation function
-muModel<-'poisson' # 'multinomial'
+muModel<-'poisson' #'multinomial'
 # Observation Model
-obsModel<-'binomial' #'binomial' # 'multinomial' #'poisson'
-manshift<-T
+obsModel<-'binomial' # 'multinomial' #'poisson'
+# Do we automatically calculate the shift in the staggered grid of the size-class bins, based on the IPM kernal?
+manshift<-F
 # For the individual and offspring growth function - normal or truncated normal, or otherwise?
-normsampler<-"sampleDTN" # 'sampleNorm'
+normsampler<-"sampleDTN"
 
-namer<-paste0(ifelse(simulation,paste0("SIM_pop",poptot,"_yr",yearing),"REAL"),"_GSF_",ifelse(fixedObsProb,"fixed","beta"),"_",muModel,"Mu_",obsModel,"Obs_GLMx0_",itermax,"_",nbks,"brks_",normsampler,"_",ifelse(manshift,"manshift","autoshift"))
+# Use these parameters to create a name for the output file from the simjulation
+namer<-paste0(ifelse(simulation,paste0("SIM_pop",poptot,"_yr",yearing),"REAL"),
+              "_GSF_",ifelse(fixedObsProb,"fixed","beta"),"_",muModel,"Mu_",obsModel,
+              "Obs_GLMx0_",itermax,"_",nbks,"brks_",normsampler,"_",ifelse(manshift,"manshift","autoshift"))
+
+###################################################################################
+###################################################################################
+###################################################################################
 
 # Skeleton frame for the parameterisation vector
 skeleton = list(
@@ -55,7 +59,6 @@ skeleton = list(
   offSizePars = rep(NA, 3),
   Schild = NA
 )
-
 
 # Link functions to be used
 returnSelf <- function(x) x
@@ -88,32 +91,24 @@ IPMLTP <- list(
   offSizeSamp = match.fun(normsampler)
 )
 
-#if(normsampler=="sampleDTN") {
+if(normsampler=="sampleDTN") {
   IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- doublyTruncatedNormal
-#}else growthFunc <- offSizeFunc <- normal
+}else growthFunc <- offSizeFunc <- normal
 
+# Get the sheep counts and sizes
+lSHEEP<-GetSoaySheep_binned(lSHEEP,shift=shift,oneSex=T,nbks=nbks)  
+  
 L<-min(c(lSHEEP$solveDF$prev.size, lSHEEP$solveDF$size),na.rm = T)
 U<-max(c(lSHEEP$solveDF$prev.size, lSHEEP$solveDF$size),na.rm = T)
 
 # Make the inital values using the piecemeal GLM approach
 x0<-do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb)))
-# x0<-readRDS(paste0(directory,"/Results/x0_GSF_fixed_multMu_multObs_GLMx0"))
-# x0<-readRDS("./Results/x0_GSF_fixed_multMu_multObs_GLMx0_nbks15_autoshift")
-# x0<-c(tx0,x0[(length(x0)-1):length(x0)])
 
 # Number of parameters
 Np<-length(x0)
 
 # Import covariance matrix:
-# propCOV<-readRDS("./Results/propCOV_GSF_fixed_multMu_multObs_GLMx0_nbrks15_autoshift")
-# propCOV<-matrix(0,nrow = length(x0),ncol = length(x0))
-# diag(propCOV)<-length(x0)/1000
-# propCOV[1:nrow(tpropCOV),1:nrow(tpropCOV)]<-tpropCOV
 propCOV<-diag(Np)/60
-# diag(propCOV)[c(4,13,14)]<-0.001
-# diag(propCOV)[13:14]<-c(1e-3,1e-3)
-# propCOV<-readRDS(paste0(directory,"/Results/propCOV_GSF_fixed_multMu_multObs_GLMx0"))
-# propCOV<-readRDS(paste0(directory,"/Results/propCOV_fixedObsP_MH_GSF_poisO_Mult"))
 
 # Observed Probability Beta Shape Param 1 & 2
 if(!fixedObsProb) IPMLTP$links%<>%c('exp','exp')
@@ -124,8 +119,6 @@ x0%<>%relist(skeleton = IPMLTP$skeleton)
 if(!manshift) {shift<-CalcShift_Kernel(x0,IPMLTP,nbks,oneSex,L,U)
 } else shift<-0.5
 print(paste0("Grid shift = ",shift, " for ",nbks," number of breaks." ))
-# Get the sheep counts and sizes
-lSHEEP<-GetSoaySheep_binned(lSHEEP,shift=shift,oneSex=T,nbks=nbks)
 
 if(simulation) {
     

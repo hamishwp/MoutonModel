@@ -1,12 +1,3 @@
-# directory<-"/home/patten/Documents/Coding/Oxford/MoutonModel/"
-directory<-paste0(getwd(),"/")
-setwd(directory)
-
-library(tidyverse)
-library(magrittr)
-library(dissPackage3)
-library(pracma)
-source(paste0(directory,'Rcode/SMC.R'))
 
 GetSoaySheep <-function(directory="/home/patten/Documents/Coding/Oxford/MoutonModel/",oneSex=T){
 
@@ -38,8 +29,12 @@ GetSoaySheep <-function(directory="/home/patten/Documents/Coding/Oxford/MoutonMo
   detectedLiveFemales <- SHEEP%>%filter(survived==1)%>%group_by(census.number)%>%
     summarise(detectedNum=length(size),.groups = 'drop_last')%>%pull(detectedNum)%>%unname()
   
+  L<-min(c(SHEEP$prev.size, SHEEP$size),na.rm = T)
+  U<-max(c(SHEEP$prev.size, SHEEP$size),na.rm = T)
+  
   return(list(solveDF=SHEEP,
-              detectedNum=detectedLiveFemales))
+              detectedNum=detectedLiveFemales,
+              L=L,U=U))
   
 }
 
@@ -73,3 +68,22 @@ GetSoaySheep_binned <-function(SHEEP,shift=0.49,oneSex=T,nbks=10){
   return(SHEEP)
   
 }
+
+###################################################################################
+####################### Load data and the initial values ##########################
+###################################################################################
+# Read in the Soay sheep data
+lSHEEP<-GetSoaySheep(directory,oneSex=oneSex)
+# Make the inital values using the piecemeal GLM approach
+x0<-do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb)))
+# Number of parameters
+Np<-length(x0)
+# Import covariance matrix:
+propCOV<-diag(Np)/60
+# Calculate the shift factor that offsets the size class mid-point
+if(!manshift) {shift<-CalcShift_Kernel(x0,IPMLTP,nbks,oneSex,lSHEEP$L,lSHEEP$U)
+} else shift<-0.5
+print(paste0("Grid shift = ",shift, " for ",nbks," number of breaks." ))
+# Get the sheep counts and sizes from the actual data (required even if simulated data is used)
+lSHEEP<-GetSoaySheep_binned(lSHEEP,shift=shift,oneSex=T,nbks=nbks)  
+

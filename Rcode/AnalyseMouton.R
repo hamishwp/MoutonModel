@@ -15,7 +15,6 @@ library(tidyverse)
 # devtools::install_github('harrelfe/Hmisc')
 library(Hmisc)
 library(corrplot)
-install.packages(c("coda","bayesplot"))
 
 # Is the observation probability a fixed or random effects model?
 fixedObsProb<-F
@@ -709,16 +708,67 @@ q<-q+facet_wrap(. ~ Variable,scales = "free") + theme(strip.text.x = element_tex
   xlab("MCMC Sample Value")+ylab("Density")+
   theme(plot.title = element_text(hjust = 0.5)) ;q
 
-FormPostSheep<-function(namer){
+FormPostSheep<-function(namer,chains=F,fixed=F){
   
   filerz<-list.files("./Results/",pattern = namer)
+  if(fixed) plotNam<-plotNames[-13] else plotNam<-plotNamesEx
   
   output<-c()
-  for (i in 1:length(filerz)) output%<>%rbind(readRDS(paste0("./Results/",filerz[i])))
-  colnames(output)<-colnames(output)<- c("Log-Target",plotNamesEx)
-
-  return(output)  
+  if(!chains){
+    for (i in 1:length(filerz)) output%<>%rbind(readRDS(paste0("./Results/",filerz[i])))
+    colnames(output)<-colnames(output)<- c("Log-Target",plotNam)
+  } else {
+    for (i in 1:length(filerz)) {
+      tmp<-readRDS(paste0("./Results/",filerz[i]))
+      colnames(tmp)<- c("Log-Target",plotNam)
+      tmp%<>%mcmc()
+      output%<>%c(list(tmp))
+    }
+    
+    return(output)  
+  }
 }
+
+vals<-c(-8.25, 3.77,
+        1.41, 0.56, log(0.08),
+        -7.23, 2.6,
+        log(0.06),
+        0.36, 0.71, log(0.16),
+        qlogis(0.9),
+        log(50),
+        log(10)
+)
+
+# namer<-"SIM_pop100_yr10_GSF_beta_poissonMu_multinomialObs_GLMx0_10000_15brks_autoshift_uniform_its10000_2021-12"
+namer<-"SIM_pop300_yr10_GSF_beta_poissonMu_multinomialObs_GLMx0_10000_10brks_autoshift_uniform_its10000_2021-12-"
+out<-FormPostSheep(namer)
+plot(out[,1])
+
+vals
+unname(apply(out,2,weighted.mean,w=out[,1]))[2:15]
+unname(colMeans(out))[2:15]
+
+namer<-"REAL_GSF_fixed_multMu_MultObs_GLMx0_final_10brks_autoshift_uniform_its20000_2021-12-1"
+
+ExploreSheep<-function(namer){
+  out<-FormPostSheep(namer,chains = T)
+  outy<-grDiagnostic(out)
+  # Number of effective samples
+  Neff<-effectiveSize(out)
+  # Rhat - Gelman-Rubin convergence parameter
+  Rhat<-gelman.diag(out)$psrf[,1]
+  # p-value & MSE determination
+  
+}
+
+
+
+
+
+
+
+
+
 
 
 
@@ -851,21 +901,6 @@ for (ppp in pop){
   }
   
 }
-
-
-
-
-# # For multiple chains per simulation, we can add the results together
-# apply(Sheep1[,-1],2,rstan::ess_bulk)+apply(Sheep2[,-1],2,rstan::ess_bulk)+apply(Sheep3[,-1],2,rstan::ess_bulk)
-# apply(Sheep1[,-1],2,rstan::ess_tail)+apply(Sheep2[,-1],2,rstan::ess_tail)+apply(Sheep3[,-1],2,rstan::ess_tail)
-
-
-
-
-
-
-
-
 
 
 

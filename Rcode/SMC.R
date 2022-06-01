@@ -648,7 +648,7 @@ particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
     if(any(is.na(logw[,time]))) {
       print("X=")
       print(rowMeans(prevStates))
-      print("Y[t=",time,"]=")
+      print(paste0("Y[t=",time,"]="))
       print(Y[,time])
       print("ObsProbPar=")
       print(obsProbPar)

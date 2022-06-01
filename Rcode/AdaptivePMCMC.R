@@ -312,7 +312,7 @@ getAcceptance <- function(pMCMCoutput, start = 1, end = NULL){
   return(output)
 }
 
-grDiagnostic <- function(chains){
+grDiagnostic <- function(chains,plotty=T){
   # purpose : Uses the CODA library to conduct a Gelman-Rubin test for MCMC
   #           convergence
   # inputs  : A list conatining the reult of the MCMC chains, assuming that
@@ -321,7 +321,8 @@ grDiagnostic <- function(chains){
   require(coda)
   thinnednl <- lapply(chains, function(x) x[,-1])
   combined <- thinnednl %>% lapply(FUN=mcmc) %>% do.call(what=mcmc.list)
-  gelman.plot(combined)
+  if(plotty) return(gelman.plot(combined))
+  return(combined)
 }
 
 ######################################################################################
