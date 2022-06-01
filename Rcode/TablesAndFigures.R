@@ -150,64 +150,69 @@ legend(x='topleft', legend=c("True population size",
       "Simulated Trajectory Mean and 2.5% quantiles"),fill=c(4,5))
 
 ########################### COMPARING GRAIN SIZE ###############################
-repeats <- 100
-simTime <- 10
+repeats <- 20
+simTime <- 13
 sizeSet <- c(5, 10, 25, 50, 200)
 results <- matrix(NA, nrow = length(sizeSet) + 1, ncol = simTime)
 
 set.seed(101010)
 
-simIBM <- simulateIBM(n=500, t=simTime*10,
-                      # set survival details:
-                      survFunc = linLogit, survPars = c(-9.65, 3.77),
-                      # set growth details:
-                      growthSamp = sampleDTN,
-                      growthPars = c(1.41, 0.56, log(0.08), 1.5, 3.55),
-                      # set reproduction details:
-                      reprFunc = linLogit, reprPars = c(-7.23, 2.6),
-                      # set offspring number and size distribution deets:
-                      offNum=1, offSizeSamp = sampleDTN,
-                      offSizePars = c(0.36, 0.71, log(0.16), 1.5, 3.55),
-                      # Child survival probability:
-                      Schild=0.873,
-                      # set other miscelaneous parameters:
-                      Start=readRDS("startSizes") %>%
-                        sample(500, replace=T), thresh=50000,
-                      OneGend = TRUE, popPrint = F)
+simParsOrig <- list(n=100, t=5000,
+                # set survival details:
+                survFunc = linLogit, survPars = c(-9.65, 3.77),
+                # set growth details:
+                growthSamp = sampleDTN,
+                growthPars = c(1.41, 0.56, 0.08, 1.5, 3.55),
+                # set reproduction details:
+                reprFunc = linLogit, reprPars = c(-7.23, 2.6),
+                # set offspring number and size distribution details:
+                offNumPars=1, offNumSamp=returnConstant,
+                offSizeSamp = sampleDTN,
+                offSizePars = c(0.36, 0.71, 0.16, 1.5, 3.55),
+                # Child survival probability:
+                Schild=0.873, obsProb=0.999,
+                # set other miscelaneous parameters:
+                Start = 2.7, thresh=1000, OneGend = T,
+                popPrint = F, verbose=F)
 
+simIBM <- do.call(simulateIBM, simParsOrig)
+
+shift<-0.6
+nbks<-6
+breaks <- seq(1.5, 3.55, l=nbks)
+  
 sizeDists <- getSizeDistns(simIBM, breaks)
 sizeDists <- sizeDists[,(ncol(sizeDists)-simTime+1):ncol(sizeDists)]
 results[1,] <- apply(sizeDists, 2, sum)
 
+simPars <- c(simParsOrig[3:14],list(oneSex=T,checks = FALSE,verbose = FALSE))
+  # %<>% c(list(oneSex = simPars$OneGend, breaks = breaks, shift=qlogis(0.49)))
+obsProb<-simParsOrig$obsProb;simPars$obsProb<-NULL
+
 for (j in 1:length(sizeSet)){
   resultsj <- matrix(NA, nrow=repeats, ncol=simTime)
   for (i in 1:repeats){
-    breaks2 <- seq(1.5, 3.55, l=sizeSet[j]+1)
+    breaks <- seq(1.5, 3.55, l=sizeSet[j]+1)
   
-    simPars <- list(
-      survFunc = linLogit, survPars = c(-9.65, 3.77),
-      growthSamp = sampleDTN, growthPars = c(1.41, 0.56, log(0.08), 1.5, 3.55),
-      reprFunc = linLogit, reprPars = c(-7.23, 2.6), 
-      offSizeSamp = sampleDTN, offSizePars = c(0.36, 0.71, log(0.16), 1.5, 3.55),
-      offNumSamp = returnConstant, offNumPars = 1,
-      Schild=qlogis(0.873), oneSex = T, breaks = breaks2, shift=qlogis(0.445))
-  
+    simPars$breaks<-breaks
+    simPars$sizes<-breaks[-(length(breaks))] + shift*diff(breaks)
+    
     startSize <- results[1, 1]
-    sizeDists <- getSizeDistns(simIBM, breaks2)
+    sizeDists <- getSizeDistns(simIBM, breaks)
     sizeDists <- sizeDists[,(ncol(sizeDists)-simTime+1):ncol(sizeDists)]
     startDistn <- sizeDists[,1]/sum(sizeDists[,1])
-    resultsj[i,] <- projectStateSpace(sampleStateIPM, simPars,
-      multnomMu(startSize, startDistn), simTime - 1) %>% apply(2, sum)
+    resultsj[i,] <- projectStateSpace(sampleStateIPM_red, simPars,
+      multnomMu(popSize = startSize, probs = startDistn,pobs = simParsOrig$obsProb), simTime - 1) %>% apply(2, sum)
   }
   
   results[j+1, ] <- apply(resultsj, 2, mean)
 }
 
-plot(results[2,], type='l', col=adjustcolor(2, alpha=0.5), lwd=2,
+plot(results[1,], type='l', col=adjustcolor(2, alpha=0.5), lwd=2,
      ylab='Population size', lty=2,
-     xlab="Census number", ylim = c(4500, 6600))
+     xlab="Census number")
 
-for (i in 2:length(sizeSet)){
+for (i in 1:length(sizeSet)){
   lines(results[i+1,], col=adjustcolor(col=i+1, alpha=0.5), lwd=2, lty=2)
 }
 
@@ -215,61 +220,61 @@ legend('topleft', fill = adjustcolor(col = 2:(length(sizeSet)+1), alpha = 0.5),
        legend = as.character(sizeSet), bty = 'n', horiz = T,
        title = "Number of Size Classes")
 
+results
 
 ####### MAKE A PLOT WITH SIMULATIONS FROM NORMAL AND STATE SPACE SAMPLER #######
 
 simSize <- 50
-simTime <- 10
-IBMresults <- matrix(NA, nrow=simTime, ncol=simSize)
-SSMresults <- matrix(NA, nrow=simTime, ncol=simSize)
-SSMresults2 <- matrix(NA, nrow=simTime, ncol=simSize)
+simTime <- 13
+IBMresults <- matrix(NA, nrow=simTime, ncol=(simSize-1))
+SSMresults <- matrix(NA, nrow=simTime, ncol=(simSize-1))
+SSMresults2 <- matrix(NA, nrow=simTime, ncol=(simSize-1))
+SSMresults3 <- matrix(NA, nrow=simTime, ncol=(simSize-1))
+
+breaks <- seq(1.5, 3.55, l=10)
+simPars$breaks<-breaks
 
 set.seed(101010)
-for (i in 1:simSize){
+for (i in 1:(simSize-1)){
   # produce the IBM simulation:
-  simIBM <- simulateIBM(n=500, t=simTime*10,
-                            # set survival details:
-                            survFunc = linLogit, survPars = c(-9.65, 3.77),
-                            # set growth details:
-                            growthSamp = sampleDTN,
-                            growthPars = c(1.41, 0.56, log(0.08), 1.5, 3.55),
-                            # set reproduction details:
-                            reprFunc = linLogit, reprPars = c(-7.23, 2.6),
-                            # set offspring number and size distribution deets:
-                            offNum=1, offSizeSamp = sampleDTN,
-                            offSizePars = c(0.36, 0.71, log(0.16), 1.5, 3.55),
-                            # Child survival probability:
-                            Schild=0.873,
-                            # set other miscelaneous parameters:
-                            Start=readRDS("startSizes") %>%
-                            sample(500, replace=T), thresh=50000,
-                            OneGend = TRUE, popPrint = F)
+  simIBM <- do.call(simulateIBM, simParsOrig)
   
   # extract the starting size distribution:
   sizeDists <- getSizeDistns(simIBM, breaks)
+  print(paste0("ncol ",ncol(sizeDists)," simtime"))
   sizeDists <- sizeDists[,(ncol(sizeDists)-simTime+1):ncol(sizeDists)]
   IBMresults[,i] <- apply(sizeDists, 2, sum)
   startSize <- IBMresults[1, i]
   startDistn <- sizeDists[,1]/sum(sizeDists[,1])
   
-  # Set the SSM parameters:
-  simPars <- list(
-    survFunc = linLogit, survPars = c(-9.65, 3.77),
-    growthSamp = sampleDTN, growthPars = c(1.41, 0.56, log(0.08), 1.5, 3.55),
-    reprFunc = linLogit, reprPars = c(-7.23, 2.6), 
-    offSizeSamp = sampleDTN, offSizePars = c(0.36, 0.71, log(0.16), 1.5, 3.55),
-    offNumSamp = returnConstant, offNumPars = 1,
-    Schild=qlogis(0.873), oneSex = TRUE, breaks = breaks, shift=qlogis(0.445))
-  
-  
   # simulate the results with the right shift:
-  SSMresults[,i] <- projectStateSpace(sampleStateIPM, simPars,
-        multnomMu(startSize, startDistn), simTime - 1) %>% apply(2, sum)
+  simPars$sizes<-breaks[-(length(breaks))] + 0.45*diff(breaks)
+  SSMresults[,i] <- projectStateSpace(sampleStateIPM_red, simPars,
+                                      # multnomMu(popSize = startSize, 
+                                      #   probs = startDistn,
+                                      #   pobs = simParsOrig$obsProb),
+                                      sizeDists[,1],
+                                      simTime - 1) %>%
+                    apply(2, sum)
+    
+  # simulate the results with an incorrect shift of 0.5:
+  simPars$sizes<-breaks[-(length(breaks))] + 0.5*diff(breaks)
+  SSMresults2[,i] <- projectStateSpace(sampleStateIPM_red, simPars,
+                                       # multnomMu(popSize = startSize, 
+                                       #           probs = startDistn,
+                                       #           pobs = simParsOrig$obsProb),
+                                       sizeDists[,1],
+                                       simTime - 1) %>%
+                    apply(2, sum)
   
-  # simulate the results with an incorrect shift of 0.5 (qlogis(0)=0.5):
-  simPars$shift <- 0
-  SSMresults2[,i] <- projectStateSpace(sampleStateIPM, simPars,
-     multnomMu(startSize, startDistn), simTime - 1) %>% apply(2, sum)
+  simPars$sizes<-breaks[-(length(breaks))] + 0.55*diff(breaks)
+  SSMresults3[,i] <- projectStateSpace(sampleStateIPM_red, simPars,
+                                       # multnomMu(popSize = startSize, 
+                                       #           probs = startDistn,
+                                       #           pobs = simParsOrig$obsProb),
+                                       sizeDists[,1],
+                                       simTime - 1) %>%
+    apply(2, sum)
 }
 
 # Calculate the 95% lines for the IBM data:
@@ -286,6 +291,11 @@ upperSSM <- apply(SSMresults, 1, quantile, probs=0.975)
 meanSSM2 <- apply(SSMresults2, 1, mean)
 lowerSSM2 <- apply(SSMresults2, 1, quantile, probs=0.025)
 upperSSM2 <- apply(SSMresults2, 1, quantile, probs=0.975)
+
+# Calculate the 95% lines for the SSM data with the incorrect shift:
+meanSSM3 <- apply(SSMresults3, 1, mean)
+lowerSSM3 <- apply(SSMresults3, 1, quantile, probs=0.025)
+upperSSM3 <- apply(SSMresults3, 1, quantile, probs=0.975)
 
 # Set some colours to reuse:
 col4 <- adjustcolor(4, alpha=0.8)

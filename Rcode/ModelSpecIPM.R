@@ -83,10 +83,6 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   #                                       population which is assumed to birth
   #                                       equal proportions of each sex. Default
   #                                       value is TRUE.
-  #                           shift     - Optionally, shift can be passed as a
-  #                                       fixed value rather than a parameter.
-  #                                       see sampleStateIPM for information on
-  #                                       'shift'.
   #                           mu        - The function which allows us to draw
   #                                       samples from the initial distribution 
   #                                       of size class counts.
@@ -102,6 +98,7 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   #                                       the hidden state
   #                           breaks    - The vector of breakpoints which 
   #                                       gives the range of each size class
+  #                           sizes     - The size class mid-point values
   #
   # output  : A single real number, the log posterior for the given parameter
   #           values.
@@ -109,11 +106,6 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   # NOTE : It is the user's responsibility to double check that the parameters
   #        being fitted, and their order in the skeleton is equal to the exact
   #        order in which they have specified the priors.
-  if (check){
-    if(length(logTargetPars$muPar[[2]])!=(length(logTargetPars$breaks)-1)){
-      stop('Dimension mismatch in initial distribution and size class numbers')
-    }
-  }
   
   if (returnNeg) multiplier <- -1
   else multiplier <- 1
@@ -121,10 +113,16 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   # Get the parameters into a list:
   skeleton <- logTargetPars$skeleton
   vectorPars <- proposed
-  proposed %<>% relist(skeleton=skeleton)
   
-  # necessary checks:
-  if (is.null(proposed$shift) & is.null(logTargetPars$shift)) stop('need shift')
+  for (i in 1:length(logTargetPars$links))  proposed[i] <- 
+    match.fun(logTargetPars$links[i])(proposed[i])
+  proposed%<>%relist(skeleton=skeleton)
+  
+  if(!is.null(logTargetPars$DTN)) {
+    UL<-logTargetPars$DTN
+    proposed$growthPars%<>%c(UL)
+    proposed$offSizePars%<>%c(UL)
+  }
   
   # Extract the function parameters:
   survPars <- proposed$survPars
@@ -133,8 +131,6 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   offNumPars <- proposed$offNumPars
   offSizePars <- proposed$offSizePars
   Schild <- proposed$Schild
-  shift <- proposed$shift ; if (is.null(shift)) shift <- logTargetPars$shift
-  obsProbPar <- proposed$obsProbPar
   
   # Extract function arguments:
   b <- logTargetPars$b
@@ -145,7 +141,7 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   reprFunc <- logTargetPars$reprFunc
   offNumSamp <- logTargetPars$offNumSamp
   oneSex <- logTargetPars$oneSex
-  if (is.null(logTargetPars$oneSex)) oneSex=T
+  if (is.null(oneSex)) oneSex=T
   offSizeSamp <- logTargetPars$offSizeSamp
   
   # Extract prior arguments:
@@ -155,6 +151,16 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   priorPars <- logTargetPars$priorPars
   breaks <- logTargetPars$breaks
   funcs <- logTargetPars$priors
+  sizes <- logTargetPars$sizes
+  fixedObsProb <- logTargetPars$fixedObsProb
+  # breaks[c(1, D)] <- c(-Inf, Inf)
+  
+  if(fixedObsProb) {
+    obsProbPar <- logTargetPars$obsProbPar
+  } else {
+    obsProbPar <- proposed$obsProbPar
+    muPar$pobs<-obsProbPar
+  }
   
   # Create the list of arguments required for the state space sampler:
   stateSpaceSampArgs <- list(survFunc = survFunc, survPars = survPars,
@@ -163,13 +169,14 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
                              offNumSamp = offNumSamp, offNumPars = offNumPars,
                              offSizeSamp = offSizeSamp, breaks = breaks,
                              offSizePars = offSizePars, Schild=Schild,
-                             oneSex = oneSex, shift = shift)
+                             sizes=sizes, oneSex = oneSex)
   
   # Get an estimate of the log likelihood from the particle filter:
   ll <- particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
                        sampleState = vectorisedSamplerIPM,
                        sampleStatePar = stateSpaceSampArgs,
-                       obsProbPar = obsProbPar, b = b, returnW = returnW)
+                       obsProbPar = obsProbPar, fixedObsProb=fixedObsProb,
+                       b = b, returnW = returnW)
   
   if (returnW) return(ll)
   
@@ -210,8 +217,8 @@ posteriorGrowthRate <- function(chains, IPMLTP, growthFunc, offSizeFunc, L=0, U,
   quantiles <- c(1-level, 1+level)/2
   
   # extract the required information from IPMLTP:
-  if (is.null(IPMLTP$oneSex)) oneSex=T
-  else oneSex <- IPMLTP$oneSex
+  # if (is.null(IPMLTP$oneSex)) oneSex=T
+  # else oneSex <- IPMLTP$oneSex
   skeleton <- IPMLTP$skeleton
   survFunc <- IPMLTP$survFunc %>% match.fun
   reprFunc <- IPMLTP$reprFunc %>% match.fun
@@ -244,7 +251,7 @@ posteriorGrowthRate <- function(chains, IPMLTP, growthFunc, offSizeFunc, L=0, U,
                           repPars = reprPars, offNum = offNumPars,
                           offSizeFunc = offSizeFunc,
                           offSizePars = offSizePars, L = L, U = U,
-                          childSurv = Schild, halfPop = oneSex) %>%
+                          childSurv = Schild) %>%
       eigen %>% `$`(values) %>% `[`(1) %>% Re
   }
   

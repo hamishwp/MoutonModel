@@ -243,3 +243,5 @@ growthRates %>% plot(x=mSizes, type='p', ylab='Approximated growth rate',
 censusNums <- simmedData$census.number
 simmedData %>% subset(censusNums==max(censusNums)) %>% `$`(size) %>% na.omit %>%
   hist
+
+

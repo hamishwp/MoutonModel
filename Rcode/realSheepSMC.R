@@ -3,7 +3,7 @@ source('SimulateData.R')
 source('ModelSpecIPM.R')
 source('piecemealFunctions.R')
 source('SMC.R')
-library(dissPackage3)
+library(dissPackage3,lib.loc=directory)
 library(MASS)
 library(mcmcse)
 
@@ -157,7 +157,7 @@ IPMLTP <- list(
   offSizeSamp = 'sampleNorm',
   oneSex = TRUE,
   mu = 'multnomMu',
-  muPar = c(sheepStartSize, list(sheepMuPar)),
+  muPar = list(popSize=sheepStartSize, probs=sheepMuPar),
   b = 100, 
   Y = SHEEP.COUNTS,
   obsProb = 'detectionNumObs',

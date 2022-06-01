@@ -7,15 +7,27 @@ library(mvtnorm)
 library(parallel)
 library(doParallel)
 library(foreach)
+library(package=Rfast,exclude = "rmvnorm")
 
 ################ PROPOSAL FUNCTIONS AND CORRELATION FINDING FUNCTIONS ##########
 
-multvarNormProp <- function(xt, propPars){
+multvarNormProp <- function(xt, propPars, n=1){
   # purpose : A multivariate Gaussian random walk proposal for Met-Hastings
   #           MCMC
   # inputs  : xt       - The value of the chain at the previous time step 
   #           propPars - The correlation structure of the proposal
-  return(rmvnorm(1, mean=xt, sigma=propPars))
+  return(rmvnorm(n, mean=xt, sigma=propPars))
+}
+
+FixedmultvarNormProp <- function(xt, propPars, indies, n=1){
+  # purpose : A multivariate Gaussian random walk proposal for Met-Hastings
+  #           MCMC
+  # inputs  : xt       - The value of the chain at the previous time step 
+  #           propPars - The correlation structure of the proposal
+  vec<-array(NA,dim=c(n,length(xt)))
+  vec[,indies]<-t(array(xt[indies],dim=c(length(indies),n)))
+  vec[,-indies]<-rmvnorm(n, mean=xt[-indies], sigma=propPars[-indies,-indies])
+  return(vec)
 }
 
 multvarPropUpdate <- function(chain){
@@ -339,19 +351,22 @@ Nested_MH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
   
   # Add the initial point, the first column of the output matrix is an 
   # evaluation of the log Target at the sampled point:
-  lTarg(xPrev, lTargPars)
   output[1, ] <- c(lTarg(xPrev, lTargPars), xPrev)
+  print(output[1, ])
   #print("Initial Value in Nested_MH = ");print(output[1,])
   
   # Create the clusters and initiate paralellisation:
-  cl<-makeCluster(cores,outfile="")
+  cl<-makeCluster(cores,outfile="./Rcode/OUTPUT.txt")
   registerDoParallel(cl)
   clusterExport(cl, clNeeds)
   
   it <- 2
   while (it <= itermax){
     
-    if(prntPars & (it%%100==0)){print(paste0("Iteration ",it," = "));print(output[it-1,])}
+    # if(any((it:(it+cores)*100)%%itermax==0)){
+    print(paste0(round(it*100/itermax),"% done. LL = ",output[it-1,1]))
+    #   saveRDS(output,file=paste0("./Rcode/saver_",round(it*100/itermax),"percent.Rdata"))
+    # }
     
     # generate a proposed point:
     for (c in 1:cores){
@@ -365,17 +380,25 @@ Nested_MH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
     }
     
     lTargOld <- output[it-1, 1]
-    print(lTargOld)
     alpha <- exp(lTargNew - lTargOld)
+    
+    print("alpha")
+    print(alpha)
+    print("")
     
     # determine acceptance or rejection:
     u <- runif(cores)
+    u2 <- runif(cores)
+    lTtmp<-0
     
     for (c in 1:cores){
       # Check that the log-likelihood was actually calculated
       if(is.na(lTargNew[c])) {output[it+c-1,] <- output[it+c-2,] ; next}
       # MH acceptance-rejection:
-      if (u[c]<=alpha[c]) output[it+c-1,] <- c(lTargNew[c], xNew[c,])
+      if (u[c]<=alpha[c] & exp(lTargNew[c]-lTtmp)>=u2[c]) {
+        output[it+c-1,] <- c(lTargNew[c], xNew[c,])
+        lTtmp<-lTargNew[c]
+      }
       else output[it+c-1,] <- output[it+c-2,]
     }
     
@@ -397,6 +420,8 @@ Nested_MH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
 Nested_pMH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
                        uFunc=NULL, prntPars=FALSE, clNeeds, RcppFile=NULL,
                        packages = "Rcpp", cores=detectCores()){
+  
+  if(itermax<200) uFunc<-NULL
   
   RNGkind("L'Ecuyer-CMRG")
   set.seed(201020)
@@ -421,6 +446,7 @@ Nested_pMH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
     # Split itermax into 2 groups of 25% and one group of 50%:
     div <- c(round((itermax-1)/4))
     indices <- c(div, div, itermax-2*div)
+    covy<-1
     
     for (im in indices){
       # Optionally display the proposal parameters:
@@ -438,14 +464,412 @@ Nested_pMH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
       if(dim(output)[1]>=itermax) break
       
       # update the proposal parameters for the next phase:
+      chain%<>%na.omit
+      # To automate 
+      # ichain <- sample(x = 1:nrow(chain), size = round(0.5*nrow(chain)), replace = F, prob = exp(chain[,1]-max(chain[,1])))
+      # propPars <- uFunc(chain[ichain,])
       propPars <- uFunc(chain)
       
-      # update xPrev for the next phase:
-      # xPrev <- chain[im,-1]
+      print(paste0("COV Matrix - Max diagonal element :",round(max(diag(propPars)),digits = 3)))
+      print(paste0("COV Matrix - Max off-diagonal element :",round(max(propPars - diag(diag(propPars))),digits = 3)))
+      
+      saveRDS(propPars,file=paste0("./saver_COV_",im,"_",covy,".Rdata"))
+      covy<-covy+1
+      
+      # update xPrev for the next phase, using a random sample of one of the values used to calculate the covariance matrix 
+      # xPrev <- chain[sample(ichain,1),-1]
+      xPrev <- chain[im,-1]
       # Choose the next initial values to have the largest log-likelihood.
-      xPrev <- output[which.max(output[,1]),-1]
+      # xPrev <- output[which.max(output[,1]),-1]
     }
     return(output)
   }
+  
+}
+
+pM_GaA <- function(propCOV, lTarg, lTargPars, x0, itermax=1000,
+                   prntPars=FALSE, clNeeds, RcppFile=NULL,
+                   packages = "Rcpp", cores=detectCores(), 
+                   Params=list(GreedyStart=200,Pstar=0.234, gamzy0=1, epsilon=2, minVar=1e-3)){
+  # purpose : Generalised Adaptative Metropolis-Hastings Algorithm with Global Adaptative Scaling
+  # Details : Christian L. Muller, (ETH) 'Exploring the common concepts of a-MCMC and cov matrix
+  #           adaptation schemes', Dagstuhl Seminar Proceedings, 2010.
+  #           Uses the multivariate Gaussian distribution as proposal, 
+  #           whereby the proposal covariance is updated at every iteration.
+  # inputs  : clNeeds   - The character names of functions which need to be 
+  #                       exported to the cluster.
+  #           RcppFile  - The Rcpp file which must be fourced for required
+  #                       Rcpp code to work
+  #           other     - for all other inputs, refer to the description given
+  #                       in the MH function.
+  # output  : A list containing the output matrices of all chains
+  # note : loads Rcpp onto the cluster by default.
+  
+  # RNGkind("L'Ecuyer-CMRG")
+  seed<-as.numeric(stringr::str_flatten(unlist(strsplit(strsplit(as.character(Sys.time()),split = " ")[[1]][2],":"))))
+  set.seed(round(runif(1,0,10000)*seed))
+  
+  propMu<- x0
+  normCOV<-sum(propCOV*t(propCOV))
+  gamzy <- Params$gamzy0/(1:(itermax+cores))^(seq(from=1/(1+Params$epsilon),to=1,length.out=(itermax+cores)))
+  # gamzy<-exp(-(1:1000 - Params$burnin)/100)
+  # gamzy<-exp(-(1:1000)^2/10000)
+  # gamzy<-1/1:(itermax+cores)
+  Lgsf<-0
+  Pstar<-Params$Pstar
+  # print("sum(<COV,COV>):")  
+  # print(sum(propCOV*t(propCOV)))
+  # print("")
+  
+  # source any required files:
+  if (!is.null(RcppFile)) Rcpp::sourceCpp(RcppFile)
+  
+  itermax<-ceiling(itermax/cores)*cores+1L
+  xPrev<-x0
+  n <- length(xPrev) + 1
+  output <- matrix(NA, nrow=itermax, ncol=n)
+  xNew <- matrix(NA, nrow=cores, ncol=n-1)
+  lTargNew<-alpha<-c()
+  
+  # Add the initial point, the first column of the output matrix is an 
+  # evaluation of the log Target at the sampled point:
+  output[1, ] <- c(lTarg(xPrev, lTargPars), xPrev)
+  print(output[1,1])
+  #print("Initial Value in Nested_MH = ");print(output[1,])
+  # Create the clusters and initiate paralellisation:
+  # cl<-makeCluster(cores,outfile="./Rcode/OUTPUT.txt")
+  # registerDoParallel(cl)
+  # clusterExport(cl, clNeeds)
+  
+  it <- 2
+  while (it <= itermax){
+    
+    # if(any((it:(it+cores)*100)%%itermax==0)){
+    # print(paste0(round(it*100/itermax),"% done. LL = ",output[it-1,1]))
+    # print(paste0(it*100/itermax,"% done. LL = ",output[it-1,1]))
+    # saveRDS(output,file=paste0("./Rcode/saver_",round(it*100/itermax),"percent.Rdata"))
+    # }
+    
+    # generate a proposed point using the MVN proposal and global scaling factor
+    xNew <- multvarNormProp(xt=xPrev, propPars=exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)), n=cores) 
+    
+    # calculate the acceptance probability:
+    # lTargNew <- foreach(c=1:cores, .packages = packages, .combine = c) %dopar%{
+    #   # to.lTargNew <- tryCatch({lTarg(xNew[c,], lTargPars)}, error=function(e) NA)
+    #   to.lTargNew <- lTarg(xNew[c,], lTargPars)
+    # }
+    
+    lTargNew <- unlist(mclapply(X = 1:cores,
+                                FUN = function(i) lTarg(xNew[i,], lTargPars),
+                                mc.cores = cores))
+        
+    lTargOld <- output[it-1, 1]
+    alpha <- apply(cbind(exp(lTargNew - lTargOld),rep(1,cores)),1,min)
+    
+    print(paste0("<alpha> = ",mean(alpha)))
+    # print("New LL:")
+    # print(lTargNew)
+    
+    # determine acceptance or rejection:
+    u <- runif(cores)
+    u2 <- runif(cores)
+    
+    tLgsf<-tpropMu<-tpropCOV<-nnz<-0
+    lTtmp<-lTargOld
+    
+    for (c in 1:cores){
+      # Check that the log-likelihood was actually calculated
+      if(is.na(lTargNew[c])) {
+        output[it+c-1,] <- output[it+c-2,]
+        nnz<-nnz+1
+        next
+      }
+      
+      if (exp(lTargNew[c]-lTtmp)>=u[c]) { # Accepted!
+        output[it+c-1,] <- c(lTargNew[c], xNew[c,])
+        lTtmp<-lTargNew[c]
+        xPrev<-xNew
+      } else { # Rejected!
+        output[it+c-1,] <- output[it+c-2,]
+        # Greedy Start Adaptive Metropolis (AM) algorithm
+        # (Only uses accepted parameters for GSF, mean & covariance updates at the start)
+        if(it+c<=Params$GreedyStart) {nnz<-nnz+1; next}
+      }
+      
+      # Global Scaling Factor (GSF), mean & covariance update
+      tLgsf <- tLgsf + gamzy[it]*(alpha[c]-Pstar)
+      tpropMu <- tpropMu + gamzy[it]*(xNew[c,] - propMu)
+      tpropCOV <- tpropCOV + gamzy[it]*((xNew[c,] - propMu)%*%t(xNew[c,] - propMu) - propCOV)
+      
+    }
+    
+    # if(nnz<cores & it>Params$burnin){
+    if(nnz<cores){
+      # Add a minimum variance value to ensure global scale factor doesn't 
+      # diag(tpropCOV)<-diag(tpropCOV)+Params$minVar
+      
+      Lgsf<-Lgsf+tLgsf/max(c(cores-nnz,1))
+      propMu<-propMu+tpropMu/max(c(cores-nnz,1))
+      propCOV<-propCOV+tpropCOV/max(c(cores-nnz,1))
+    }
+
+    # Lgsf<-max(Lgsf,Params$minVar)
+    
+    # print("sum(<COV,COV>):")  
+    print(paste0("Total covariance = ",sum(exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))))
+    print(paste0("Global Scaling Factor, r = ",exp(2*Lgsf)))
+    # print("")
+    # if(any((it:(it+cores)*100)%%itermax==0)){
+    print(paste0(round(it*100/itermax),"% done. LL = ",output[it,1]))
+    # saveRDS(output,file=paste0("./Rcode/saver_",round(it*100/itermax),"percent.Rdata"))
+    # }
+    
+    # update Xt-1
+    xPrev <- output[it+cores-1,-1]
+    # update iterator:
+    it <- it + cores
+  }
+  
+  # Do the tear down for the parallelisation, we exception handle it simply
+  # to silence a bunch of warnings that indicate which connections to unused
+  # ports are closed by stopping the cluster
+  # try(stopCluster(cl), silent = T)
+  return(output)
+  
+}
+
+p_HMC <- function(propCOV, lTarg, lTargPars, x0, itermax=1000,
+                  prntPars=FALSE, clNeeds, RcppFile=NULL,
+                  packages = "Rcpp", cores=detectCores(), 
+                  Params=list(Pstar=0.65, Leaps=20, stepsize=0.0005, gamzy0=1, egam=2, minVar=1e-3)){
+  # purpose : Generalised Adaptative Metropolis-Hastings Algorithm with Global Adaptative Scaling
+  # Details : Christian L. Muller, (ETH) 'Exploring the common concepts of a-MCMC and cov matrix
+  #           adaptation schemes', Dagstuhl Seminar Proceedings, 2010.
+  #           Uses the multivariate Gaussian distribution as proposal, 
+  #           whereby the proposal covariance is updated at every iteration.
+  # inputs  : clNeeds   - The character names of functions which need to be 
+  #                       exported to the cluster.
+  #           RcppFile  - The Rcpp file which must be fourced for required
+  #                       Rcpp code to work
+  #           other     - for all other inputs, refer to the description given
+  #                       in the MH function.
+  # output  : A list containing the output matrices of all chains
+  # note : loads Rcpp onto the cluster by default.
+  
+  ############## HAMILTONIAN MONTE-CARLO ALGORITHM #############
+  # For more information, see either: 
+  #           https://arxiv.org/pdf/1701.02434.pdf
+  #           https://www.mcmchandbook.net/HandbookChapter5.pdf
+  ### FOR EACH ITERATION 
+  # Generate new p values
+  # Sample new q values
+  ### HMC-loop (leapfrog steps)
+  # Propagate q & p (calculating dV/dq each time)
+  ###
+  # Reverse p
+  # Calculate new Hamiltonian
+  # Calculate old Hamiltonian
+  # MH accept-reject
+  # Adjust propCOV to ensure Pstar = 0.65
+  ###
+  ##############################################################
+  # Define kinetic energy function - Kin - we use quadratic with parameter scaling metric:
+  KinF  <- function(p, propCOV){
+    # NOTE: negative log term corresponds to taking 1/det(propCOV)
+    # propCOV = M^(-1) for M, the Euclidean metric (also called mass matrix)
+    return(-0.5*sum(p%*%propCOV*p) - log(det(propCOV)))
+    # return(-0.5*sum(p*propCOV*propCOV*p) - log(prod(propCOV*propCOV)))
+  }
+  # Define potential energy function - Vpot - we use logTargetIPM:
+  VpotF <- function(q){
+    return(-lTarg(q,lTargPars))
+  }
+  # Define the Hamiltonian - Ham
+  HamF <- function(q,p,q_old=NULL,p_old=NULL,propCOV){
+    # LL is actually -Vpotential, see output
+    if(is.null(q_old)|is.null(p_old)) return(list(new=(VpotF(q)+KinF(p,propCOV))))
+    return(list(new=(VpotF(q)+KinF(p,propCOV)),old=(VpotF(q_old)+KinF(p_old,propCOV))))
+  }
+  # Define derivative of potential dV/dq:
+  dVpotF <- function(q,delta=0.0001){
+    n<-length(q)
+    dVpot<-rep(0,n)
+    
+    for (i in 1:n){
+      delvec<-rep(0,n)
+      delvec[i]=delta
+      
+      lower<-VpotF(q-delvec)
+      upper<-VpotF(q+delvec)
+      # print(mean(c(lower,upper)))
+      
+      dVpot[i]<-upper-lower
+    }
+    
+    return(dVpot=dVpot/(2*delta))
+  }
+  # Define Leapfrog algorithm
+  LeapfrogMe <- function(q,p,Leaps=20,eps=0.0005){
+    p%<>%as.numeric()
+    q%<>%as.numeric()
+    for (L in 1:Leaps){
+      # Half step in momentum
+      dV1<-dVpotF(q)
+      print("dVpot 1:")
+      print(dV1)
+      p<-p-0.5*eps*dV1
+      print("0.5*eps*dV1:")
+      print(0.5*eps*dV1)
+      print("eps*p")
+      print(eps*p)
+      # Update position
+      q<-q+eps*p
+      print("q*")
+      print(q)
+      # Second half-step in momentum
+      dV2<-dVpotF(q)
+      print("dVpot 2:")
+      print(dV2)
+      p<-p-0.5*eps*dV2
+    }
+    return(list(q=q,p=-p))
+  }
+  
+  # Add these functions to the required parallel functions (see ClusterExport)
+  clNeeds%<>%c("lTarg","dVpotF","HamF","VpotF","KinF","LeapfrogMe")
+  
+  #%%%%%%%%%%%%%%%% WHEN TO PARALLELISE????? %%%%%%%%%%%%%%%%%#
+  # Do they share propCOV? Do we make propCOV an average/median of the others?
+  # Deal with step size and number of steps
+  
+  RNGkind("L'Ecuyer-CMRG")
+  set.seed(201020)
+  # source any required files:
+  if (!is.null(RcppFile)) Rcpp::sourceCpp(RcppFile)
+  itermax<-ceiling(itermax/cores)*cores+1L
+  qPrev<-x0
+  n <- length(qPrev) + 1
+  output <- matrix(NA, nrow=itermax, ncol=n)
+  qNew <- matrix(NA, nrow=cores, ncol=n-1)
+  # Create the clusters and initiate paralellisation:
+  # cl<-makeCluster(cores,outfile="./Rcode/OUTPUT.txt")
+  # registerDoParallel(cl)
+  # clusterExport(cl, clNeeds)
+  
+  ### Adaptative accept-reject algorithm parameters, evolving covariance matrix ###
+  propMu<- x0
+  gamzy <- Params$gamzy0/(1:(itermax+cores))^(seq(from=1/(1+Params$egam),to=1,length.out=(itermax+cores)))
+  Lgsf<-0
+  Pstar<-Params$Pstar
+  
+  pInit<-multvarNormProp(rep(0,(n-1)), exp(2*Lgsf)*propCOV, n=cores)
+  # Print out LL & summary statistics of the initial parameters
+  print(-VpotF(qPrev))
+  print(HamF(q = qPrev,p = pInit,propCOV = propCOV))
+  Leapy<-LeapfrogMe(q = qPrev,p = pInit,Leaps = 3,eps = sqrt(diag(propCOV)))
+  
+  print("sum(<COV,COV>):")  
+  print(sum(propCOV*t(propCOV)))
+  print("")
+  
+  it <- 1
+  while (it <= itermax){
+    
+    # Generate momentum variables:
+    pCur <- multvarNormProp(rep(0,(n-1)), exp(2*Lgsf)*propCOV, n=cores)
+    # pNew <- array(rnorm((n-1)*cores,mean=0,sd=1),dim=c((n-1),cores))*s
+    
+    # Generate a proposed point using the MVN proposal and global scaling factor
+    qCur <- qPrev
+    # qCur <- multvarNormProp(qPrev, exp(2*Lgsf)*propCOV, n=cores) 
+    
+    # calculate the HMC new position-momentum values:
+    # listQPspace <- foreach(c=1:cores, .packages = packages, .combine = c) %dopar%{
+    #   to.listQPspace <- tryCatch({LeapfrogMe(qCur[c,],pCur[c,],Leaps = Params$Leaps,
+    #                                          eps = Params$stepsize)}, error=function(e) NA)
+    # }
+    listQPspace<-tryCatch({LeapfrogMe(qCur,pCur,Leaps = Params$Leaps,
+                                      eps = sqrt(diag(propCOV)))}, error=function(e) NA)
+    print("3")
+    print(listQPspace)
+    qNew<-listQPspace$q
+    # NOTE: momentum is reversed for volume preservation!
+    pNew<-listQPspace$p
+    print("4")
+    # Calculate the proposed and current Hamiltonian values
+    # list_Ham <- foreach(c=1:cores, .packages = packages, .combine = c) %dopar%{
+    #   to.list_Ham <- tryCatch({HamF(qNew[c,],pNew[c,],qCur[c,],pCur[c,],propCOV)}, error=function(e) NA)
+    # }
+    list_Ham<-tryCatch({HamF(qNew,pNew,qCur,pCur,propCOV)}, error=function(e) NA)
+    Hamiltonian <- list_Ham$new
+    o_Hamiltonian <- list_Ham$old
+    print("5")
+    # MH accept-reject parameter
+    alpha <- apply(cbind(exp(-Hamiltonian + o_Hamiltonian),rep(1,cores)),1,min)
+    print("<alpha> = ")
+    print(alpha)
+    print("")
+    
+    # determine acceptance or rejection:
+    u <- runif(cores)
+    
+    tLgsf<-tpropMu<-tpropCOV<-nnz<-0
+    HamTmp<-min(o_Hamiltonian)
+    
+    for (c in 1:cores){
+      # Check that the log-likelihood was actually calculated
+      if(is.na(Hamiltonian[c])) {
+        output[it+c-1,] <- output[it+c-2,]
+        nnz<-nnz+1
+        next
+      }
+      
+      # Note: modifying global scale factor by alpha, not exp(-Ham[c]+HamTmp)
+      tLgsf <- tLgsf + gamzy[it]*(alpha[c]-Pstar)
+      tpropMu <- tpropMu + gamzy[it]*(qCur[c,] - propMu)
+      tpropCOV <- tpropCOV + gamzy[it]*((qCur[c,] - propMu)%*%t(qCur[c,] - propMu) - propCOV)
+      
+      # MH acceptance-rejection:
+      if (exp(-Hamiltonian[c]+HamTmp)>=u[c]) {
+        output[it+c-1,] <- c(Hamiltonian[c], qNew[c,])
+        HamTmp<-Hamiltonian[c]
+      } else output[it+c-1,] <- output[it+c-2,]
+      
+    }
+    
+    # # if(nnz<cores & it>Params$burnin){
+    # if(nnz<cores){
+    #   # Ensure a minimum variance value, even despite potentially low acceptance rate.
+    #   diag(tpropCOV)<-diag(tpropCOV)+Params$minVar
+    #   
+    #   Lgsf<-Lgsf+tLgsf/max(c(cores-nnz,1))
+    #   propMu<-propMu+tpropMu/max(c(cores-nnz,1))
+    #   propCOV<-propCOV+tpropCOV/max(c(cores-nnz,1))
+    # }
+    
+    # print("sum(<COV,COV>):")  
+    # print(sum(propCOV*t(propCOV)))
+    # print("Global Scaling Factor, r:")
+    # print(exp(Lgsf))
+    # print("")
+    # if(any((it:(it+cores)*100)%%itermax==0)){
+    print(paste0(round(it*100/itermax),"% done. LL = ",output[it,1]))
+    print(output[it,-1])
+    print("")
+    # saveRDS(output,file=paste0("./Rcode/saver_",round(it*100/itermax),"percent.Rdata"))
+    # }
+    
+    # update Xt-1
+    qPrev <- output[it+cores-1,-1]
+    
+    # update iterator:
+    it <- it + cores
+  }
+  
+  # Do the tear down for the parallelisation, we exception handle it simply
+  # to silence a bunch of warnings that indicate which connections to unused
+  # ports are closed by stopping the cluster
+  # try(stopCluster(cl), silent = T)
+  return(output)
   
 }

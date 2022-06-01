@@ -1,5 +1,5 @@
 library(magrittr)
-source('piecemealFunctions.R') # for the DesignMatrix and LinPredictor funcs
+source(paste0(getwd(),'/Rcode/piecemealFunctions.R')) # for the DesignMatrix and LinPredictor funcs
 
 rCNS <- function(df, formula1, formula2, pars1, pars2, sigmaE){
   # purpose : Simulates samples from two normal distributions, where the 

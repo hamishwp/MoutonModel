@@ -176,7 +176,9 @@ growthLinear <- function(zPrime, z, par, L, U, lik=FALSE){
 }
 
 # A quick function for when a model holds a quantity constant:
-returnConstant <- function(x, const) const
+returnConstant <- function(x, const) rep(x,const)
+
+PoisNum<-function(x, const) rep(x,  (rpois(n=length(x), lambda = const-1L)+1L) )
 
 offSizeNLL <- function(par, L, U, DF){
   # purpose : Calculates the negative log likelihood of the exponential 
@@ -232,7 +234,7 @@ doublyTruncatedNormal <- function(y, x, pars){
   # output : The growth density evaluated at x and y
   
   # Extract parameters from the passed vector:
-  intercept <- pars[1] ; gradient <- pars[2] ; sigma <- pars[3] %>% exp
+  intercept <- pars[1] ; gradient <- pars[2] ; sigma <- pars[3] #%>% exp
   L <- pars[4] ; U <- pars[5]
   
   if (!L<U) stop("Growth: Upper bound does not exceed Lower bound")
@@ -256,7 +258,7 @@ normal <- function(y, x, pars){
 
 kernelOneVar <- function(m, growthFunc, growthPars, survFunc, survPars,
                          repFunc, repPars, offNum, offSizeFunc, offSizePars, L, 
-                         U, childSurv=1, halfPop=F){
+                         U, childSurv=1,shift=0.5,halfPop=NULL){
   # purpose : Evaluates the Integral Projection Model Kernal for one time step,
   #           given the range of the size values, and the number of points to 
   #           use with the midpoint.
@@ -290,10 +292,10 @@ kernelOneVar <- function(m, growthFunc, growthPars, survFunc, survPars,
   
   # produce mesh points for the midpoint rule:
   h <- (U-L)/m
-  meshpts <- L + (1:m)*h - h/2
+  meshpts <- L + (1:m)*h - h*shift
   
   # To account for only tracking half the population:
-  multiplier <- ifelse(is.null(halfPop), 1, 1/2)
+  multiplier <- ifelse(is.null(halfPop), 1, 0.5)
   
   # calculate first term of the kernel:
   pFunc <- function(zprime, z){
@@ -306,6 +308,7 @@ kernelOneVar <- function(m, growthFunc, growthPars, survFunc, survPars,
   fFunc <- function(zprime, z){
     survivalProb <- survFunc(z, survPars)
     repProb <- repFunc(z, repPars)
+    # repProb <- repFunc(zprime, repPars)
     offSizeProb <- offSizeFunc(zprime, z, offSizePars)
     return(survivalProb*repProb*offNum*offSizeProb*multiplier*childSurv)
   }
@@ -318,3 +321,406 @@ kernelOneVar <- function(m, growthFunc, growthPars, survFunc, survPars,
   class(kernel) <- "IterationMatrix"
   return(kernel)
 } 
+
+CalcShift_Kernel<-function(x0,IPMLTP,nbks,halfpop,L,U){
+  
+  x0%<>%unlist()
+  
+  for (i in 1:length(IPMLTP$links))  x0[i] <- 
+      match.fun(IPMLTP$links[i])(x0[i])
+  x0%<>%relist(skeleton=IPMLTP$skeleton)
+  
+  x0$growthPars%<>%c(L,U)
+  x0$offSizePars%<>%c(L,U)
+  
+  
+  
+  popinc<-kernelOneVar(m = 500, growthFunc = IPMLTP$growthFunc,
+                       growthPars = x0$growthPars, survFunc = IPMLTP$survFunc,
+                       survPars = x0$survPars, repFunc = IPMLTP$reprFunc,
+                       repPars = x0$reprPars, offNum = 1,
+                       offSizeFunc =  IPMLTP$offSizeFunc,
+                       offSizePars = x0$offSizePars, L = L, U = U,
+                       childSurv = x0$Schild,shift=0.5,halfPop = halfpop) %>%
+    eigen %>% `$`(values) %>% `[`(1) %>% Re
+  
+  shift<-optimise(f=function(shift) {
+    
+    tmp<-kernelOneVar(m = nbks, growthFunc = IPMLTP$growthFunc,
+                      growthPars = x0$growthPars, survFunc = IPMLTP$survFunc,
+                      survPars = x0$survPars, repFunc = IPMLTP$reprFunc,
+                      repPars = x0$reprPars, offNum = 1,
+                      offSizeFunc =  IPMLTP$offSizeFunc,
+                      offSizePars = x0$offSizePars, L = L, U = U,
+                      childSurv = x0$Schild,shift=shift,halfPop = halfpop) %>%
+      eigen %>% `$`(values) %>% `[`(1) %>% Re
+    
+    return(abs(tmp-popinc))
+    
+  }, lower = 0.,upper = 1.0)$minimum
+  
+  return(shift)
+  
+}
+
+getInitialValues <- function(solveDF,printPars=T,CI=FALSE){
+  ############### PRODUCE SOME DATA FRAMES FOR EASY MODEL FITTING ################
+  solveDFg <- with(solveDF, subset(solveDF, !is.na(size) & !is.na(prev.size)))
+  # remove the observations we can't use for survival fitting:
+  solveDF2 <- with(solveDF, subset(solveDF, !is.na(prev.size)))
+  # Make a DF with only the individuals when they were born:
+  solveDF3 <- subset(solveDF, !is.na(solveDF$parent.size))
+  # Make a DF with only individuals that had the chance to reproduce:
+  solveDF4 <-  subset(solveDF, !is.na(solveDF$reproduced))
+  # Make DF to estimate number of children born:
+  solveDF5 <- solveDF[(solveDF$reproduced & !is.na(solveDF$off.born) & !is.na(solveDF$reproduced)) %>% which,]
+  # Make DF to estimate child survival probability:
+  solveDF6 <-  subset(solveDF5, !is.na(off.survived))
+  tmp<-rep(1,sum(solveDF6$off.survived))
+  tmp%<>%c(rep(0,sum(solveDF6$off.born-solveDF6$off.survived)))
+  solveDF6<-data.frame(off.survived=tmp) ; rm(tmp)
+  
+  sumzy<-solveDF%>%group_by(census.number)%>%
+    summarise(born=sum(off.born,na.rm = T),
+              total=length(survived),
+              measured=length(na.omit(survived)),
+              .groups = 'drop_last') 
+  numBorn.prev<-sumzy%>%pull(born)
+  
+  lenC<-length(unique(solveDF$census.number))
+  minC<-min(solveDF$census.number,na.rm = T)
+  numNewID<-rep(0,lenC)
+  for(i in 1:lenC){
+    c<-unique(solveDF$census.number)[i]
+    uniquers<-unique(solveDF$id[solveDF$census.number==c])
+    numNewID[i]<-length(uniquers)
+    if(i>1) {
+      c_old<-unique(solveDF$census.number)[i-1]
+      uniquers_old<-unique(solveDF$id[solveDF$census.number==c_old])
+      
+      numNewID[i]<-length(uniquers[!uniquers%in%uniquers_old])
+    }
+  }
+  
+  ############## PIECEMEAL ESTIMATION OF DEMOGRAPHIC PARAMETERS ##################
+  # Estimation without truncation:
+  growthSol <- lm(size ~ prev.size, data = solveDFg)
+  survivalSol <- glm(survived ~ prev.size, family = binomial, data = solveDF2)
+  offspringSizeSol <- lm(size ~ parent.size, data = solveDF3)
+  reproductionSol <- glm(reproduced ~ size, family = binomial, data=solveDF4)
+  offspringNumSol <- glm(off.born~1, family=poisson, data=solveDF5)
+  offspringSurvSol <- glm(off.survived~1, family=binomial, data=solveDF6)
+  observedProbSol<- data.frame(total=length(solveDF$survived), 
+                               measured=length(solveDF$survived[!is.na(solveDF$survived)])) %>% 
+    glm(formula = total~measured+0, family = logit)
+  # length(solveDF$survived[!is.na(solveDF$survived)])/length(solveDF$survived)
+  # observedProbSol<-length(solveDF$size[!is.na(solveDF$size)])/length(solveDF$size)
+  
+  # Estimation with truncation:
+  # growthSolStart <- c(coef(growthSol), summary(growthSol)$sigma)
+  # growthSolTrunc <- optim(growthSolStart, growthNLL, DF=solveDFg, L=1.5, U=3.55,
+  #                         formula=size ~ prev.size)
+  # offspringSizeStart <- c(coef(offspringSizeSol), summary(offspringSizeSol)$sigma)
+  # offspringSizeSolTrunc <- optim(offspringSizeStart, growthNLL, DF=solveDF3,
+  #                                formula=size~parent.size, L=1.5, U=3.55)
+  
+  survPars<-coef(survivalSol)
+  growthPars <- c(coef(growthSol),qlogis(summary(growthSol)$sigma))
+  reprPars <- coef(reproductionSol)
+  offNumPars <- exp(coef(offspringNumSol))
+  offSizePars <- c(coef(offspringSizeSol),qlogis(summary(offspringSizeSol)$sigma))
+  Schild <- coef(offspringSurvSol)
+  obsProbPar <- qlogis(observedProbSol)
+  
+  
+  if(CI){
+    # Student's distribution confidence levels
+    alpha<-0.025
+    tstar<-function(nn) qt(1-alpha/2,nn-1,lower.tail = T)
+    # Survival
+    survParsCI<-confint(survivalSol)
+    # Growth 
+    nn<-length(growthSol$residuals)
+    
+    gsigCI<-c(sigma(growthSol)-(nn-2)*sigma(growthSol)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE),
+              sigma(growthSol)+(nn-2)*sigma(growthSol)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE))
+    # growthParsCI <- rbind(confint(growthSol),qlogis(gsigCI))
+    growthParsCI <- rbind(confint(growthSol),gsigCI)
+    rownames(growthParsCI)[3]<-"sigma"
+    # Reproduction
+    reprParsCI <- confint(reproductionSol)
+    # Offspring Number
+    nn<-length(solveDF$off.born[solveDF$off.born>0 & !is.na(solveDF$off.born)])
+    offNumParsCI <- c(exp(offNumPars)+1-tstar(nn)*sd(solveDF$off.born[solveDF$off.born>0],na.rm = T)/sqrt(nn),
+                      exp(offNumPars)+1+tstar(nn)*sd(solveDF$off.born[solveDF$off.born>0],na.rm = T)/sqrt(nn))
+    names(offNumParsCI)<-c("2.5 %","97.5 %")
+    # offNumParsCI <-log(offNumParsCI-1)
+    # Offspring size
+    nn<-length(offspringSizeSol$residuals)
+    osigCI<-c(sigma(offspringSizeSol)-(nn-2)*sigma(offspringSizeSol)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE),
+              sigma(offspringSizeSol)+(nn-2)*sigma(offspringSizeSol)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE))
+    # offSizeParsCI <- rbind(confint(offspringSizeSol),qlogis(osigCI))
+    offSizeParsCI <- rbind(confint(offspringSizeSol),osigCI)
+    rownames(offSizeParsCI)[3]<-"sigma"
+    # Child survival probability
+    if(sum(numNewID)!=0) {
+      SchildCI <- c(offspringSurvSol-tstar(lenC-1)*sd(numNewID[-1]/numBorn.prev[-length(numBorn.prev)])/sqrt(lenC-1),
+                    offspringSurvSol+tstar(lenC-1)*sd(numNewID[-1]/numBorn.prev[-length(numBorn.prev)])/sqrt(lenC-1))
+    } else SchildCI <-rep(NA,2)
+    names(SchildCI)<-c("2.5 %","97.5 %")
+    # SchildCI%<>%qlogis
+    # Observation probability
+    obsProbParCI <- c(obsProbSol$estimate-tstar(obsProbSol$n)*obsProbSol$sd/sqrt(obsProbSol$n),
+                      obsProbSol$estimate+tstar(obsProbSol$n)*obsProbSol$sd/sqrt(obsProbSol$n))
+    # obsProbParCI%<>%log%>%array(dim = c(2,2))
+    obsProbParCI%<>%array(dim = c(2,2))
+    colnames(obsProbParCI)<-c("2.5 %","97.5 %")
+    rownames(obsProbParCI)<-c("Shape1","Shape2")
+    
+    initialCI <- list(
+      survPars = survParsCI,
+      growthPars = growthParsCI,
+      reprPars = reprParsCI,
+      offNumPars = offNumParsCI,
+      offSizePars = offSizeParsCI,
+      Schild = SchildCI,  
+      obsProbPar = obsProbParCI
+    )
+    return(initialCI)
+    
+  }
+  
+  if(printPars){
+    print(paste0("Survival: ",paste(as.character(survPars),collapse = ", ")))
+    print(paste0("Growth: ",paste(as.character(growthPars),collapse = ", ")))
+    print(paste0("Reproduction: ",paste(as.character(reprPars),collapse = ", ")))
+    print(paste0("Offspring number: ",paste(as.character(offNumPars),collapse = ", ")))
+    print(paste0("Offspring size: ",paste(as.character(offSizePars),collapse = ", ")))
+    print(paste0("Offspring survival: ",paste(as.character(plogis(Schild)),collapse = ", ")))
+    print(paste0("Observed probability: ",plogis(obsProbPar)))
+  }
+  
+  initialValues <- list(
+    survPars = survPars,
+    growthPars = growthPars,
+    reprPars = reprPars,
+    offNumPars = offNumPars,
+    offSizePars = offSizePars,
+    Schild = Schild,  
+    obsProbPar = obsProbPar
+  ) %>%unlist()
+  
+  names(initialValues)<-c("survPars1","survPars2","growthPars1","growthPars2","growthPars3",
+                          "reprPars1","reprPars2","offNumPars","offSizePars1","offSizePars2",
+                          "offSizePars3","Schild","obsProbPar")
+  
+  if(offNumPars<1) stop("Offspring born must be more than one")
+  
+  return(initialValues)
+}
+
+getInitialValues_R <- function(solveDF,printPars=T,plotty=T,detectedNum=NULL,brks=NULL,fixedObsProb=F,CI=F){
+  ############### PRODUCE SOME DATA FRAMES FOR EASY MODEL FITTING ################
+  # solveDFg <- with(solveDF, subset(solveDF, !is.na(size) & !is.na(prev.size)))
+  # # remove the observations we can't use for survival fitting:
+  # solveDF2 <- with(solveDF, subset(solveDF, !is.na(prev.size)))
+  # # Make a DF with only the individuals when they were born:
+  # solveDF3 <- subset(solveDF, !is.na(solveDF$size) & !is.na(solveDF$rec1.wt))
+  # # Make a DF with only individuals that had the chance to reproduce:
+  # solveDF4 <-  subset(solveDF, !is.na(solveDF$off.born))
+  # # Make DF to estimate number of children born:
+  # solveDF5 <- subset(solveDF, solveDF$reproduced & !is.na(solveDF$off.born) & !is.na(solveDF$reproduced)) #solveDF[(solveDF$reproduced & !is.na(solveDF$off.born) & !is.na(solveDF$reproduced)) %>% which,]
+  
+  # Make DF to estimate child survival probability:
+  # solveDF6 <-  subset(solveDF5, !is.na(off.survived))
+  # tmp<-rep(1,sum(solveDF6$off.survived))
+  # tmp%<>%c(rep(0,sum(solveDF6$off.born-solveDF6$off.survived)))
+  # solveDF6<-data.frame(off.survived=tmp) ; rm(tmp)
+  numBorn.prev<-solveDF%>%group_by(census.number)%>%
+    summarise(born=sum(off.born,na.rm = T),.groups = 'drop_last')%>%pull(born)
+  lenC<-length(unique(solveDF$census.number))
+  minC<-min(solveDF$census.number,na.rm = T)
+  numNewID<-rep(0,lenC)
+  for(i in 1:lenC){
+    c<-unique(solveDF$census.number)[i]
+    uniquers<-unique(solveDF$id[solveDF$census.number==c])
+    numNewID[i]<-length(uniquers)
+    if(i>1) {
+      c_old<-unique(solveDF$census.number)[i-1]
+      uniquers_old<-unique(solveDF$id[solveDF$census.number==c_old])
+      
+      numNewID[i]<-length(uniquers[!uniquers%in%uniquers_old])
+    }
+  }
+  
+  ############## PIECEMEAL ESTIMATION OF DEMOGRAPHIC PARAMETERS ##################
+  # Estimation without truncation:
+  growthSol <- lm(size ~ prev.size, data = solveDF)
+  survivalSol <- glm(survived ~ prev.size, family = binomial, data = solveDF)
+  offspringSizeSol <- lm(rec1.wt ~ size, data = solveDF)
+  reproductionSol <- glm(reproduced ~ size, family = binomial, data=solveDF)
+  # offspringNumSol <- glm(off.born~1, family=poisson, data=solveDF5)
+  # offspringSurvSol <- glm(off.survived~1, family=binomial, data=solveDF6)
+  offspringSurvSol<-mean(numNewID[-1]/numBorn.prev[-length(numBorn.prev)])
+  
+  if(is.null(detectedNum)) {
+    detectedNum<- solveDF%>%filter(survived==1)%>%group_by(census.number)%>%
+      summarise(detectedNum=length(size),.groups = 'drop_last')%>%pull(detectedNum)%>%unname()
+  }
+  
+  popsizer<-solveDF%>%filter(survived==1 & !is.na(size))%>%group_by(census.number)%>%summarise(total=length(id))
+  obsProbSol <- MASS::fitdistr(popsizer$total/detectedNum,dbeta,start=list(shape1=1,shape2=1)) 
+  
+  # Estimation with truncation:
+  # growthSolStart <- c(coef(growthSol), summary(growthSol)$sigma)
+  # growthSolTrunc <- optim(growthSolStart, growthNLL, DF=solveDFg, L=1.5, U=3.55,
+  #                         formula=size ~ prev.size)
+  # offspringSizeStart <- c(coef(offspringSizeSol), summary(offspringSizeSol)$sigma)
+  # offspringSizeSolTrunc <- optim(offspringSizeStart, growthNLL, DF=solveDF3,
+  #                                formula=size~parent.size, L=1.5, U=3.55)
+  
+  survPars<-coef(survivalSol)
+  growthPars <- c(coef(growthSol),log(summary(growthSol)$sigma))
+  reprPars <- coef(reproductionSol)
+  # offNumPars <- exp(coef(offspringNumSol))
+  offNumPars <- mean(solveDF$off.born[solveDF$off.born>0],na.rm = T)
+  if(offNumPars<1) stop("Offspring born must be more than one")
+  offNumPars <-log(offNumPars-1)
+  offSizePars <- c(coef(offspringSizeSol),log(summary(offspringSizeSol)$sigma))
+  # Schild <- coef(offspringSurvSol)
+  Schild <- qlogis(offspringSurvSol)
+  obsProbPar <- log(obsProbSol$estimate)
+  
+  if(CI){
+    # Student's distribution confidence levels
+    alpha<-0.025
+    tstar<-function(nn) qt(1-alpha/2,nn-1,lower.tail = T)
+    # Survival
+    survParsCI<-confint(survivalSol)
+    # Growth 
+    nn<-length(growthSol$residuals)
+    
+    gsigCI<-c(sigma(growthSol)-(nn-2)*sigma(growthSol)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE),
+              sigma(growthSol)+(nn-2)*sigma(growthSol)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE))
+    # growthParsCI <- rbind(confint(growthSol),qlogis(gsigCI))
+    growthParsCI <- rbind(confint(growthSol),gsigCI)
+    rownames(growthParsCI)[3]<-"sigma"
+    # Reproduction
+    reprParsCI <- confint(reproductionSol)
+    # Offspring Number
+    nn<-length(solveDF$off.born[solveDF$off.born>0 & !is.na(solveDF$off.born)])
+    offNumParsCI <- c(exp(offNumPars)+1-tstar(nn)*sd(solveDF$off.born[solveDF$off.born>0],na.rm = T)/sqrt(nn),
+                      exp(offNumPars)+1+tstar(nn)*sd(solveDF$off.born[solveDF$off.born>0],na.rm = T)/sqrt(nn))
+    names(offNumParsCI)<-c("2.5 %","97.5 %")
+    # offNumParsCI <-log(offNumParsCI-1)
+    # Offspring size
+    nn<-length(offspringSizeSol$residuals)
+    osigCI<-c(sigma(offspringSizeSol)-(nn-2)*sigma(offspringSizeSol)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE),
+              sigma(offspringSizeSol)+(nn-2)*sigma(offspringSizeSol)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE))
+    # offSizeParsCI <- rbind(confint(offspringSizeSol),qlogis(osigCI))
+    offSizeParsCI <- rbind(confint(offspringSizeSol),osigCI)
+    rownames(offSizeParsCI)[3]<-"sigma"
+    # Child survival probability
+    SchildCI <- c(offspringSurvSol-tstar(lenC-1)*sd(numNewID[-1]/numBorn.prev[-length(numBorn.prev)])/sqrt(lenC-1),
+                  offspringSurvSol+tstar(lenC-1)*sd(numNewID[-1]/numBorn.prev[-length(numBorn.prev)])/sqrt(lenC-1))
+    names(SchildCI)<-c("2.5 %","97.5 %")
+    # SchildCI%<>%qlogis
+    # Observation probability
+    obsProbParCI <- c(obsProbSol$estimate-tstar(obsProbSol$n)*obsProbSol$sd/sqrt(obsProbSol$n),
+                      obsProbSol$estimate+tstar(obsProbSol$n)*obsProbSol$sd/sqrt(obsProbSol$n))
+    # obsProbParCI%<>%log%>%array(dim = c(2,2))
+    obsProbParCI%<>%array(dim = c(2,2))
+    colnames(obsProbParCI)<-c("2.5 %","97.5 %")
+    rownames(obsProbParCI)<-c("Shape1","Shape2")
+    
+    initialCI <- list(
+      survPars = survParsCI,
+      growthPars = growthParsCI,
+      reprPars = reprParsCI,
+      offNumPars = offNumParsCI,
+      offSizePars = offSizeParsCI,
+      Schild = SchildCI,  
+      obsProbPar = obsProbParCI
+    )
+    return(initialCI)
+    
+  }
+  
+  if(printPars){
+    print(paste0("Survival: ",paste(as.character(survPars),collapse = ", ")))
+    print(paste0("Growth: ",paste(as.character(c(growthPars[1:2],exp(growthPars[3]))),collapse = ", ")))
+    print(paste0("Reproduction: ",paste(as.character(reprPars),collapse = ", ")))
+    print(paste0("Offspring number: ",paste(as.character((exp(offNumPars)+1)),collapse = ", ")))
+    print(paste0("Offspring size: ",paste(as.character(c(offSizePars[1:2],exp(offSizePars[3]))),collapse = ", ")))
+    print(paste0("Offspring survival: ",paste(as.character(plogis(Schild)),collapse = ", ")))
+    print(paste0("Mean observed probability: ",paste(as.character(exp(obsProbPar)[1]/(sum(exp(obsProbPar)))),collapse = ", ")))
+  }
+  
+  if(plotty){
+    plot(solveDF$prev.size,solveDF$surv,main="Survival")
+    points(solveDF$prev.size,plogis(survPars[2]*solveDF$prev.size + survPars[1]),col="red")
+    plot(solveDF$prev.size,solveDF$size,main="Growth")
+    points(solveDF$size[!is.na(solveDF$size)],rnorm(n = length(solveDF$size[!is.na(solveDF$size)]),
+                                                    mean = (growthPars[2]*solveDF$size[!is.na(solveDF$size)] + growthPars[1]),
+                                                    sd = exp(growthPars[3])),
+           col="blue",cex=.3)
+    points(solveDF$prev.size,growthPars[2]*solveDF$prev.size + growthPars[1],col="red")
+    plot(solveDF$size,solveDF$rec1.wt,main="Offspring Size")
+    points(solveDF$size[!is.na(solveDF$size)],rnorm(n = length(solveDF$size[!is.na(solveDF$size)]),
+                                                    mean = (offSizePars[2]*solveDF$size[!is.na(solveDF$size)] + offSizePars[1]),
+                                                    sd = exp(offSizePars[3])),
+           col="blue",cex=.3)
+    points(solveDF$size,offSizePars[2]*solveDF$size + offSizePars[1],col="red")
+    plot(solveDF$size,solveDF$reproduced,main="Reproduction")
+    points(solveDF$size,plogis(reprPars[2]*solveDF$size + reprPars[1]),col="red")
+  }
+  
+  if(fixedObsProb) {
+    
+    initialValues <- list(
+      survPars = survPars,
+      growthPars = growthPars,
+      reprPars = reprPars,
+      offNumPars = offNumPars,
+      offSizePars = offSizePars,
+      Schild = Schild
+    ) %>%unlist()
+    
+    names(initialValues)<-c("survPars1","survPars2","growthPars1","growthPars2","growthPars3",
+                            "reprPars1","reprPars2","offNumPars","offSizePars1","offSizePars2",
+                            "offSizePars3","Schild")
+    
+  } else {
+    
+    initialValues <- list(
+      survPars = survPars,
+      growthPars = growthPars,
+      reprPars = reprPars,
+      offNumPars = offNumPars,
+      offSizePars = offSizePars,
+      Schild = Schild,  
+      obsProbPar = obsProbPar
+    ) %>%unlist()
+    
+    names(initialValues)<-c("survPars1","survPars2","growthPars1","growthPars2","growthPars3",
+                            "reprPars1","reprPars2","offNumPars","offSizePars1","offSizePars2",
+                            "offSizePars3","Schild","obsProbSh1","obsProbSh2")
+    
+  }
+  
+  return(initialValues)
+}
+
+x0latextable<-function(simmedData){
+  
+  x0<-getInitialValues(simmedData,printPars = T,CI = F)
+  CI<-getInitialValues(simmedData,printPars = T,CI = T)
+  
+  low<-c(CI$survPars[,1],CI$growthPars[,1],CI$reprPars[,1],CI$offNumPars[1],CI$offSizePars[,1],CI$Schild[1],CI$obsProbPar[,1])
+  up<-c(CI$survPars[,2],CI$growthPars[,2],CI$reprPars[,2],CI$offNumPars[2],CI$offSizePars[,2],CI$Schild[2],CI$obsProbPar[,2])
+  
+  summaries<-data.frame(True=vals,MLE=unlist(x0),lower=low,upper=up)  
+  
+}
+
+

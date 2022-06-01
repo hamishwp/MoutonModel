@@ -1,6 +1,8 @@
-directory<-"/home/patten/Documents/Coding/Oxford/MoutonModel/"
+# directory<-"/home/patten/Documents/Coding/Oxford/MoutonModel/"
+directory<-paste0(getwd(),"/")
+setwd(directory)
 
-list.of.packages <- c("mcmcse","xtable","mvtnorm","magrittr","doParallel")
+list.of.packages <- c("mcmcse","xtable","magrittr","doParallel","Rfast","mc2d", "abind")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -14,22 +16,96 @@ source(paste0(directory,'Rcode/SMC.R'))
 library(dissPackage3)
 library(xtable)
 library(mcmcse)
+library(tidyverse)
+library(magrittr)
 
-namer<-"gro3params_11yrs_vals_ufunc_10000its"
-propCov<-readRDS(paste0(directory,"gro")) #+ diag(13)*1/100
+# ############################ GENERATE THE DATA #################################
+# 
+# # Get the observations:
+# set.seed(102010)
+# simmedData <- do.call(simulateIBM, simPars)
+# Define the breaks for the 4 group specification:
+breaks <- seq(1.5, 3.55, l=6)[-2]
+shift=0.49
+D<-length(breaks)
+sizes <- breaks[-D] + shift*diff(breaks)
+breaks[c(1, D)] <- c(-Inf, Inf)
+oneSex<-T
 
-#itermax <- 18000
-itermax <- 10000
-#itermax <- 33
-SMC_parts<-6500
-# nchains<-4
-# ncores<-detectCores()
-# nchains<-4
-ncores<-7
-# if(ncores%%nchains!=0) {
-#   print("Warning: #cores/#nchains not divisible, adjusting #chains=1")
-#   nchains<-1
-# }
+########## GENERATE THE SIMULATED DATA ##########
+startValues <- list(
+  survPars = c(-9.65, 3.77),
+  growthPars = c(1.41, 0.56, 0.08),
+  # reprPars = c(-7.23, 2.6),
+  reprPars = c(0, 0.2),
+  offNumPars = 1,
+  offSizePars = c(0.36, 0.71, 0.16),
+  Schild = 0.873,
+  obsProbPar = 0.999 # not too close to 50 since this will hurt the chain
+)
+vals<-unlist(startValues)
+simPars <- list(n=100, t=5000,
+                # set survival details:
+                survFunc = linLogit, survPars = vals[1:2],
+                # set growth details:
+                growthSamp = sampleDTN,
+                growthPars = c(vals[3:5], 1.5, 3.55),
+                # set reproduction details:
+                reprFunc = linLogit, reprPars = vals[6:7],
+                # set offspring number and size distribution details:
+                offNum=vals[8], offNumSamp=returnConstant, offSizeSamp = sampleDTN,
+                offSizePars = c(vals[9:11], 1.5, 3.55),
+                # Child survival probability:
+                Schild=vals[12], obsProb=vals[13],
+                # set other miscelaneous parameters:
+                Start = 2.7, thresh=1000, OneGend = oneSex,
+                popPrint = F, verbose=F)
+
+# simmedData<-readRDS(paste0(directory,"RDSobjects/simmedData"))
+set.seed(102010)
+simmedData <- do.call(simulateIBM, simPars)
+max.cens <- simmedData$census.number %>% max
+simmedData%<>%filter(census.number>=max(c((max.cens-12L),1L)))
+# Y is [size_distribution , year]
+Y <- getSizeDistns(simmedData, breaks)[,(max.cens-12):max.cens]
+
+priorProbs<-rowSums(Y)/sum(Y)
+# priorProbs<-c(0.03374183, 0.16805116, 0.39873340, 0.39947362)
+########################### MAKE THE START VALUES ##############################
+
+x0<-getInitialValues(simmedData,printPars = T)
+stop("Initial Values don't correspond to realdataset")
+vals
+unlist(x0)
+sqrt(sum((vals-unlist(x0))*(vals-unlist(x0))))
+
+itermax <- 5000
+SMC_parts<-6700
+ncores<-8
+
+# x0[["obsProbPar"]]<-qlogis(0.95)
+# x0[["offNumPars"]]<-1
+# Import x0 value:
+# x0<-readRDS(paste0(directory,"./Results/x0_MH_GSF_poissonMu_MultinomialObs"))
+# x0[["offNumPars"]]<-1
+# x0<-0.99*unlist(startValues)
+
+namer<-"zeroReprod_sims_GSF_poissonMu_multinomObs_GLMx0_Retake"
+
+saveRDS(simmedData, paste0("simmedData_",namer))
+
+# propCov<-readRDS(paste0(directory,"gro")) #+ diag(13)*1/100
+mufun<-match.fun('poissonMu') #match.fun('multnomMu')
+muPar<-list(popSize=Y[,1],n=SMC_parts) #list(popSize=sum(Y[,1]), n=SMC_parts, probs=priorProbs) 
+
+obsfun<-match.fun('multinomialObs') # match.fun('poissonObs') # match.fun('detectionNumObs')
+
+# diagCOV<-x0/x0/5e5 (# Easy way to keep the variable names)
+# diagCOV[["offNumPars"]]<-1e-9
+# propCOV<-diag(diagCOV)
+# Import covariance matrix:
+# propCOV<-readRDS(paste0(directory,"/Results/propCOV_MH_GSF_poissonMu_MultinomialObs"))
+propCOV<-diag(length(x0))/100
 
 ########################### SPECIFYING THE PRIORS ##############################
 
@@ -64,20 +140,30 @@ flatPriors <- list(
   # Childsize sd:
   osFuncSD=listy,
   # qlogis(Child survival):
-  Schild=list(min=0, max=50),
+  Schild=listy,
   # qlogis(probability of detection of an animal):
-  obsProb=list(min=1, max=50)
+  obsProb=listy
 )
 
-########################### MAKE THE START VALUES ##############################
-startValues <- list(
-  survPars = c(-9.65, 3.77),
-  growthPars = c(1.41, 0.56, log(0.08)),
-  reprPars = c(-7.23, 2.6),
-  offNumPars = 1,
-  offSizePars = c(0.36, 0.71, log(0.16)),
-  Schild = qlogis(0.873), 
-  obsProbPar = 10 # not too close to 50 since this will hurt the chain
+returnSelf <- function(x) x
+linkNum <- function(x) exp(x)+1
+if(oneSex) {Schilder <- function(x) 0.5*plogis(x)
+} else {Schilder <- function(x) plogis(x)}
+
+links<-c(
+  'returnSelf', # Survival Logistic Regression Intercept
+  'returnSelf', # Survival Logistic Regression Gradient
+  'returnSelf', # Growth Linear Regression Intercept
+  'returnSelf', # Growth Linear Regression Gradient
+  'exp', # Growth Linear Regression Dispersion (Std. Dev.)
+  'returnSelf', # Reproduction Logistic Regression Intercept
+  'returnSelf', # Reproduction Logistic Regression Gradient
+  'linkNum', # Offspring Number per Birth
+  'returnSelf', # Offspring Size Linear Regression Intercept
+  'returnSelf', # Offspring Size Linear Regression Gradient
+  'exp', # Offspring Size Linear Regression Dispersion (Std. Dev.)
+  'Schilder', # Offspring Survival Probability
+  'plogis' # Observed Probability
 )
 
 ########################### AUTOCALCULATE START VALUES ##############################
@@ -124,9 +210,6 @@ skeleton = list(
 #     reprPars = c(-11.23, 3.6)
 #     growthPars = c(1.41, 0.56, log(0.04), 1.5, 3.55)
 
-# Define the breaks for the 4 group specification:
-breaks <- seq(1.5, 3.55, l=6)[-2]
-
 # # Get the prior initial size distribution:
 # priorLoopN <- 100
 # priorCounts <- rep(0, length(breaks)-1)
@@ -150,19 +233,9 @@ breaks <- seq(1.5, 3.55, l=6)[-2]
 # priorProbs <- countsToProbs(priorCounts)
 # priorStartSize <- (sum(priorCounts)/priorLoopN) %>% ceiling
 # priorStartSizeSD <- sd(priorStartSize)
-# ############################ GENERATE THE DATA #################################
-# 
-# # Get the observations:
-# set.seed(102010)
-# simmedData <- do.call(simulateIBM, simPars)
-simmedData<-readRDS(paste0(directory,"RDSobjects/simmedData"))
-max.cens <- simmedData$census.number %>% max
-# Y is [size_distribution , year]
-Y <- getSizeDistns(simmedData, breaks)[,(max.cens-12):max.cens]
 
 #################### CREATE THE LOGTARGETPARAMETERS OBJECT #####################
 # readRDS(paste0(directory,"RDSobjects/IPMLTP"))
-priorProbs<-c(0.03374183, 0.16805116, 0.39873340, 0.39947362)
 
 IPMLTP <- list(
   priorFunc = match.fun('evalPriors'),
@@ -172,35 +245,31 @@ IPMLTP <- list(
   survFunc = match.fun('linLogit'),
   growthSamp = match.fun('sampleNorm'),
   reprFunc = match.fun('linLogit'),
-  offNumSamp = match.fun('returnConstant'),
+  offNumSamp = match.fun('PoisNum'),
   offSizeSamp = match.fun('sampleNorm'),
-  oneSex = TRUE,
-  mu = match.fun('multnomMu'),
-  muPar = c(sum(Y[,1]), list(priorProbs)),
+  oneSex = oneSex,
+  mu = mufun, # mu = match.fun('multnomMu'), 
+  muPar = muPar, # muPar = list(popSize=sum(Y[,1]), probs=priorProbs),
   b = SMC_parts, 
   Y = Y,
-  obsProb = match.fun('detectionNumObs'),
-  shift = qlogis(0.49),
-  breaks = breaks
+  obsProb = obsfun, # obsProb = match.fun('detectionNumObs'), # obsProb = match.fun('poissonObs'),
+  fixedObsProb=F,
+  breaks = breaks,
+  sizes=sizes,
+  links = links
 )
-
+# obsProb<-match.fun("multinomialObs1D")
 # saveRDS(IPMLTP, "IPMLTP")
 
-startValues %<>% unlist
+startValues <- unlist(x0)
 # SVjitter <- startValues + rnorm(length(startValues), 0, 0.5)
 # saveRDS(SVjitter, paste0(directory,"RDSobjects/HWP/startvals_jitter"))
-SVjitter<-readRDS(paste0(directory,"RDSobjects/startvals_jitter"))
+# SVjitter<-readRDS(paste0(directory,"RDSobjects/startvals_jitter"))
 
-vals<-startValues
-vals[3:5]<-SVjitter[3:5]
-print(vals)
-print(startValues)
-print(SVjitter)
-
-print("Initial Values Log-Likelihood=")
+# print("Initial Values Log-Likelihood=")
 # print(logTargetIPM(SVjitter, logTargetPars = IPMLTP, returnNeg = T, printProp = F))
-print(1563.144)
-print(" ")
+# print(1563.144)
+# print(" ")
 
 ########################### SIMULATED ANNEALING ################################
 
@@ -234,13 +303,17 @@ print(" ")
 ######################### RUN THE MCMC CHAINS IN PARALLEL ######################
 
 # high resolution plots:
-plotNames <- c("log(pi)", "Si", "Sg", "Gi", "Gg", "log(Gs)", "Ri", "Rg", "ON",
-               "OSi", "OSg", "log(OSs)", "qlogis(Schild)", "qlogis(ObsP)")
+plotNames <- c("LL", "SurvI", "SurvG", "GrowI", "GrowG", "GrowS", "ReprI", "ReprG", "OffNum",
+               "OffSurvI", "OffSurvG", "OffSurvS", "SurvChild", "ObsProb")
 
 # Objects which the cluster needs to know about to run the sampling:
-clNeeds = c('logTargetIPM', '%<>%', '%>%', 'sampleNorm', 'returnConstant',
-            'detectionNumObs', 'evalPriors', 'sampleStateIPM_red', 'particleFilter',
-            'multnomMu', 'linLogit', 'vectorisedSamplerIPM', 'rmvnorm') 
+clNeeds = c('logTargetIPM', '%<>%', '%>%', 'sampleNorm', 'returnConstant', 'PoisNum',
+            'evalPriors', 'sampleStateIPM_red', 'particleFilter','poissonObs',
+            'multnomMu', "poissonMu", 'linLogit', 'vectorisedSamplerIPM', 'rmvnorm',
+            'abind','colprods', 'detectionNumObs', 'SplitMNom','dmnom','multinomialObs',
+            'countsToProbs','beta_mnomObs','beta_poisObs','linkNum','returnSelf',
+            'Schilder','returnConstant','beta_mnMu','beta_poisMu','fixedPoisObs',
+            'fixedMuObs') 
 
 
 # proposal <- multvarNormProp; uFunc <- NULL;
@@ -255,16 +328,24 @@ clNeeds = c('logTargetIPM', '%<>%', '%>%', 'sampleNorm', 'returnConstant',
 
 # An example of how chains are run, using a stored proposal covariance structure
 # and then stored for iteration:
+print("And so it begins...")
 ptm <- proc.time()
-Sheepies <- Nested_pMH(proposal = multvarNormProp, uFunc = multvarPropUpdate,
-                         #propPars = diag(length(SVjitter))/100,
-                         #propPars = readRDS("ObsNumSigma4.1"),
-                         propPars = propCov,
+Sheepies <- pM_GaA(propCOV = propCOV,
                          lTarg = logTargetIPM, lTargPars = IPMLTP,
-                         cores = ncores, 
-                         x0 = vals, #x0 = unlist(startValues),
+                         cores = ncores,
+                         x0 = x0, # x0 = unlist(startValues),
                          itermax=itermax,
                          clNeeds = clNeeds, packages = "dissPackage3", prntPars=TRUE)
+
+# Sheepies <- Nested_pMH(proposal = multvarNormProp, uFunc=NULL, #uFunc = multvarPropUpdate,
+#                        propPars = diag(length(SVjitter))/100,
+#                        #propPars = readRDS("ObsNumSigma4.1"),
+#                        # propPars = propCov,
+#                        lTarg = logTargetIPM, lTargPars = IPMLTP,
+#                        cores = ncores,
+#                        x0 = SVjitter, #x0 = unlist(startValues),
+#                        itermax=itermax,
+#                        clNeeds = clNeeds, packages = "dissPackage3", prntPars=TRUE)
 ptm_fin<-proc.time() - ptm;
 print(paste0("ncpus= ",ncores," : ",ptm_fin))
 
@@ -279,7 +360,8 @@ print(paste0("ncpus= ",ncores," : ",ptm_fin))
 #                 lTarg = logTargetIPM, lTargPars = IPMLTP,
 #                 x0 = SVjitter, itermax=itermax, prntPars = T)
 
-tag<-paste0(namer,"_",priorName,"_its",itermax,"_",Sys.Date())
+tag<-paste0(namer,"_",priorName,"_its",itermax,"_",
+            gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = ""))
 saveRDS(Sheepies, paste0(directory,"Results/",tag))
 # 
 # MLE<-readRDS("./Results/MLE_svjitter")

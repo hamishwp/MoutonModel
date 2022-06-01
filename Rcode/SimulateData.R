@@ -29,25 +29,51 @@ sampleRec <- function(n, rate, L, U){
 }
 
 sampleDTN <- function(x, pars){
-  # purpose : produces samples from a doubly truncated normal distribution 
-  #           using a rejection sampling algorithm
-  # extract parameter values:
-  int <- pars[1] ; gra <- pars[2] ; sigma <- pars[3]
-  L <- pars[4] ; U <- pars[5] ;
   
-  # obtain the samples:
-  mean <- x*gra + int
-  sampled.size <- rnorm(n, mean, sigma)
+  # range is a vector of two values
+  mu<- x*pars[2] + pars[1]
+  # F.a <- pnorm(pars[4], mean = mu, sd = pars[3])
+  # F.b <- pnorm(pars[5], mean = mu, sd = pars[3])
   
-  # perform rejection sampling to ensure the samples are within (L, U):
-  while (any(sampled.size<L | sampled.size>U)){
-    badSamples <- sampled.size<L | sampled.size>U
-    replacements <- rnorm(sum(badSamples), mean[badSamples], sigma)
-    sampled.size[badSamples] <- replacements
-  }
+  return(qnorm(runif(length(x), 
+             min = pnorm(pars[4], mean = mu, sd = pars[3]), 
+             max = pnorm(pars[5], mean = mu, sd = pars[3])),
+        mean = mu, sd = pars[3]))
   
-  return(sampled.size)
 }
+
+dgammaM<-function(x,mu,sig_percent){
+  # rgamma(n shape = alpha, scale = theta)
+  # Note that the sig_percent is the constant coefficient of variation
+  # Therefore, it is like a percentage of the mean
+  ssq<-sig_percent*sig_percent
+  dgamma(x,shape=1./ssq,scale=mu*ssq)
+}
+
+# sampleDTN <- function(x, pars){
+#   # purpose : produces samples from a doubly truncated normal distribution 
+#   #           using a rejection sampling algorithm
+#   # extract parameter values:
+#   int <- pars[1] ; gra <- pars[2] ; sigma <- pars[3]
+#   L <- pars[4] ; U <- pars[5] ;
+#   
+#   # obtain the samples:
+#   mean <- x*gra + int
+#   sampled.size <- rnorm(length(x), mean, sigma)
+#   
+#   
+#   
+#   # perform rejection sampling to ensure the samples are within (L, U):
+#   while (any(sampled.size<L | sampled.size>U)){
+#     badSamples <- sampled.size<L | sampled.size>U
+#     replacements <- rnorm(sum(badSamples), mean[badSamples], sigma)
+#     sampled.size[badSamples] <- replacements
+#   }
+#   
+#   return(sampled.size)
+# }
+
+
 
 sampleNorm <- function(x, pars){
   # purpose : produces samples as DTN without the double truncation.
@@ -55,14 +81,16 @@ sampleNorm <- function(x, pars){
   return(rnorm(n = length(x), mean = (x*pars[2] + pars[1]) , sd = pars[3]))
 }
 
+sampleOffNumMod <- function(z, rate) (rpois(length(z),rate-1L)+1L)
+
 sampleOffNum <- function(z, rate){
   # purpose : Samples the number of offspring an individual has when they 
   #           reproduce, from a truncated poisson distribution
   # input   : The mean number of children each parent has when they reproduce
   # output  : The integer number of children had by the parent
   
-  if (class(rate)!="numeric") stop("invalid rate input")
-  rate <- exp(rate)
+  # if (class(rate)!="numeric") stop("invalid rate input")
+  # rate <- exp(rate)
   
   # rejection algorithm that samples from the truncated Poisson with at least
   # 1 offspring produced:
@@ -103,7 +131,7 @@ sampleExp <- function(z, pars){
 simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
                         reprFunc, reprPars, offNum=NULL, offNumSamp=NULL,
                         offNumPars=NULL, offSizeSamp, offSizePars, Start,
-                        Schild=1, OneGend=FALSE, thresh=Inf,
+                        Schild=1, obsProb=NULL, OneGend=FALSE, thresh=Inf,
                         CalcOffSurv=TRUE, popPrint=TRUE, verbose=FALSE){
   # purpose : Uses an Individual Based Model (IBM) to simulate census data used
   #           in fitting Integral Projection Models.
@@ -122,7 +150,7 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
   #                         reproduction. It takes two arguments, the size of
   #                         the individual, and a vector of parameters.
   #           reprPars    - The parmeters for the reproduction function.
-  #           offNum      - If not NULL, indiciates the fixed number of 
+  #           offNum      - If not NULL, indicates the fixed number of 
   #                         offspring that a parent has when they reproduce.
   #           offNumSamp  - If offNum is NULL, this is the function which
   #                         samples the number of offspring that a parent has
@@ -142,6 +170,8 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
   #                         if so, it must be of length n
   #           Schild      - The probability of survival of children to their 
   #                         first census.
+  #           obsProb     - The probability of the individual to be observed at 
+  #                         in any one census.
   #           OneGend     - If TRUE, the census only tracks one gender, and so 
   #                         only half of the children born are assimilated into
   #                         the census data.
@@ -168,9 +198,262 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
   survFunc %<>% match.fun ; growthSamp %<>% match.fun ; reprFunc %<>% match.fun
   offSizeSamp %<>% match.fun
   
+  # growthPars[3]<-exp(growthPars[3])
+  # offSizePars[3]<-exp(offSizePars[3])
+  
   # If a parent always has the same number of children, we make sure it is 
   # an integer:
-  if (!is.null(offNum)) offNum <- ceiling(offNum)
+  # if (!is.null(offNum)) offNum <- ceiling(offNum)
+  
+  # generate first generation from parent of fixed size:
+  if (length(Start)!=n) {
+    
+    Start <- rep(Start[1], n)
+    initial.sizes <- offSizeSamp(Start, offSizePars)
+    
+    DF <- data.frame(id=1:n, size=initial.sizes, survived=1, 
+                     census.number=1, parent.size=Start, reproduced=NA, 
+                     prev.size=NA, off.survived=NA, off.born=NA)  
+    
+  } else DF <- data.frame(id=1:n, size=Start, survived=rep(1,length(Start)), 
+                          census.number=rep(1,length(Start)), 
+                          parent.size=sample(Start,length(Start),replace = T), 
+                          reproduced=NA, 
+                          prev.size=NA, off.survived=NA, off.born=NA)
+  
+  # create a data.frame which contains only the individuals from the previous
+  # census (and will be constantly updated):
+  previous.census <- DF
+  
+  time <- 2 # set the current census number (will be continually updated)
+  while((time < t + 1) & nrow(previous.census)<thresh){
+    
+    # Select only the survivors of the previous census:
+    survivorsDF <- subset(previous.census, previous.census$survived==1)
+    current.pop.size <- nrow(survivorsDF)
+    
+    # Determine who survives this time:
+    survivors<-newSizes<-rep(NA,current.pop.size)
+    survivors[!is.na(survivorsDF$size)] <- rbinom(length(survivorsDF$size[!is.na(survivorsDF$size)]), 1, 
+                survFunc(survivorsDF$size[!is.na(survivorsDF$size)], survPars))
+    
+    if (sum(survivors,na.rm = T)==0) break
+    
+    iids<-survivors==1 & !is.na(survivors)
+    
+    # Determine their new sizes:
+    newSizes[iids] <- growthSamp(survivorsDF$size[iids],growthPars)
+
+    # Determine who reproduces (out of the survivors):
+    reproducers <- rep(NA, current.pop.size)
+    # reproducers[iids] <- rbinom(sum(survivors,na.rm = T), 1, reprFunc(na.omit(newSizes), reprPars))
+    reproducers[iids] <- rbinom(sum(survivors,na.rm = T), 1, reprFunc(survivorsDF$size[iids], reprPars))
+    
+    iids<-reproducers==1 & !is.na(reproducers)
+    
+    # nRepr <- reproducers %>% na.omit %>% `==`(1) %>% sum
+    parentsDF <- survivorsDF[iids,]
+    
+    # Determine the number of offspring for each parent:
+    if (!is.null(offNumPars)) {censusOffNum <-(rpois(reproducers[iids],offNumPars-1L)+1L)
+    }else if(!is.null(offNum)) {censusOffNum <- rep(reproducers[iids],offNum)
+    }else stop("No offspring parameters provided, check offNum or offNumPars")
+    # parentSizes <- offNumSamp(reproducers, offNumPars)
+
+    # Determine the sizes of the offspring:
+    reprSizes <- survivorsDF$size[iids]
+    parentSizes <- rep(reprSizes, censusOffNum)
+    parentIDs <- rep(parentsDF$id, censusOffNum)
+    
+    offspringSizes <- offSizeSamp(parentSizes, offSizePars)
+    
+    # Determine the survival of the offspring:
+    nOffspring <- length(offspringSizes)
+    survivingChildren <- rbinom(nOffspring, 1, Schild)
+    
+    # Determine the sex of the offspring:
+    probGend <- ifelse(isTRUE(OneGend), 0.5, 1)
+    gender <- rbinom(nOffspring, 1, probGend)
+    
+    # Find out which children make it to census:
+    newIDStart <- (max(DF$id)+1)
+    censusedChildren <- which(gender==1 & survivingChildren==1)
+    
+    # Print out summaries of the simulation if desired:
+    if (verbose){
+      cat("survival rate is", sum(survivors)/current.pop.size,"\n")
+      oldSizes <- survivorsDF$size[which(survivors==1)]
+      cat("average growth is", mean(na.omit(newSizes) - oldSizes), "\n")
+      # cat("reproduction rate is", nRepr/current.pop.size, "\n")
+      cat("rate of births is", nOffspring/current.pop.size, "\n")
+      cat("child censusing rate is", length(censusedChildren)/nOffspring,"\n")
+      gr <- (length(censusedChildren)+sum(survivors))/current.pop.size
+      cat("growth rate is", gr, "\n")
+      cat("\n")
+    }
+    
+    # Calculate how many surviving children per parent with a helper:
+    helper <- function(x){
+      ifelse(!x %in% parentIDs,
+             NA,
+             sum(x==parentIDs & survivingChildren==1))
+    }#helper
+
+    helper2 <- function(x){
+      ifelse(!x %in% parentIDs,
+             NA,
+             sum(x==parentIDs))
+    }#helper2
+
+    # Only use the helper if the user wants us to. Otherwise make a vector of
+    # NAs for speed of calculation:
+    if (isTRUE(CalcOffSurv)){
+      off.survived <- sapply(survivorsDF$id, helper)
+      off.born <- sapply(survivorsDF$id, helper2)
+    } else{
+      off.survived <- rep(NA, current.pop.size)
+      off.born <- rep(NA, current.pop.size)
+    }
+    
+    # Create the DF for the parents:
+    currentDF <- data.frame(id=survivorsDF$id,
+                            size=newSizes,
+                            survived=survivors,
+                            census.number=time,
+                            parent.size=NA,
+                            reproduced=reproducers,
+                            prev.size=survivorsDF$size,
+                            off.survived=off.survived,
+                            off.born=off.born)
+    
+    # Update the previous.census data.frame:
+    if (length(censusedChildren)==0) previous.census <- currentDF
+    
+    else{
+      newIDs <- newIDStart:(length(censusedChildren)+newIDStart-1)
+      offspringDF <- data.frame(id = newIDs,
+                                size = offspringSizes[censusedChildren],
+                                survived = 1, census.number = time,
+                                parent.size = parentSizes[censusedChildren],
+                                reproduced = NA, prev.size = NA,
+                                off.survived = NA, off.born = NA)
+      
+      # Update the previous.census data.frame:
+      previous.census <- rbind(currentDF, offspringDF)
+    }
+    
+    # Update the overall data:
+    DF <- rbind(DF, previous.census)
+    
+    # Iterate the census.number:
+    time <- time + 1
+    
+    # Let the user know the size of the population:
+    if(popPrint) print(nrow(previous.census))
+  }
+  
+  
+  if(!is.null(obsProb)) DF[sample(1:nrow(DF),size = round((1-obsProb)*nrow(DF)),replace = F),-c(1,4)]<-NA
+  
+  return(DF)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+simulateIBM_old <- function(n, t, survFunc, survPars, growthSamp, growthPars,
+                        reprFunc, reprPars, offNum=NULL, offNumSamp=NULL,
+                        offNumPars=NULL, offSizeSamp, offSizePars, Start,
+                        Schild=1, obsProb=0.85, OneGend=FALSE, thresh=Inf,
+                        CalcOffSurv=TRUE, popPrint=TRUE, verbose=FALSE){
+  # purpose : Uses an Individual Based Model (IBM) to simulate census data used
+  #           in fitting Integral Projection Models.
+  # inputs  : n           - The starting size of the population
+  #           t           - The maximum number of censuses to simulate
+  #           survFunc    - The function which determines the probability of 
+  #                         survival. It takes two arguments, the size of the 
+  #                         individual, and a vector of parameters.
+  #           survPar     - The vector of parameters for the survival function
+  #           growthSamp  - The function which samples new sizes for
+  #                         individuals. It takes two arguments, the size of the 
+  #                         individual, and a vector of parameters
+  #           growthPars  - The parameters for the function which samples the
+  #                         new size of individuals.
+  #           reprFunc    - The function which determines the probability of 
+  #                         reproduction. It takes two arguments, the size of
+  #                         the individual, and a vector of parameters.
+  #           reprPars    - The parmeters for the reproduction function.
+  #           offNum      - If not NULL, indicates the fixed number of 
+  #                         offspring that a parent has when they reproduce.
+  #           offNumSamp  - If offNum is NULL, this is the function which
+  #                         samples the number of offspring that a parent has
+  #                         when they reproduce. It takes two arguments, the
+  #                         size of the individual, and a vector of parameters
+  #           offNumPars  - If offNum is NULL, this is the vector of parameters
+  #                         for the number of offspring each parent has when 
+  #                         they reproduce.
+  #           offSizeSamp - The function which samples the size of the offspring
+  #                         when they are first censused. It takes two
+  #                         arguments, the size of the parent, and a vector of
+  #                         parameters.
+  #           offSizePars - The vector of parameters for the function which
+  #                         samples the sizes of offspring.
+  #           Start       - The size of the individual which fathers all the 
+  #                         initial members of the population. Can be a vector,
+  #                         if so, it must be of length n
+  #           Schild      - The probability of survival of children to their 
+  #                         first census.
+  #           obsProb     - The probability of the individual to be observed at 
+  #                         in any one census.
+  #           OneGend     - If TRUE, the census only tracks one gender, and so 
+  #                         only half of the children born are assimilated into
+  #                         the census data.
+  #           thresh      - If the size of the population ever exceeds this 
+  #                         quantity, we stop simulating.
+  #           CalcOffSurv - If TRUE will calculate the number of offspring
+  #                         that recruited for each parent in the population.
+  #                         if FALSE, the function will fill this column with 
+  #                         all NAs to save on computation time.
+  #           popPrint    - If TRUE, the size of the population is printed at
+  #                         the end of each census.
+  #           verbose     - if TRUE, will print the survival rate, reproduction
+  #                         rate, avergae change in size, rate of births and
+  #                         child cenus rate at every survey:
+  
+  # make sure the number of children per litter is specified correctly:
+  if (is.null(offNum) & (is.null(offNumSamp) | is.null(offNumPars))){
+    stop('offNum or both offNumFunc and offNumPars must be specified')
+  }
+  
+  if (is.null(thresh)) thresh <- .Machine$integer.max
+  
+  # to allow names ot be passed:
+  survFunc %<>% match.fun ; growthSamp %<>% match.fun ; reprFunc %<>% match.fun
+  offSizeSamp %<>% match.fun
+  
+  # growthPars[3]<-exp(growthPars[3])
+  # offSizePars[3]<-exp(offSizePars[3])
+  
+  # If a parent always has the same number of children, we make sure it is 
+  # an integer:
+  # if (!is.null(offNum)) offNum <- ceiling(offNum)
   
   # generate first generation from parent of fixed size:
   if (length(Start)!=n) Start <- rep(Start[1], n)
@@ -210,12 +493,13 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     
     # Determine the number of offspring for each parent:
     if (!is.null(offNum)) censusOffNum <- rep(offNum, nRepr)
-    else censusOffNum <- offNumSamp(parentsDF$size, offNumPars)
+    else censusOffNum <-(rpois(nRepr,offNumPars-1L)+1L)
+    # else censusOffNum <- offNumSamp(parentsDF$size, offNumPars)
     
     # Determine the sizes of the offspring:
     reprSizes <- survivorsDF$size[reproducers==1 & !is.na(reproducers)]
     parentSizes <- rep(reprSizes, censusOffNum)
-    parentIDs <- rep(parentsDF$individual, censusOffNum)
+    parentIDs <- rep(parentsDF$id, censusOffNum)
     offspringSizes <- offSizeSamp(parentSizes, offSizePars)
     
     # Determine the survival of the offspring:
@@ -223,11 +507,11 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     survivingChildren <- rbinom(nOffspring, 1, Schild)
     
     # Determine the sex of the offspring:
-    probGend <- ifelse(isTRUE(OneGend), 1/2, 1)
+    probGend <- ifelse(isTRUE(OneGend), 0.5, 1)
     gender <- rbinom(nOffspring, 1, probGend)
     
     # Find out which children make it to census:
-    newIDStart <- (max(DF$individual)+1)
+    newIDStart <- (max(DF$id)+1)
     censusedChildren <- which(gender==1 & survivingChildren==1)
     
     # Print out summaries of the simulation if desired:
@@ -259,17 +543,15 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     # Only use the helper if the user wants us to. Otherwise make a vector of
     # NAs for speed of calculation:
     if (isTRUE(CalcOffSurv)){
-      off.survived <- sapply(survivorsDF$individual, helper)
-      off.born <- sapply(survivorsDF$individual, helper2)
-    }
-    
-    else{
+      off.survived <- sapply(survivorsDF$id, helper)
+      off.born <- sapply(survivorsDF$id, helper2)
+    } else{
       off.survived <- rep(NA, current.pop.size)
       off.born <- rep(NA, current.pop.size)
     }
     
     # Create the DF for the parents:
-    currentDF <- data.frame(individual=survivorsDF$individual,
+    currentDF <- data.frame(id=survivorsDF$id,
                             size=newSizes,
                             survived=survivors,
                             census.number=time,
@@ -284,7 +566,7 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     
     else{
       newIDs <- newIDStart:(length(censusedChildren)+newIDStart-1)
-      offspringDF <- data.frame(individual = newIDs,
+      offspringDF <- data.frame(id = newIDs,
                                 size = offspringSizes[censusedChildren],
                                 survived = 1, census.number = time,
                                 parent.size = parentSizes[censusedChildren],
@@ -305,8 +587,21 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     if(popPrint) print(nrow(previous.census))
   }
   
+  # NotObs<-c()
+  # for (c in unique(DF$census.number)){
+  #   indy<-DF$census.number==c
+  #   indy<-(1:length(indy))[indy]
+  #   lenS<-length(indy)
+  #   subprob<-max(c(min(c(rnorm(n = 1,mean = (1-obsProb),sd = 0.05),0.99)),0.01))
+  #   subs<-rbinom(n = 1,size = lenS,prob = subprob)
+  #   NotObs%<>%c(sample(x = indy,size = subs,replace = F))
+  # }
+  
+  # DF[NotObs,-c(1,4)]<-NA
+  
   return(DF)
 }
+
 
 # UNCOMMENT the below sections for example datasets to be generated:
 

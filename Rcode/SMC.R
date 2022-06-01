@@ -1,5 +1,7 @@
-library(dissPackage3) #for the countsToProbs function
-
+library(dissPackage3)
+library(mc2d)
+library(abind)
+# library(Rfast,include.only = "colprods")
 ####################### INITIAL DISTRIBUTION FUNCTIONS #########################
 
 unifMu <- function(popSize, traitClasses, n=1){
@@ -12,13 +14,44 @@ unifMu <- function(popSize, traitClasses, n=1){
   return(rmultinom(n, popSize, rep(1/traitClasses, traitClasses)))
 }
 
-multnomMu <- function(popSize, probs, n=1){
+multnomMu <- function(popSize, probs, n=1, pobs){
   # purpose : returns a vector of individual counts which is uniformly 
   #           distributed across the dimensions of the state space
   # inputs  : popSize - The integer total population size (to be spread
   #                     uniformly amongst the train classes) 
   #           probs   - The probabilities of beingin each size class
-  return(rmultinom(n, popSize, probs))
+  #           pobs   - probability of being observed
+  
+  return(rmultinom(n, round(popSize/pobs), probs))
+  # return(rmultinom(n, popSize, probs))
+}
+
+poissonMu <- function(popSize, n=1, pobs){
+  # purpose : returns a vector of 'real' population per size class
+  #           calculated from the observed population and observed probability
+  # inputs  : popSize - The integer population per size class
+  #           pobs   - probability of being observed
+  return(popSize+t(sapply((popSize*(1/pobs-1)),rpois,n=n)))
+}
+
+beta_mnMu <- function(popSize, probs, n=1, pobs){
+  # purpose : returns a vector of individual counts which is uniformly 
+  #           distributed across the dimensions of the state space
+  # inputs  : popSize - The integer total population size (to be spread
+  #                     uniformly amongst the train classes) 
+  #           probs   - The probabilities of beingin each size class
+  #           pobs   - probability of being observed
+  p<-1/rbeta(n,pobs[1],pobs[2])
+  return(sapply(p, function(p) rmultinom(1, round(popSize*p), probs) ))
+}
+
+beta_poisMu <- function(popSize, n=1, pobs){
+  # purpose : returns a vector of 'real' population per size class
+  #           calculated from the observed population and observed probability
+  # inputs  : popSize - The integer population per size class
+  #           pobs   - probability of being observed
+  p<-rbeta(n,pobs[1],pobs[2])
+  return(popSize+sapply(p,function(p) sapply((popSize*(1/p-1)),rpois,n=1)))
 }
 
 ################### OBSERVATION CONDITIONAL LIKELIHOODS ########################
@@ -50,7 +83,7 @@ binomialObs <- function(Y, X, p){
   rbind(Y, X) %>% apply(2, helper, p=p) %>% return
 }
 
-detectionNumObs1D <- function(Y, X, p, log=F){
+detectionNumObs1D <- function(Y, X, p, logy=F){
   # purpose : A simple model which ignores the probability of the distribution
   #           of sizes, and says that the probability of observing what we
   #           observe is simply the probability of detecting the number of 
@@ -68,10 +101,10 @@ detectionNumObs1D <- function(Y, X, p, log=F){
   trueSizes <- sum(X)
   obsSizes <- sum(Y)
   
-  return(dbinom(obsSizes, trueSizes, p, log=log))
+  return(dbinom(obsSizes, trueSizes, p, log=logy))
 }
 
-detectionNumObs <- function(Y, X, p, log=F){
+detectionNumObs <- function(Y, X, p, logy=T){
   # purpose : A simple model which ignores the probability of the distribution
   #           of sizes, and says that the probability of observing what we
   #           observe is simply the probability of detecting the number of 
@@ -86,12 +119,12 @@ detectionNumObs <- function(Y, X, p, log=F){
   # output  : Either a single probability, or a vector with the probability for
   #           each time step. Log probabilities are used.
   
-  return(dbinom(colSums(Y), colSums(X), p, log=log))
+  return(dbinom(colSums(Y), colSums(X), p, log=logy))
   
 }
 
 
-poissonObs <- function(Y, X, p, log=T){
+poissonObs <- function(Y, X, p, logy=T){
   # purpose : A model which assumes the number of individuals in each size class
   #           is poisson distributed with mean equal to the number of true
   #           individuals in the classx the detection probability.
@@ -104,23 +137,13 @@ poissonObs <- function(Y, X, p, log=T){
   #               the true population.
   # output  : Either a single probability, or a vector with the probability for
   #           each time step. Log probabilities are used.
-  
-  # In case Y and X are for a single time step:
-  Y %<>% as.matrix ; X %<>% as.matrix
-  
-  helper <- function(yx, log=T){
-    n <- length(yx)
-    y <- yx[1:(n/2)]
-    x <- yx[(n/2+1):n]*p
-    results <- dpois(y, x, log=log)
-    if (log) return(sum(results))
-    else return(prod(results))
-  }
-  
-  rbind(Y, X) %>% apply(2, helper) %>% return
+  results <- dpois(Y, (X*p), log=logy)
+  # results %<>% replace(is.infinite(results), log(.Machine$double.xmin))
+  if (logy) return(colSums(results,na.rm = T))
+  else return(colprods(results,na.rm = T))
 }
 
-prob1Obs <- function(Y, X, p, log=F){
+prob1Obs <- function(Y, X, p, logy=T){
   # purpose : returns a uniform probability so that we can test the particle 
   #           filter more easily
   # inputs  : Y   - The observation matrix (not used)
@@ -128,11 +151,17 @@ prob1Obs <- function(Y, X, p, log=F){
   #           p   - The probability of detection (not used)
   #           log - if TRUE, returns the log probability instead
   Y %<>% as.matrix %>% ncol
-  if (log) return(runif(Y) %>% log)
+  if (logy) return(runif(Y) %>% log)
   else return(runif(Y))
 }
 
-multinomialObs <- function(Y, X, p, log=F){
+SplitMNom<-function(vec,logy) dmultinom(x = vec[,1],prob=vec[,2],log=logy)
+
+dmnom<-function(Y,multiProbs,logy){
+  out1<-apply(abind(Y,multiProbs,along=3),2,SplitMNom,log=logy)
+}
+
+multinomialObs <- function(Y, X, p, logy=T){
   # purpose : An observation model for size distributions. We assume we miss an 
   #           animal with fixed probability. Then, given the total number of 
   #           observed animals, we assumed that they are multinomially
@@ -152,43 +181,133 @@ multinomialObs <- function(Y, X, p, log=F){
   # Sometimes the particle filter requires all arguments to be a list, since
   # p is only a single parameter, this can cause it to be passed as a list of 
   # one element, this tries to elegantly cope with the edge case:
-  if (class(p)=='list') p %<>% as.numeric
-  
-  helper <- function(yp){
-    n <- length(yp)/2
-    y <- yp[1:n]
-    pr <- yp[-(1:n)]
-    dmultinom(y, prob = pr, log = log)
-  }
-  
-  if (isTRUE(log)) operator <- `+`
-  else operator <- `*`
-  
-  # In case Y and X are for a single time step:
-  Y %<>% as.matrix ; X %<>% as.matrix
+  p %<>% as.numeric
   
   # Some required quantities:
-  truePopSizes <- apply(X, 2, sum)
-  obsPopSizes <- apply(Y, 2, sum)
+  truePopSizes <- colSums(X)
+  obsPopSizes <- colSums(Y)
   multiProbs <- apply(X, 2, countsToProbs)
+  # multiProbs[is.na(multiProbs)]<-1
+    
+  # out1<- dmultinomial(t(Y), prob = t(multiProbs), log = logy)
+  indy<-truePopSizes!=0
+  out1<-out2<-rep(ifelse(logy,-Inf,0),length(truePopSizes))
+  out1[indy]<-dmnom(Y[,indy],multiProbs[,indy],logy)
+  out2[indy]<-dbinom(obsPopSizes[indy], truePopSizes[indy], p, log = logy)
+
+  if (logy) return(out1+out2)
+  else return(out1*out2)
+    
+  # if (logy) {
+  #   output<-out1+out2
+  #   output %>% replace(is.infinite(output), log(.Machine$double.xmin)) %>% return()
+  # }
+  # else {
+  #   output<-out1*out2
+  #   output %>% replace(is.infinite(output), .Machine$double.xmin) %>% return()
+  # }
   
-  # Calculate the prob of seeing the distribution we saw given the number we saw
-  # and the probability of seeing the number we saw
-  output <- rbind(Y, multiProbs) %>% apply(2, helper) %>%
-    operator(dbinom(obsPopSizes, truePopSizes, p, log = log))
-  
-  # To avoid returning -Inf log probabilities:
-  output %<>% replace(is.infinite(output), log(.Machine$double.xmin))
-  return(output)
 }
 
+beta_binObs <- function(Y, X, p, logy=T){
+  # purpose : A model which assumes the number of individuals in each size class
+  #           is poisson distributed with mean equal to the number of true
+  #           individuals in the classx the detection probability.
+  # inputs  : Y - A vector or matrix containing the observed sizes. If it is a
+  #               matrix, it is assumed that each time step is a column.
+  #           X - A vector or matrix containing the true sizes. The columns are
+  #               also assumed to be for different time steps if this is a
+  #               matrix.
+  #           p - The probability of observing an animal given it is present in
+  #               the true population.
+  # output  : Either a single probability, or a vector with the probability for
+  #           each time step. Log probabilities are used.
+  
+  pobs<-rbeta(ncol(Y),p[1],p[2])
+  
+  if (logy) return(dbinom(colSums(X), colSums(Y), pobs, log=logy))
+  else return(dbinom(colSums(X), colSums(Y), pobs, log=logy))
+}
+
+beta_poisObs <- function(Y, X, p, logy=T){
+  # purpose : A model which assumes the number of individuals in each size class
+  #           is poisson distributed with mean equal to the number of true
+  #           individuals in the classx the detection probability.
+  # inputs  : Y - A vector or matrix containing the observed sizes. If it is a
+  #               matrix, it is assumed that each time step is a column.
+  #           X - A vector or matrix containing the true sizes. The columns are
+  #               also assumed to be for different time steps if this is a
+  #               matrix.
+  #           p - The probability of observing an animal given it is present in
+  #               the true population.
+  # output  : Either a single probability, or a vector with the probability for
+  #           each time step. Log probabilities are used.
+  
+  pobs<-rbeta(ncol(Y),p[1],p[2])
+  results <- dpois(Y, (X*pobs), log=logy)
+  # results %<>% replace(is.infinite(results), log(.Machine$double.xmin))
+  if (logy) return(colSums(results))
+  else return(colprods(results))
+}
+
+beta_mnomObs<-function(Y, X, p, logy=T){
+  # purpose : An observation model for size distributions. We assume we miss an 
+  #           animal with fixed probability. Then, given the total number of 
+  #           observed animals, we assumed that they are multinomially
+  #           distributed according to the same size distribution as the true
+  #           population, using a beta distribution to generate the observed probabilities
+  #           of trials equal to the true number of animals in that size class.
+  # inputs  : Y - A vector or matrix containing the observed sizes. If it is a
+  #               matrix, it is assumed that each time step is a column.
+  #           X - A vector or matrix containing the true sizes. The columns are
+  #               also assumed to be for different time steps if this is a
+  #               matrix.
+  #           p - The probability of observing an animal given it is present in
+  #               the true population.
+  # output  : Either a single probability, or a vector with the probability for
+  #           each time step. Log probabilities are used.
+  
+  # Sometimes the particle filter requires all arguments to be a list, since
+  # p is only a single parameter, this can cause it to be passed as a list of 
+  # one element, this tries to elegantly cope with the edge case:
+  
+  # Some required quantities:
+  truePopSizes <- colSums(X)
+  obsPopSizes <- colSums(Y)
+  multiProbs <- apply(X, 2, countsToProbs)
+  indy<-truePopSizes!=0
+  
+  pobs<-rbeta(length(truePopSizes),p[1],p[2])
+  
+  # out1<- dmultinomial(t(Y), prob = t(multiProbs), log = logy)
+  # Make sure that if any X distributions have zero individuals, the likelihood equals zero
+  out1<-out2<-rep(ifelse(logy,-Inf,0),length(truePopSizes))
+  out1[indy]<-dmnom(Y[,indy],multiProbs[,indy],logy)
+  out2[indy]<-dbinom(obsPopSizes[indy], truePopSizes[indy], pobs[indy], log = logy)
+  
+  if (logy) return(out1+out2)
+  else return(out1*out2)
+  
+}
+
+fixedMuObs<-function(Y, X, p, logy=T, time){
+  return(multinomialObs(Y, X, p[time], logy=logy))
+}
+
+fixedPoisObs<-function(Y, X, p, logy=T, time){
+  return(poissonObs(Y, X, p[time], logy=logy))
+}
+
+fixedBinObs<-function(Y, X, p, logy=T, time){
+  return(detectionNumObs(Y, X, p[time], logy=logy))
+}
 
 ####################### IPM STATE SPACE SAMPLER ################################
 sampleStateIPM <- function(previousState, survFunc, survPars,
                            growthSamp, growthPars, reprFunc, reprPars, 
                            offNumSamp, offNumPars, offSizeSamp, offSizePars,
                            Schild, breaks, oneSex = TRUE, checks = FALSE,
-                           verbose = FALSE, shift = qlogis(0.5)){
+                           verbose = FALSE, sizes){
   # purpose : A barebones version of simulateIBM which takes as input a size 
   #           distribution at a given time, and given the parameters of the 
   #           vital rate functions, produces a sample of the size distribution
@@ -234,14 +353,6 @@ sampleStateIPM <- function(previousState, survFunc, survPars,
   #           verbose       - If TRUE prints out survival rate, average growth,
   #                           reproductive rate, birth rate, and child censusing
   #                           rate.
-  #           shift         - In many cases, if there is a correlation between
-  #                           size and survival, assuming that individuals are
-  #                           at the midpoint of the interval can cause bias,
-  #                           leading to large shifts in population size over
-  #                           time. Shift corrects for this, by putting the
-  #                           assumed size of the individual right at the start
-  #                           of the interval (value 0), right at the end (value
-  #                           1), or anything in between.
   # output  : A vector of counts of the same length as previousState
   # note : Could add functionality for customised breaks, maybe useful if 
   #        population is very clustered in a certain range.
@@ -263,16 +374,8 @@ sampleStateIPM <- function(previousState, survFunc, survPars,
     if (!class(offSizeSamp) %in% c('function','character'))stop('Invalid input')
   }
   
-  # Some link functions:
-  Schild %<>% plogis
-  shift %<>% plogis
-  
-  # If half the children are of a sex not being tracked:
-  if (isTRUE(oneSex)) Schild %<>% `/`(2)
-  
   # Get midpoint of each user defined interval:
   D <- length(previousState)
-  sizes <- breaks[-(D+1)] + shift*diff(breaks)
   
   # Get the size distribution of individuals that survive:
   newSizes <- survFunc(sizes, survPars) %>% rbinom(n=D, size=previousState) %>%
@@ -284,6 +387,11 @@ sampleStateIPM <- function(previousState, survFunc, survPars,
   reprSizes <- weightedSelection(newSizes, reprProbs)
   if (length(reprSizes)==0) offSizes <- c()
   else{
+    # Determine the sex of the offspring:
+    probGend <- ifelse(isTRUE(oneSex), 0.5, 1)
+    # Modify the number of reproducing sheep 
+    reprSizes <- reprSizes[which(as.logical(rbinom(length(reprSizes), 1, probGend)))]
+    
     offSizesTemp <- offNumSamp(reprSizes, offNumPars) %>% rep(x=reprSizes) %>%
       offSizeSamp(offSizePars)
     offSizes <- weightedSelection(offSizesTemp,rep(Schild,length(offSizesTemp)))
@@ -302,7 +410,7 @@ sampleStateIPM <- function(previousState, survFunc, survPars,
   }
   
   # Get the new distribution of sizes:
-  breaks[c(1, D+1)] <- c(-Inf, Inf)
+  # breaks[c(1, D+1)] <- c(-Inf, Inf)
   vectorToCounts(c(offSizes, newSizes), breaks) %>% return  
   
 }
@@ -313,33 +421,39 @@ sampleStateIPM_red <- function(previousState, survFunc, survPars,
                                growthSamp, growthPars, reprFunc, reprPars, 
                                offNumSamp, offNumPars, offSizeSamp, offSizePars,
                                Schild, breaks, oneSex = TRUE, checks = FALSE,
-                               verbose = FALSE, shift = qlogis(0.49), D=4, sizes){
+                               verbose = FALSE, sizes){
   
   # Get the size distribution of individuals that survive:
+  D<-length(previousState)
   # Generate the survival probability [0,1] for each 'size' bin
   # Using previousState (X - total #sheep per bin), predict number of OBSERVED sheep per bin
   # Generate a sample population at the bin midpoint (at 'sizes' values) but repeating the values
-  newSizes <- survFunc(sizes, survPars) %>% rbinom(n=D, size=previousState) %>%
-    rep(x=sizes)  
+  newSizes <- rep(rbinom(n=D, size=previousState, prob = survFunc(sizes, survPars)),x=sizes)  
   if (length(newSizes)==0) return(rep(0, D))
   # What would the growth of such a population be in one year?
-  newSizes %<>% growthSamp(growthPars)
+  newSizes <- growthSamp(newSizes, growthPars)
   
   # Get the probability that each class reproduces based on number of sheep (not observed but actual)
-  reprProbs <- reprFunc(newSizes, reprPars)
-  # Get the size distribution of newborns:
+  # reprProbs <- reprFunc(newSizes, reprPars)
+  reprProbs <- reprFunc(previousState, reprPars)
+  # Get the updated size distribution of adults:
   reprSizes <- weightedSelection(newSizes, reprProbs)
   if (length(reprSizes)==0){ return(vectorToCounts(c(newSizes), breaks))
   }else{
-    offSizesTemp <- offNumSamp(reprSizes, offNumPars) %>% rep(x=reprSizes) %>%
-      offSizeSamp(offSizePars)
+    # Modify the number of reproducing sheep to retain females only
+    if(oneSex) {
+      reprSizes <- reprSizes[sample(1:length(reprSizes),ceiling(length(reprSizes)*0.5),replace = F)] # as.logical(rbinom(length(reprSizes), 1, 0.5))
+      # if (length(reprSizes)==0) return(vectorToCounts(c(newSizes), breaks))
+    }
+    # Sample the size of the offspring
+    # offSizesTemp <- offSizeSamp( rep(reprSizes,offNumSamp(reprSizes, offNumPars)) , offSizePars)
+    offSizesTemp <- offSizeSamp(offNumSamp(reprSizes, offNumPars),offSizePars) 
     # Get the new distribution of sizes:
-    # weightedSelection(offSizesTemp,rep(Schild,length(offSizesTemp))) %>% 
-    #   c(newSizes) %>% vectorToCounts(breaks =  breaks) %>% return
     offSizes <- weightedSelection(offSizesTemp,rep(Schild,length(offSizesTemp)))
+    
   }
   
-  vectorToCounts(c(offSizes, newSizes), breaks) %>% return
+  return(vectorToCounts(c(offSizes, newSizes), breaks))
   
 }
 
@@ -358,7 +472,7 @@ vectorisedSamplerIPM <- function(initialStates, SamplerArgs){
   #           is the number of time steps we project forwards for.
   
   helper <- function(vec) do.call(sampleStateIPM_red, c(list(vec), SamplerArgs))
-  initialStates %>% apply(2, helper) %>% return
+  return(apply(initialStates,2, helper))
 }
 
 # vectorisedSamplerIPM <- function(initialStates, SamplerArgs){
@@ -419,12 +533,11 @@ getSizeDistns <- function(DF, breaks){
   #           s  - The number of size classes used for the discretisation.
 
   # In case user specified breaks are bad:
-  breaks %<>% sort
-  breaks[c(1, length(breaks))] <- c(-Inf, Inf)
+  # breaks %<>% sort
+  # breaks[c(1, length(breaks))] <- c(-Inf, Inf)
   
   # Loop through the censuses and get the size distn:
-  maxCens <- DF$census.number %>% max
-  sapply(1:maxCens, getSizeForCensus, DF=DF, breaks=breaks) %>% return
+  return(sapply(unique(DF$census.number), getSizeForCensus, DF=DF, breaks=breaks))
 }
 
 makeFakeTrueSizeDist <- function(probs, sizes){
@@ -441,7 +554,7 @@ makeFakeTrueSizeDist <- function(probs, sizes){
 ################### PARTICLE FILTER AND PMCMC IMPLEMENTATION ###################
 
 particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
-                           obsProbPar, b, checks=F, returnW=F, l=T, cap=-300){
+                           obsProbPar, b, fixedObsProb=F, checks=F, returnW=F, l=T, cap=-300){
   # purpose : Produces an estimate of the log likelihood of the model, given
   #           b particles projected through the state space
   # inputs  : Y              - The matrix of observations. Columns are time
@@ -474,24 +587,9 @@ particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
   #           cap            - Any log likelihood smaller than cap for a
   #                            single observation will be rounded up to cap,
   #                            to help limit numerical errors
+  #                            cap=log(.Machine$double.xmin)
   # output  : A matrix or array with n rows, t columns and the third dimension
   #           equal to the dimension of the state space.
-  
-  # Some link functions:
-  sampleStatePar$Schild %<>% as.numeric %>% plogis
-  sampleStatePar$shift %<>% as.numeric %>% plogis
-  obsProbPar %<>% as.numeric %>% plogis
-  
-  # If half the children are of a sex not being tracked:
-  if (isTRUE(sampleStatePar$oneSex)) sampleStatePar$Schild %<>% `/`(2)
-  
-  breaks<-sampleStatePar$breaks
-  sampleStatePar$D<-length(breaks)-1
-  sampleStatePar$sizes <- breaks[-(sampleStatePar$D+1)] + sampleStatePar$shift*diff(breaks)
-  sampleStatePar$breaks[c(1, sampleStatePar$D+1)] <- c(-Inf, Inf)
-  
-  sampleStatePar$growthPars[3]%<>%exp()
-  sampleStatePar$offSizePars[3]%<>%exp()
   
   # In case of a single observation:
   Y %<>% as.matrix
@@ -499,55 +597,81 @@ particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
   # So function names can be passed:
   mu <- match.fun(mu) ; sampleState <- match.fun(sampleState)
   obsProb <-  match.fun(obsProb)
-  
-  # Setup initial state, weight matrix and standardised weight matrix:
   t <-  ncol(Y)
-  initDists <- do.call(mu, c(muPar, list(b)))
+  
+  # Setup matrix to store the states for the previous time step:
+  prevStates <- do.call(mu, muPar)
+  # Setup weight matrix and standardised weight matrix:
   logw <- matrix(NA, nrow=b, ncol=t)
   sw <- matrix(NA, nrow=b, ncol=t)
   
-  # Setup matrix to store the states for the previous time step:
-  prevStates <- initDists # each particle is a column
-  
   # Update weights for first time step:
-  initArgs <- list(Y = Y[, rep(1, b)], X = prevStates, obsProbPar, log = T)
-  # This is dbinom(observedvalues,totalpopulation,capturelikelihood)
-  # Represents the likelihood of having sum(Y) observed out of X total when captureprob=p 
-  logw[,1] <- do.call(obsProb, initArgs)
-  
-  # Remove the max for numerical stability, and then get standardised weights:
-  M <- max(logw[,1]) ; residw <- logw[,1] - M
+  wArgs <- list(Y = Y[, rep(1, b)], X = prevStates, p=obsProbPar, logy = T)
+  if(fixedObsProb) wArgs%<>%c(list(time=1))
+  logw[,1] <- tryCatch(do.call(obsProb, wArgs),error = function(e) NA)
+  if(any(is.na(logw[,1]))) {
+    print("X=")
+    print(rowMeans(prevStates))
+    print("Y[t=1]=")
+    print(Y[,1])
+    print("ObsProbPar=")
+    print(obsProbPar)
+    saveRDS(list(obsProb=obsProb,wArgs=wArgs,t=t),"./ERROR.Rdata")
+    stop()
+  }
   # Sometimes removing M makes -Inf values when we exp again, so we need to 
   # reset them back to something that doesn't break the maths:
-  residw %<>% replace(residw < cap, cap)
+  logw[,1] %<>% `<`(cap) %>% replace(x = logw[, 1], values = cap)
+  # Remove the max for numerical stability, and then get standardised weights:
+  M <- max(logw[,1],na.rm = T) ; residw <- logw[,1] - M
   sw[,1] <- exp(residw)
   
   # Create the LL object:
-  output <- M + log(mean(sw[,1]))
+  # output<-cap
+  output <- M + log(mean(sw[,1],na.rm = T))
   
   for (time in 2:t){
     # Sample from the previous states:
     # Using importance resampling (weighted & with replacement)
-    particleIndices <- sample(1:b, b, replace = T, prob = sw[, time - 1])
+    particleIndices <- sample(1:b, b, replace = T, prob = (sw[, time - 1]+1-max(sw[, time - 1])))
     sampledStates <-  prevStates[, particleIndices]
     prevStates <- sampleState(sampledStates, sampleStatePar)
     
     # Evaluate the conditional likelihood of the data given the states:
     #@@@@@@@@@ Get rid of this unnecessary creation and combination of matrices @@@@@@@
-    wArgs <- list(Y = Y[, rep(time, b)], X = prevStates, obsProbPar, log = T)
-    logw[, time] <- do.call(obsProb, wArgs)
+    wArgs$X<-prevStates
+    wArgs$Y <- Y[, rep(time, b)]
+    if(fixedObsProb) wArgs$time<-time
+    
+    # logw[, time] <- do.call(obsProb, wArgs)
+    logw[,time] <- tryCatch(do.call(obsProb, wArgs),error = function(e) NA)
+    if(any(is.na(logw[,time]))) {
+      print("X=")
+      print(rowMeans(prevStates))
+      print("Y[t=",time,"]=")
+      print(Y[,time])
+      print("ObsProbPar=")
+      print(obsProbPar)
+      saveRDS(list(obsProb=obsProb,wArgs=wArgs,t=t),"./ERROR.Rdata")
+      stop()
+    }
     # Note: log(.Machine$double.xmin) = -708.39
     logw[, time] %<>% `<`(cap) %>% replace(x = logw[, time], values = cap)
     
-    # Update the weight matrices:
-    M <- max(logw[, time])
-    #@@@@@@@@@ Get rid of residw by using piping options @@@@@@@
-    residw <- logw[, time] - M
+    if(!max(logw[, time],na.rm = T)==min(logw[, time],na.rm = T)){
+      M <- max(logw[, time],na.rm = T)
+      #@@@@@@@@@ Get rid of residw by using piping options @@@@@@@
+      residw <- logw[, time] - M
+    } else {
+      M<-0
+      residw<-logw[, time]
+    }
+    
     # residw %<>% replace(residw < -100, -100)
     sw[, time] <- exp(residw)
     
     # Update the LL:
-    output <- output + M + log(mean(sw[, time]))
+    output <- output + M + log(mean(sw[, time],na.rm = T))
   }
   
   if (returnW) return(sw)
@@ -557,74 +681,184 @@ particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
 ##################################################
 ### TESTING ZONE - PLEASE DELETE WHEN POSSIBLE ###
 ##################################################
-
-# directory<-"/home/patten/Documents/Coding/Oxford/MoutonModel/"
+# 
+# directory<-paste0(getwd(),"/")
 # source(paste0(directory,"Rcode/SimulateData.R"))
 # source(paste0(directory,"Rcode/piecemealFunctions.R"))
 # IPMLTP<-readRDS(paste0(directory,"RDSobjects/IPMLTP"))
 # library(ggplot2)
-
-# Y is [size_distribution , year]
-
-# list(
-#   priorFunc = 'evalPriors',
-#   priors = priorsIPM,
-#   priorPars = flatPriors,
-#   skeleton = skeleton,
-#   survFunc = 'linLogit',
-#   growthSamp = 'sampleNorm',
-#   reprFunc = 'linLogit',
-#   offNumSamp = 'returnConstant',
-#   offSizeSamp = 'sampleNorm',
-#   oneSex = TRUE,
-#   mu = 'multnomMu',
-#   muPar = c(sum(Y[,1]), list(priorProbs)),
-#   b = 250,
-#   Y = Y,
-#   obsProb = 'detectionNumObs',
-#   shift = qlogis(0.49),
-#   breaks = breaks
-# )
-
-
-
-
-
-##################################################################################
-# Y<-IPMLTP$Y ; mu<-IPMLTP$mu ; muPar<-IPMLTP$muPar ; obsProb<-IPMLTP$obsProb ;
-# breaks<-IPMLTP$breaks ; shift<-IPMLTP$shift
+# #
+# # # Y is [size_distribution , year]
+# #
+# # # list(
+# # #   priorFunc = 'evalPriors',
+# # #   priors = priorsIPM,
+# # #   priorPars = flatPriors,
+# # #   skeleton = skeleton,
+# # #   survFunc = 'linLogit',
+# # #   growthSamp = 'sampleNorm',
+# # #   reprFunc = 'linLogit',
+# # #   offNumSamp = 'returnConstant',
+# # #   offSizeSamp = 'sampleNorm',
+# # #   oneSex = TRUE,
+# # #   mu = 'multnomMu',
+# # #   muPar = c(sum(Y[,1]), list(priorProbs)),
+# # #   b = 250,
+# # #   Y = Y,
+# # #   obsProb = 'detectionNumObs',
+# # #   shift = qlogis(0.49),
+# # #   breaks = breaks
+# # # )
+# #
+# #
+# #
+# #
+# #
+# # ##################################################################################
+# breaks <- seq(1.5, 3.55, l=6)[-2]
+# shift = qlogis(0.49)
+# 
+# priorProbs<-c(0.03374183, 0.16805116, 0.39873340, 0.39947362)
+# 
+# startValues <- list(
+#   survPars = c(-9.65, 3.77),
+#   growthPars = c(1.41, 0.56, log(0.08)),
+#   reprPars = c(-7.23, 2.6),
+#   offNumPars = 1,
+#   offSizePars = c(0.36, 0.71, log(0.16)),
+#   Schild = qlogis(0.873),
+#   obsProbPar = 10 # not too close to 50 since this will hurt the chain
+# ) %>% unlist()
+# 
+# SVjitter<-readRDS(paste0(directory,"RDSobjects/startvals_jitter"))
+# 
+# simmedData<-readRDS(paste0(directory,"RDSobjects/simmedData"))
+# max.cens <- simmedData$census.number %>% max
+# Y <- getSizeDistns(simmedData, breaks)[,(max.cens-12):max.cens]
+# 
+# # mu<-match.fun('poissonMu')
+# # muPar <- list(popSize=Y[,1])
+# mu<-match.fun('multnomMu')
+# muPar <- list(popSize=sum(Y[,1]), probs=priorProbs)
+# 
+# obsProb<-match.fun("detectionNumObs")
+# # obsProb<-match.fun("multinomialObs")
+# # obsProb<-match.fun("poissonObs")
+# obsProbPar <- 10
 # 
 # # b<-IPMLTP$b
-# b <- 7500
+# b <- 1600
 # 
 # survFunc <- linLogit; survPars <- c(-9.65, 3.77)
 # growthSamp <- sampleNorm; growthPars <- c(1.41, 0.56, log(0.08), 1.5, 3.55)
 # reprFunc <- linLogit; reprPars <- c(-7.23, 2.6);
 # offNum<-1;
-# offNumSamp = match.fun('returnConstant'); offNumPars = offNum;
+# offNumSamp <- match.fun('returnConstant'); offNumPars <- offNum;
 # offSizeSamp <- sampleNorm; offSizePars <- c(0.36, 0.71, log(0.16), 1.5, 3.55);
 # Schild<-qlogis(0.873); oneSex<-T;
-# obsProbPar = 10
+# 
 # D <- length(breaks)-1
 # sizes <- breaks[-(D+1)] + plogis(shift)*diff(breaks)
 # 
 # sampleStatePar <- list(survFunc = survFunc, survPars = survPars,
-#                            growthSamp = growthSamp, growthPars = growthPars,
-#                            reprFunc = reprFunc, reprPars = reprPars,
-#                            offNumSamp = offNumSamp, offNumPars = offNumPars,
-#                            offSizeSamp = offSizeSamp, breaks = breaks,
-#                            offSizePars = offSizePars, Schild=Schild,
-#                            oneSex = oneSex, shift = shift, D=D,sizes=sizes)
+#                        growthSamp = growthSamp, growthPars = growthPars,
+#                        reprFunc = reprFunc, reprPars = reprPars,
+#                        offNumSamp = offNumSamp, offNumPars = offNumPars,
+#                        offSizeSamp = offSizeSamp, breaks = breaks,
+#                        offSizePars = offSizePars, Schild=Schild,
+#                        oneSex = oneSex, shift = shift, D=D,sizes=sizes)
+# 
+# # tmp<-Sheep[1500:2500,-1] %>% apply(2, mean,na.rm=T) %>% relist(skeleton=IPMLTP$skeleton)
+# tmp<-SVjitter %>% relist(skeleton=IPMLTP$skeleton)
+# # tmp<-startValues %>% relist(skeleton=IPMLTP$skeleton)
+# obsProbPar <- tmp$obsProbPar
+# tmp$obsProbPar<-NULL
+# sampleStatePar <- append(list(survFunc = survFunc,
+#                        growthSamp = growthSamp,
+#                        reprFunc = reprFunc,
+#                        offNumSamp = offNumSamp,
+#                        offSizeSamp = offSizeSamp, breaks = breaks,
+#                        oneSex = oneSex, shift = shift, D=D,sizes=sizes),tmp)
 # 
 # ll <- particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
 #                      sampleState = vectorisedSamplerIPM,
 #                      sampleStatePar = sampleStatePar,
 #                      obsProbPar = obsProbPar, b = b, returnW = T)
+# # 
+# # 
+# # 
+# # 
+# sampleStatePar$Schild %<>% as.numeric %>% plogis
+# obsProbPar %<>% as.numeric %>% plogis
 # 
-# ll %>% apply(2,countsToProbs) %>% `^`(2) %>% apply(2, sum) %>% `^`(-1) %>% `[`(-1) %>% mean
-
-# sampledStates<-do.call(mu, c(muPar, list(b)))
-# prevStates<-vectorisedSamplerIPM(sampledStates,sampleStatePar)
+# # If half the children are of a sex not being tracked:
+# if (isTRUE(sampleStatePar$oneSex)) sampleStatePar$Schild %<>% `/`(2)
+# 
+# breaks<-sampleStatePar$breaks
+# sampleStatePar$D<-length(breaks)-1
+# sampleStatePar$sizes <- breaks[-(sampleStatePar$D+1)] + plogis(as.numeric(sampleStatePar$shift))*diff(breaks)
+# sampleStatePar$shift<-NULL
+# sampleStatePar$breaks[c(1, sampleStatePar$D+1)] <- c(-Inf, Inf)
+# 
+# sampleStatePar$growthPars[3]%<>%exp()
+# sampleStatePar$offSizePars[3]%<>%exp()
+# 
+# muPar$n<-b; muPar$pobs<-obsProbPar
+# prevStates <- do.call(mu, muPar)
+# 
+# previousState<-prevStates[,1]
+# survPars<-sampleStatePar$survPars
+# growthPars<-sampleStatePar$growthPars
+# reprPars<- sampleStatePar$reprPars
+# offNumPars<-sampleStatePar$offNumPars
+# offSizePars<-sampleStatePar$offSizePars
+# Schild<-sampleStatePar$Schild
+# 
+# ###################################
+# ########## IPM Algorithm ##########
+# ###################################
+# sizesamp<-seq(min(sizes),max(sizes),length.out=100)
+# 
+# # Probability of surviving for each size class
+# plot(sizesamp,survFunc(sizesamp,survPars))
+# survFunc(sizes, survPars)
+# # Number that make it through per class
+# survFunc(sizes, survPars) %>% rbinom(n=D, size=previousState)
+# # Weights of surviving sheep that survive (number of unique weights = number of size classes)
+# newSizes <- survFunc(sizes, survPars) %>% rbinom(n=D, size=previousState) %>%
+#   rep(x=sizes)
+# # What weight do they grow to?
+# newSizes %<>% growthSamp(growthPars)
+# plot(sizesamp,growthSamp(sizesamp,growthPars))
+# # Are these sheep likely to reproduce?
+# reprProbs <- reprFunc(newSizes, reprPars)
+# plot(sizesamp,reprFunc(sizesamp,reprPars))
+# # What size are the newborns?
+# reprSizes <- weightedSelection(newSizes, reprProbs)
+# ### The rest, have a play!
+# if (length(reprSizes)==0){ return(vectorToCounts(c(newSizes), breaks))
+# }else{
+#   offSizesTemp <- offNumSamp(reprSizes, offNumPars) %>% rep(x=reprSizes) %>%
+#     offSizeSamp(offSizePars)
+#   plot(sizesamp,offNumSamp(sizesamp, offNumPars))
+#   # Get the new distribution of sizes:
+#   # weightedSelection(offSizesTemp,rep(Schild,length(offSizesTemp))) %>%
+#   #   c(newSizes) %>% vectorToCounts(breaks =  breaks) %>% return
+#   offSizes <- weightedSelection(offSizesTemp,rep(Schild,length(offSizesTemp)))
+# }
+# vectorToCounts(c(offSizes, newSizes), breaks) %>% return
+# ###################################
+# ###################################
+# ###################################
+# 
+# 
+# 
+# 
+# # 
+# # ll %>% apply(2,countsToProbs) %>% `^`(2) %>% apply(2, sum) %>% `^`(-1) %>% `[`(-1) %>% mean
+# # muPar$n<-b; muPar$pobs<-obsProbPar
+# sampledStates<-do.call(mu, list(popSize=muPar$popSize, probs=muPar$probs,n=b,pobs=obsProbPar))
+# nextState<-vectorisedSamplerIPM(prevStates,sampleStatePar)
 
 # ll<-numeric(length = 50)
 # ptm <- proc.time()
@@ -680,56 +914,197 @@ particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
 #   points(ll3$sw[,i],col="green")
 # }
 # 
+  
+##################################################################################
+# 
+# mu<-match.fun('multnomMu')
+# muPar <- list(popSize=sum(Y[,1]), probs=priorProbs)
+# 
+# lister<-seq.int(from = 50,to = 1000,by = 50)
+# ##### Binomial Observation Model #####
+# obsProb<-match.fun("detectionNumObs")
+# 
 # i<-1
-# ll<-c()
-# for (bb in seq.int(from = 500,to = 10000,by = 50)){
-# ll <- c(ll,particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
-#                       sampleState = vectorisedSamplerIPM,
-#                       sampleStatePar = sampleStatePar,
-#                       obsProbPar = obsProbPar, b = bb, returnW = F))
-#   i<-i+1
-# }
-# 
-# lenny<-length(ll)
-# meany<-sdy<-c()
-# for(i in 6:lenny){
-#   meany<-c(meany,mean(ll[(i-5):i]))
-#   sdy<-c(sdy,sd(ll[(i-5):i]))
-# }
-# x<-tmp[6:lenny]
-# plot(x,meany,ylim=range(c(meany-sdy,meany+sdy)),pch=19)
-# arrows(x, meany-sdy, x, meany+sdy, length=0.05, angle=90, code=3)
-# 
-# ll2<-tmp2<-c()
-# for (bb in c(250,500,750,1000,2500,5000,7500,10000)){
-#   for (j in 1:150){
-#   ll2 <- c(ll2,particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
+# mnll1<-c()
+# for (bb in lister){
+#   mnll1 <- c(mnll1,particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
 #                             sampleState = vectorisedSamplerIPM,
 #                             sampleStatePar = sampleStatePar,
 #                             obsProbPar = obsProbPar, b = bb, returnW = F))
-#   tmp2<-c(tmp2,bb)
+#   i<-i+1
+# }
+# 
+# ##### Poisson Observation Model #####
+# obsProb<-match.fun("poissonObs")
+# 
+# i<-1
+# mnll2<-c()
+# for (bb in lister){
+#   mnll2 <- c(mnll2,particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
+#                               sampleState = vectorisedSamplerIPM,
+#                               sampleStatePar = sampleStatePar,
+#                               obsProbPar = obsProbPar, b = bb, returnW = F))
+#   i<-i+1
+# }
+# 
+# ##### Multinomial Observation Model #####
+# obsProb<-match.fun("multinomialObs1D")
+# 
+# i<-1
+# mnll3<-c()
+# for (bb in lister){
+#   mnll3 <- c(mnll3,particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
+#                               sampleState = vectorisedSamplerIPM,
+#                               sampleStatePar = sampleStatePar,
+#                               obsProbPar = obsProbPar, b = bb, returnW = F))
+#   i<-i+1
+# }
+# 
+# mu<-match.fun('poissonMu')
+# muPar <- list(popSize=Y[,1])
+# 
+# lister<-seq.int(from = 50,to = 1000,by = 50)
+# ##### Binomial Observation Model #####
+# obsProb<-match.fun("detectionNumObs")
+# 
+# i<-1
+# pnll1<-c()
+# for (bb in lister){
+#   pnll1 <- c(pnll1,particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
+#                               sampleState = vectorisedSamplerIPM,
+#                               sampleStatePar = sampleStatePar,
+#                               obsProbPar = obsProbPar, b = bb, returnW = F))
+#   i<-i+1
+# }
+# 
+# ##### Poisson Observation Model #####
+# obsProb<-match.fun("poissonObs")
+# 
+# i<-1
+# pnll2<-c()
+# for (bb in lister){
+#   pnll2 <- c(pnll2,particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
+#                               sampleState = vectorisedSamplerIPM,
+#                               sampleStatePar = sampleStatePar,
+#                               obsProbPar = obsProbPar, b = bb, returnW = F))
+#   i<-i+1
+# }
+# 
+# ##### Multinomial Observation Model #####
+# obsProb<-match.fun("multinomialObs1D")
+# 
+# i<-1
+# pnll3<-c()
+# for (bb in lister){
+#   pnll3 <- c(pnll3,particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
+#                               sampleState = vectorisedSamplerIPM,
+#                               sampleStatePar = sampleStatePar,
+#                               obsProbPar = obsProbPar, b = bb, returnW = F))
+#   i<-i+1
+# }
+# 
+# ##################################################################################
+# ##### CHECK VARIANCE CONVERGENCE #####
+# mulist<-c('multnomMu','poissonMu')
+# muParlist<-list(list(popSize=sum(Y[,1]), probs=priorProbs),list(popSize=Y[,1]))
+#   
+# DFf<-data.frame()
+# i<-1
+# for (k in 1:2){
+#   mu<-match.fun(mulist[k])
+#   muPar<-muParlist[[k]]
+#   
+#   for(obsProb in c("detectionNumObs","poissonObs","multinomialObs1D")){
+#     # for(obsProb in c("poissonObs","multinomialObs1D")){
+#     ll<-tmp2<-c()
+#     op<-match.fun(obsProb)
+#     # bb<- seq.int(from = 50,to = 1000,by = 50)
+#     bb<-c(10,50,200,500,2000,5000,8000)
+#     # bb<-c(20,100)
+#     for (b in bb){
+#       for (j in 1:50){
+#         ll <- c(ll,particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = op,
+#                                   sampleState = vectorisedSamplerIPM,
+#                                   sampleStatePar = sampleStatePar,
+#                                   obsProbPar = obsProbPar, b = b, returnW = F))
+#         tmp2<-c(tmp2,b)
+#       }
+#     }
+#     
+#     DF<-data.frame(ll=ll,bb=tmp2,obsProb=rep(obsProb,length(tmp2)),mu=rep(mulist[k],length(tmp2)))
+#     # DFsd<-DF%>%group_by(bb)%>%summarise(lsd=sd(ll))
+#     DFf<-rbind(DFf,DF)
+#     
+#     i<-i+1
 #   }
 # }
 # 
-# DF<-data.frame(ll=ll2,bb=tmp2)
-# DFsd<-DF%>%group_by(bb)%>%summarise(sd=sd(ll))
-# bb<- seq.int(from = 200,to = 10000,by = 100)
+# p<-ggplot(DFf,aes(bb,-ll,group=mu))+geom_point(aes(colour=obsProb,shape=mu)) + scale_y_log10() +
+#   xlab("#Particles") + ylab("Negative Log-Likelihood")
+# ggsave("pf_conv_nll.png", plot=p,path = paste0(directory,'Plots/NEW_WORK/'),width = 8,height = 5)
 # 
+# DFsd<-DFf%>%group_by(mu,obsProb,bb)%>%summarise(lsd=sd(ll))
+# p<-ggplot(DFsd,aes(bb,lsd,group=mu))+geom_point(aes(colour=obsProb,shape=mu))  + scale_y_log10() + scale_x_log10() +
+#   xlab("#Particles") + ylab("Standard Deviation of LL")
+# ggsave("pf_conv_sd.png", plot=p,path = paste0(directory,'Plots/NEW_WORK/'),width = 8,height = 5)
+# ##################################################################################
+# ##### CONVERGENCE OF NLL & SD(LL) #####
+# 
+# convDF<-DFf%>%filter(bb==8000)%>%group_by(mu,obsProb)%>%summarise(mean=mean(ll))
+# 
+# predy<-DFsd%>%filter(mu=="multnomMu" & obsProb=="detectionNumObs")%>%lm(formula = log(bb) ~ log(lsd), data=.) 
+# print(exp(predict(object = predy,data.frame(lsd=c(1.2)))))
+# # 1422.193
+# print(convDF$mean[1])
+# # -22.60212
+# 
+# predy<-DFsd%>%filter(mu=="multnomMu" & obsProb=="poissonObs")%>%lm(formula = log(bb) ~ log(lsd), data=.) 
+# print(exp(predict(object = predy,data.frame(lsd=c(1.2)))))
+# # 156.0012
+# print(convDF$mean[2])
+# # -101.4621
+# 
+# predy<-DFsd%>%filter(mu=="multnomMu" & obsProb=="multinomialObs1D")%>%lm(formula = log(bb) ~ log(lsd), data=.) 
+# print(exp(predict(object = predy,data.frame(lsd=c(1.2)))))
+# # 6104.29
+# print(convDF$mean[3])
+# # -95.32274
+# 
+# predy<-DFsd%>%filter(mu=="poissonMu" & obsProb=="detectionNumObs")%>%lm(formula = log(bb) ~ log(lsd), data=.) 
+# print(exp(predict(object = predy,data.frame(lsd=c(1.2)))))
+# # 1370.334 
+# print(convDF$mean[4])
+# # -22.93806
+# 
+# predy<-DFsd%>%filter(mu=="poissonMu" & obsProb=="poissonObs")%>%lm(formula = log(bb) ~ log(lsd), data=.) 
+# print(exp(predict(object = predy,data.frame(lsd=c(1.2)))))
+# # 155.0295
+# print(convDF$mean[5])
+# # -99.82453
+# 
+# predy<-DFsd%>%filter(mu=="poissonMu" & obsProb=="multinomialObs1D")%>%lm(formula = log(bb) ~ log(lsd), data=.) 
+# print(exp(predict(object = predy,data.frame(lsd=c(1.2)))))
+# # 6364.99
+# print(convDF$mean[6])
+# # -92.7514
+  
+##################################################################################
+
+# predict(data.frame(lsd=c(log(1.2))),data=.)%>%exp()
 # library(mgcv)
 # model <- gam(lsd ~ s(bb,k = 4), data = DFsd)
 # # model <- glm(lsd ~poly(bb,4), data = DFsd)
 # summary(model)
 # predy <- model %>% predict(data.frame(bb=bb))
 # pd<-data.frame(bb=bb,pred=exp(predy))
-# varLL<-ggplot(DFsd,aes(x=bb,y=sd)) + geom_point() + geom_line(data = pd,aes(x=bb,y=pred),colour="red") + 
+# varLL<-ggplot(DFsd,aes(x=bb,y=lsd)) + geom_point() + geom_line(data = pd,aes(x=bb,y=pred),colour="red") +
 #   geom_hline(yintercept = 1.2)+ geom_text(x=7000,y=log10(4),label=paste0("var=1.2 at ",bb[which.min(abs(exp(predy)-1.2))]," particles")) +
 #   scale_y_log10()+xlab("Number of pfMCMC Particles") + ylab("Variance in log-likelihood (n=150)")
-# # NLL<-ggplot(DFold,aes(x=bb,y=ll))+geom_point()+ylim(c(23,50))+ylab("Negative Log-Likelihood") + 
-# #   xlab("Number of pfMCMC Particles")+geom_smooth(method="auto",se = FALSE)
-# # gridExtra::grid.arrange(NLL,varLL,nrow=1)
-# 
-# print(paste0("Number of pfMCMC particles = ",bb[which.min(abs(exp(predy)-1.2))]))
+# NLL<-ggplot(DFold,aes(x=bb,y=ll))+geom_point()+ylim(c(23,50))+ylab("Negative Log-Likelihood") +
+#   xlab("Number of pfMCMC Particles")+geom_smooth(method="auto",se = FALSE)
+# gridExtra::grid.arrange(NLL,varLL,nrow=1)
 
+# print(paste0("Number of pfMCMC particles = ",bb[which.min(abs(exp(predy)-1.2))]))
 
 ##################################################################################
 
