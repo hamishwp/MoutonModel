@@ -10,15 +10,15 @@ oneSex<-T
 # Is the observation probability an empirically-based fixed value or sampled as a R.V.?
 fixedObsProb<-T
 # Number of MCMC simulations
-itermax <- 10000
+itermax <- 5000
 # Number of in-chain parallelised cores
-ncores<-1
+ncores<-4
 # Define the number of size class bins
 nbks<-10
 # Particle filter initialisation function
 muModel<-'poisson' #'multinomial'
 # Observation Model
-obsModel<-'binomial' # 'multinomial' #'poisson'
+obsModel<-'multinomial' #'binomial' #'poisson'
 # Do we automatically calculate the shift in the staggered grid of the size-class bins, based on the IPM kernal?
 manshift<-F
 # For the individual and offspring growth function - normal or truncated normal, or otherwise?

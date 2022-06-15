@@ -491,11 +491,9 @@ Nested_pMH <- function(proposal, propPars, lTarg, lTargPars, x0, itermax=1000,
 pM_GaA <- function(propCOV, lTarg, lTargPars, x0, itermax=1000,
                    prntPars=FALSE, clNeeds, RcppFile=NULL,
                    packages = "Rcpp", cores=detectCores(), 
-                   Params=list(GreedyStart=200,Pstar=0.234, gamzy0=1, epsilon=2, minVar=1e-3)){
+                   Params=list(GreedyStart=500,Pstar=0.234, gamzy0=NA, epsilon=1, minVar=1e-9)){
   # purpose : Generalised Adaptative Metropolis-Hastings Algorithm with Global Adaptative Scaling
-  # Details : Christian L. Muller, (ETH) 'Exploring the common concepts of a-MCMC and cov matrix
-  #           adaptation schemes', Dagstuhl Seminar Proceedings, 2010.
-  #           Uses the multivariate Gaussian distribution as proposal, 
+  # Details : Uses the multivariate Gaussian distribution as proposal, 
   #           whereby the proposal covariance is updated at every iteration.
   # inputs  : clNeeds   - The character names of functions which need to be 
   #                       exported to the cluster.
@@ -506,27 +504,23 @@ pM_GaA <- function(propCOV, lTarg, lTargPars, x0, itermax=1000,
   # output  : A list containing the output matrices of all chains
   # note : loads Rcpp onto the cluster by default.
   
-  # RNGkind("L'Ecuyer-CMRG")
-  seed<-as.numeric(stringr::str_flatten(unlist(strsplit(strsplit(as.character(Sys.time()),split = " ")[[1]][2],":"))))
-  set.seed(round(runif(1,0,10000)*seed))
+  # Check: 
+      # Get rid of link functions and replace with rejection routine
   
-  propMu<- x0
-  normCOV<-sum(propCOV*t(propCOV))
+  set.seed(round(runif(1,0,10000)*seed))
+  # Setup the MCMC algorithm parameters
+  xPrev<-propMu<-x0
+  if(is.na(Params$gamzy0)) Params$gamzy0<-2.38^2/length(x0)
   gamzy <- Params$gamzy0/(1:(itermax+cores))^(seq(from=1/(1+Params$epsilon),to=1,length.out=(itermax+cores)))
-  # gamzy<-exp(-(1:1000 - Params$burnin)/100)
-  # gamzy<-exp(-(1:1000)^2/10000)
-  # gamzy<-1/1:(itermax+cores)
+  eps<-Params$minVar/(1:(itermax+cores))
   Lgsf<-0
-  Pstar<-Params$Pstar
-  # print("sum(<COV,COV>):")  
-  # print(sum(propCOV*t(propCOV)))
-  # print("")
+  C_0<-propCOV
   
   # source any required files:
   if (!is.null(RcppFile)) Rcpp::sourceCpp(RcppFile)
   
+  # Initialisations of arrays
   itermax<-ceiling(itermax/cores)*cores+1L
-  xPrev<-x0
   n <- length(xPrev) + 1
   output <- matrix(NA, nrow=itermax, ncol=n)
   xNew <- matrix(NA, nrow=cores, ncol=n-1)
@@ -534,107 +528,54 @@ pM_GaA <- function(propCOV, lTarg, lTargPars, x0, itermax=1000,
   
   # Add the initial point, the first column of the output matrix is an 
   # evaluation of the log Target at the sampled point:
-  output[1, ] <- c(lTarg(xPrev, lTargPars), xPrev)
+  lTargOld <- lTarg(xPrev, lTargPars)
+  output[1, ] <- c(lTargOld, xPrev)
   print(output[1,1])
-  #print("Initial Value in Nested_MH = ");print(output[1,])
-  # Create the clusters and initiate paralellisation:
-  # cl<-makeCluster(cores,outfile="./Rcode/OUTPUT.txt")
-  # registerDoParallel(cl)
-  # clusterExport(cl, clNeeds)
-  
   it <- 2
   while (it <= itermax){
-    
-    # if(any((it:(it+cores)*100)%%itermax==0)){
-    # print(paste0(round(it*100/itermax),"% done. LL = ",output[it-1,1]))
-    # print(paste0(it*100/itermax,"% done. LL = ",output[it-1,1]))
-    # saveRDS(output,file=paste0("./Rcode/saver_",round(it*100/itermax),"percent.Rdata"))
-    # }
-    
-    # generate a proposed point using the MVN proposal and global scaling factor
-    xNew <- multvarNormProp(xt=xPrev, propPars=exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)), n=cores) 
-    
-    # calculate the acceptance probability:
-    # lTargNew <- foreach(c=1:cores, .packages = packages, .combine = c) %dopar%{
-    #   # to.lTargNew <- tryCatch({lTarg(xNew[c,], lTargPars)}, error=function(e) NA)
-    #   to.lTargNew <- lTarg(xNew[c,], lTargPars)
-    # }
-    
+    # Generate a proposed point using the MVN proposal and global scaling factor
+    # Note that GreedyStart corresponds to a form of annealing
+    if(it>Params$GreedyStart) {xNew <- multvarNormProp(xt=xPrev, propPars=exp(2*Lgsf)*propCOV, n=cores) 
+    } else xNew <- multvarNormProp(xt=xPrev, propPars=C_0, n=cores) 
+    # Sample from the target distribution
     lTargNew <- unlist(mclapply(X = 1:cores,
                                 FUN = function(i) lTarg(xNew[i,], lTargPars),
                                 mc.cores = cores))
-        
-    lTargOld <- output[it-1, 1]
+    # Acceptance ratios
     alpha <- apply(cbind(exp(lTargNew - lTargOld),rep(1,cores)),1,min)
-    
     print(paste0("<alpha> = ",mean(alpha)))
-    # print("New LL:")
-    # print(lTargNew)
-    
     # determine acceptance or rejection:
     u <- runif(cores)
     u2 <- runif(cores)
-    
-    tLgsf<-tpropMu<-tpropCOV<-nnz<-0
     lTtmp<-lTargOld
-    
+    # Acceptance/rejection routine
     for (c in 1:cores){
       # Check that the log-likelihood was actually calculated
-      if(is.na(lTargNew[c])) {
-        output[it+c-1,] <- output[it+c-2,]
-        nnz<-nnz+1
-        next
-      }
-      
+      if(is.na(lTargNew[c])) {output[it+c-1,] <- output[it+c-2,]; next}
+      # Store these values
+      output[it+c-1,] <- c(lTargNew[c], xNew[c,])
+      # Acceptance/rejection
       if (exp(lTargNew[c]-lTtmp)>=u[c]) { # Accepted!
-        output[it+c-1,] <- c(lTargNew[c], xNew[c,])
         lTtmp<-lTargNew[c]
         xPrev<-xNew
-      } else { # Rejected!
-        output[it+c-1,] <- output[it+c-2,]
-        # Greedy Start Adaptive Metropolis (AM) algorithm
-        # (Only uses accepted parameters for GSF, mean & covariance updates at the start)
-        if(it+c<=Params$GreedyStart) {nnz<-nnz+1; next}
       }
-      
-      # Global Scaling Factor (GSF), mean & covariance update
-      tLgsf <- tLgsf + gamzy[it]*(alpha[c]-Pstar)
-      tpropMu <- tpropMu + gamzy[it]*(xNew[c,] - propMu)
-      tpropCOV <- tpropCOV + gamzy[it]*((xNew[c,] - propMu)%*%t(xNew[c,] - propMu) - propCOV)
-      
+      # For stochastic, likelihood free models, avoid falling into ficticious local minima
+      sigLL<-1.-2*pnorm(lTargNew[c]-lTtmp,mean = 0,sd = 1.2)
+      # Update the Global Scaling Factor (GSF), mean & covariance
+      Lgsf <- Lgsf + sigLL*gamzy[it+c-1]*(alpha[c]-Params$Pstar)
+      propMu <- propMu + sigLL*gamzy[it+c-1]*(xNew[c,] - propMu)
+      propCOV <- propCOV + sigLL*gamzy[it+c-1] * ((xNew[c,] - propMu) %*% t(xNew[c,] - propMu) - propCOV) + eps[it+c-1]
     }
-    
-    # if(nnz<cores & it>Params$burnin){
-    if(nnz<cores){
-      # Add a minimum variance value to ensure global scale factor doesn't 
-      # diag(tpropCOV)<-diag(tpropCOV)+Params$minVar
-      
-      Lgsf<-Lgsf+tLgsf/max(c(cores-nnz,1))
-      propMu<-propMu+tpropMu/max(c(cores-nnz,1))
-      propCOV<-propCOV+tpropCOV/max(c(cores-nnz,1))
-    }
-
-    # Lgsf<-max(Lgsf,Params$minVar)
-    
-    # print("sum(<COV,COV>):")  
-    print(paste0("Total covariance = ",sum(exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))))
+    # Update target value for acceptance ratio at next step
+    lTargOld<-lTtmp
+    # Print checks
+    print(paste0("Total covariance = ",sum(exp(2*Lgsf)*propCOV)))
     print(paste0("Global Scaling Factor, r = ",exp(2*Lgsf)))
-    # print("")
-    # if(any((it:(it+cores)*100)%%itermax==0)){
     print(paste0(round(it*100/itermax),"% done. LL = ",output[it,1]))
-    # saveRDS(output,file=paste0("./Rcode/saver_",round(it*100/itermax),"percent.Rdata"))
-    # }
-    
-    # update Xt-1
-    xPrev <- output[it+cores-1,-1]
     # update iterator:
     it <- it + cores
   }
   
-  # Do the tear down for the parallelisation, we exception handle it simply
-  # to silence a bunch of warnings that indicate which connections to unused
-  # ports are closed by stopping the cluster
-  # try(stopCluster(cl), silent = T)
   return(output)
   
 }

@@ -1,7 +1,7 @@
 
 GetSoaySheep <-function(directory="/home/patten/Documents/Coding/Oxford/MoutonModel/",oneSex=T){
 
-  SHEEP <- read.csv(paste0(directory,"/SHEEP.csv"), header = 2)
+  SHEEP <- read.csv(paste0(directory,"SHEEP.csv"), header = 2)
   
   # How many years are included in the data:
   SHEEP$sheep.yr %>% unique %>% length
@@ -79,7 +79,7 @@ x0<-do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedOb
 # Number of parameters
 Np<-length(x0)
 # Import covariance matrix:
-propCOV<-diag(Np)/60
+propCOV<-diag(Np)*(2.38)^2/Np
 # Calculate the shift factor that offsets the size class mid-point
 if(!manshift) {shift<-CalcShift_Kernel(x0,IPMLTP,nbks,oneSex,lSHEEP$L,lSHEEP$U)
 } else shift<-0.5

@@ -8,6 +8,19 @@
 #@@@                          University of Oxford                             @@@#
 #@@@                                                                           @@@#
 #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#
+
+
+
+
+# to do:
+# - Auto-define link functions & asymmetric acceptance probability based on upper and lower parameter limits
+# - auto-calculate the number of particles required in algorithm based on logTarget
+# - re-calculate number of particles every 250 iterations?
+# - use CI of initial values to build initial covariance function
+
+
+
+
 directory<-paste0(getwd(),"/")
 # Load the packages required for the code, and install them if they don't already exist
 source(paste0(directory,'Rcode/GetPackages.R'))
@@ -34,7 +47,7 @@ Sheepies <- pM_GaA(propCOV = propCOV,
                          cores = ncores,
                          x0 = x0,
                          itermax=itermax,
-                         Params=list(GreedyStart=100,Pstar=0.234, gamzy0=1, epsilon=2, minVar=1e-6),
+                         Params=list(GreedyStart=500,Pstar=0.234, gamzy0=NA, epsilon=1, minVar=1e-9),
                          clNeeds = clNeeds, packages = "dissPackage3", prntPars=TRUE)
 ptm_fin<-proc.time() - ptm;
 print(paste0("ncpus= ",ncores," : ",ptm_fin))

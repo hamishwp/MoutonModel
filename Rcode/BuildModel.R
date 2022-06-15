@@ -107,3 +107,6 @@ IPMLTP %<>% c(list(
 if(fixedObsProb) IPMLTP %<>% c(list(obsProbPar = obsProbTime))
 #if(normsampler=="sampleDTN") IPMLTP %<>% c(list(DTN = c(lSHEEP$L,lSHEEP$U)))
 IPMLTP %<>% c(list(DTN = c(lSHEEP$L,lSHEEP$U)))
+
+
+

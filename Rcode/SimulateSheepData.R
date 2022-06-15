@@ -1,6 +1,6 @@
 # vals<-unlist(x0)
 
-x0<-vals<-c(-8.25, 3.77,
+x0<-vals<-c(-7.25, 3.77,
             1.41, 0.56, log(0.08),
             -7.23, 2.6,
             log(0.06),
@@ -9,9 +9,12 @@ x0<-vals<-c(-8.25, 3.77,
             log(50),
             log(10)
 )
-if(fixedObsProb) x0<-x0[1:12]
-# Calculate the expected observation probability
-obsMean<-vals[13]/(vals[13]+vals[14])
+if(fixedObsProb) {
+  # Remove the last two parameters
+  x0<-x0[1:12]
+  # Calculate the expected observation probability
+  obsMean<-vals[13]/(vals[13]+vals[14])
+}
 
 if(!manshift) {shift<-CalcShift_Kernel(vals,IPMLTP,nbks,oneSex,lSHEEP$L,lSHEEP$U)
 } else shift<-0.5

@@ -172,11 +172,12 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
                              sizes=sizes, oneSex = oneSex)
   
   # Get an estimate of the log likelihood from the particle filter:
-  ll <- particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
+  ll <- tryCatch(particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
                        sampleState = vectorisedSamplerIPM,
                        sampleStatePar = stateSpaceSampArgs,
                        obsProbPar = obsProbPar, fixedObsProb=fixedObsProb,
-                       b = b, returnW = returnW)
+                       b = b, returnW = returnW), error= function(e) -Inf)
+  if(is.infinite(ll)) warning("failure to calc LL for current parameter choice, adapt covariance matrix")
   
   if (returnW) return(ll)
   
