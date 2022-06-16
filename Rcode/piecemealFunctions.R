@@ -327,7 +327,7 @@ CalcShift_Kernel<-function(x0,IPMLTP,nbks,halfpop,L,U){
   x0%<>%unlist()
   
   for (i in 1:length(IPMLTP$links))  x0[i] <- 
-      match.fun(IPMLTP$links[i])(x0[i])
+      match.fun(IPMLTP$links[[i]])(x0[i])
   x0%<>%relist(skeleton=IPMLTP$skeleton)
   
   x0$growthPars%<>%c(L,U)
@@ -519,23 +519,8 @@ getInitialValues <- function(solveDF,printPars=T,CI=FALSE){
   return(initialValues)
 }
 
-getInitialValues_R <- function(solveDF,printPars=T,plotty=T,detectedNum=NULL,brks=NULL,fixedObsProb=F,CI=F){
+getInitialValues_R <- function(solveDF,printPars=T,plotty=F,detectedNum=NULL,brks=NULL,fixedObsProb=F,CI=F){
   ############### PRODUCE SOME DATA FRAMES FOR EASY MODEL FITTING ################
-  # solveDFg <- with(solveDF, subset(solveDF, !is.na(size) & !is.na(prev.size)))
-  # # remove the observations we can't use for survival fitting:
-  # solveDF2 <- with(solveDF, subset(solveDF, !is.na(prev.size)))
-  # # Make a DF with only the individuals when they were born:
-  # solveDF3 <- subset(solveDF, !is.na(solveDF$size) & !is.na(solveDF$rec1.wt))
-  # # Make a DF with only individuals that had the chance to reproduce:
-  # solveDF4 <-  subset(solveDF, !is.na(solveDF$off.born))
-  # # Make DF to estimate number of children born:
-  # solveDF5 <- subset(solveDF, solveDF$reproduced & !is.na(solveDF$off.born) & !is.na(solveDF$reproduced)) #solveDF[(solveDF$reproduced & !is.na(solveDF$off.born) & !is.na(solveDF$reproduced)) %>% which,]
-  
-  # Make DF to estimate child survival probability:
-  # solveDF6 <-  subset(solveDF5, !is.na(off.survived))
-  # tmp<-rep(1,sum(solveDF6$off.survived))
-  # tmp%<>%c(rep(0,sum(solveDF6$off.born-solveDF6$off.survived)))
-  # solveDF6<-data.frame(off.survived=tmp) ; rm(tmp)
   numBorn.prev<-solveDF%>%group_by(census.number)%>%
     summarise(born=sum(off.born,na.rm = T),.groups = 'drop_last')%>%pull(born)
   lenC<-length(unique(solveDF$census.number))
@@ -559,8 +544,6 @@ getInitialValues_R <- function(solveDF,printPars=T,plotty=T,detectedNum=NULL,brk
   survivalSol <- glm(survived ~ prev.size, family = binomial, data = solveDF)
   offspringSizeSol <- lm(rec1.wt ~ size, data = solveDF)
   reproductionSol <- glm(reproduced ~ size, family = binomial, data=solveDF)
-  # offspringNumSol <- glm(off.born~1, family=poisson, data=solveDF5)
-  # offspringSurvSol <- glm(off.survived~1, family=binomial, data=solveDF6)
   offspringSurvSol<-mean(numNewID[-1]/numBorn.prev[-length(numBorn.prev)])
   
   if(is.null(detectedNum)) {
@@ -582,12 +565,10 @@ getInitialValues_R <- function(solveDF,printPars=T,plotty=T,detectedNum=NULL,brk
   survPars<-coef(survivalSol)
   growthPars <- c(coef(growthSol),log(summary(growthSol)$sigma))
   reprPars <- coef(reproductionSol)
-  # offNumPars <- exp(coef(offspringNumSol))
   offNumPars <- mean(solveDF$off.born[solveDF$off.born>0],na.rm = T)
   if(offNumPars<1) stop("Offspring born must be more than one")
   offNumPars <-log(offNumPars-1)
   offSizePars <- c(coef(offspringSizeSol),log(summary(offspringSizeSol)$sigma))
-  # Schild <- coef(offspringSurvSol)
   Schild <- qlogis(offspringSurvSol)
   obsProbPar <- log(obsProbSol$estimate)
   
@@ -633,15 +614,43 @@ getInitialValues_R <- function(solveDF,printPars=T,plotty=T,detectedNum=NULL,brk
     colnames(obsProbParCI)<-c("2.5 %","97.5 %")
     rownames(obsProbParCI)<-c("Shape1","Shape2")
     
+    # Output list
     initialCI <- list(
-      survPars = survParsCI,
-      growthPars = growthParsCI,
-      reprPars = reprParsCI,
-      offNumPars = offNumParsCI,
-      offSizePars = offSizeParsCI,
-      Schild = SchildCI,  
-      obsProbPar = obsProbParCI
+      lower=list(
+        survPars = survParsCI[1:2,1],
+        growthPars = growthParsCI[1:3,1],
+        reprPars = reprParsCI[1:2,1],
+        offNumPars = offNumParsCI[1],
+        offSizePars = offSizeParsCI[1:3,1],
+        Schild = SchildCI[1]
+      ), 
+      upper=list(
+        survPars = survParsCI[1:2,2],
+        growthPars = growthParsCI[1:3,2],
+        reprPars = reprParsCI[1:2,2],
+        offNumPars = offNumParsCI[2],
+        offSizePars = offSizeParsCI[1:3,2],
+        Schild = SchildCI[2]
+      )
     )
+    # Add the observed probability parameters if not using fixed values
+    if(!fixedObsProb){
+      initialCI$lower$obsProbPar = obsProbParCI[1:2,1]
+      initialCI$upper$obsProbPar = obsProbParCI[1:2,1]
+    }
+    # First transform parameters using 'link' functions
+    lennie<-min(length(initialCI$lower),length(IPMLTP$links)); initialCI$lower%<>%unlist(); initialCI$upper%<>%unlist()
+    for (i in 1:lennie) {
+      initialCI$lower[i] <- match.fun(IPMLTP$links[[i]])(initialCI$lower[i])
+      initialCI$upper[i] <- match.fun(IPMLTP$links[[i]])(initialCI$upper[i])
+    }
+    # As all parameters now have Real support, we can use the CI to make VERY approximate S.Ds:
+    initialCI$sd<-0.5*(initialCI$upper - initialCI$lower)
+    # Re-transform the parameters using inverse 'link' functions
+    initialCI$lower%<>%relist(skeleton = IPMLTP$skeleton)
+    initialCI$upper%<>%relist(skeleton = IPMLTP$skeleton)
+    initialCI$sd%<>%relist(skeleton = IPMLTP$skeleton)
+    
     return(initialCI)
     
   }

@@ -19,7 +19,7 @@ if(fixedObsProb) {
 if(!manshift) {shift<-CalcShift_Kernel(vals,IPMLTP,nbks,oneSex,lSHEEP$L,lSHEEP$U)
 } else shift<-0.5
 
-for (i in 1:length(IPMLTP$links))  vals[i] <- match.fun(IPMLTP$links[i])(vals[i])
+for (i in 1:length(IPMLTP$links))  vals[i] <- IPMLTP$links[[i]](vals[i])
 vals%<>%relist(skeleton=IPMLTP$skeleton)
 
 if(normsampler=="sampleDTN") {

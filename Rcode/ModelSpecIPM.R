@@ -115,7 +115,7 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   vectorPars <- proposed
   
   for (i in 1:length(logTargetPars$links))  proposed[i] <- 
-    match.fun(logTargetPars$links[i])(proposed[i])
+    logTargetPars$links[[i]](proposed[i])
   proposed%<>%relist(skeleton=skeleton)
   
   if(!is.null(logTargetPars$DTN)) {

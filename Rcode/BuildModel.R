@@ -7,21 +7,21 @@ if(obsModel=='multinomial'){
   if(fixedObsProb) obsfun<-match.fun('fixedMuObs')
   else obsfun<-match.fun('beta_mnomObs')
   # Number of SMC particles
-  SMC_parts<-6700  # 6700 # 200
+  SMC_parts<-7000  # 6700 # 200
   
 } else if(obsModel=='poisson'){
   # Poisson observational model
   if(fixedObsProb) obsfun<-match.fun('fixedPoisObs')
   else obsfun<-match.fun('beta_poisObs')
   # Number of SMC particles
-  SMC_parts<-400  # 6700 # 200
+  SMC_parts<-600  # 6700 # 200
   
 } else if(obsModel=='binomial'){
   # Binomial observational model
   if(fixedObsProb) obsfun<-match.fun('fixedBinObs')
   else obsfun<-match.fun('beta_binObs')
   # Number of SMC particles
-  SMC_parts<-1500  # 6700 # 200
+  SMC_parts<-1750  # 6700 # 200
   
 } else stop("Error in Mu Model input, we recommend muModel<-'poissonMu' ")
 

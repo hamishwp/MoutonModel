@@ -8,19 +8,6 @@
 #@@@                          University of Oxford                             @@@#
 #@@@                                                                           @@@#
 #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#
-
-
-
-
-# to do:
-# - Auto-define link functions & asymmetric acceptance probability based on upper and lower parameter limits
-# - auto-calculate the number of particles required in algorithm based on logTarget
-# - re-calculate number of particles every 250 iterations?
-# - use CI of initial values to build initial covariance function
-
-
-
-
 directory<-paste0(getwd(),"/")
 # Load the packages required for the code, and install them if they don't already exist
 source(paste0(directory,'Rcode/GetPackages.R'))
@@ -37,6 +24,14 @@ source(paste0(directory,'Rcode/BuildModel.R'))
 # Check that the log-likelihood values make sense before running the full parallelised code
 print("Initial Values Log-Likelihood=")
 print(logTargetIPM(x0, logTargetPars = IPMLTP, returnNeg = T, printProp = F))
+# Save everything we need to replicate this run:
+earlytag<-paste0(namer,"_",priorName,"_its",itermax,"_",
+                 gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = ""),"_rand",round(runif(1,max = 1000)))
+saveRDS(list(
+  x0=x0,
+  propCOV=propCOV,
+  IPMLTP=IPMLTP
+), paste0(directory,"Results/INPUT_",earlytag))
 ###################################################################################
 ######################## Parameterise the model using MCMC ########################
 ###################################################################################

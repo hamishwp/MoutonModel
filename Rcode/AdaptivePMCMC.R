@@ -507,7 +507,7 @@ pM_GaA <- function(propCOV, lTarg, lTargPars, x0, itermax=1000,
   # Check: 
       # Get rid of link functions and replace with rejection routine
   
-  set.seed(round(runif(1,0,10000)*seed))
+  set.seed(round(runif(1,0,10000)))
   # Setup the MCMC algorithm parameters
   xPrev<-propMu<-x0
   if(is.na(Params$gamzy0)) Params$gamzy0<-2.38^2/length(x0)
@@ -539,11 +539,12 @@ pM_GaA <- function(propCOV, lTarg, lTargPars, x0, itermax=1000,
     } else xNew <- multvarNormProp(xt=xPrev, propPars=C_0, n=cores) 
     # Sample from the target distribution
     lTargNew <- unlist(mclapply(X = 1:cores,
-                                FUN = function(i) lTarg(xNew[i,], lTargPars),
+                                FUN = function(c) lTarg(xNew[c,], lTargPars),
                                 mc.cores = cores))
     # Acceptance ratios
-    alpha <- apply(cbind(exp(lTargNew - lTargOld),rep(1,cores)),1,min)
-    print(paste0("<alpha> = ",mean(alpha)))
+    alpha <- apply(cbind(exp(lTargNew - lTargOld),rep(1,cores)),1,min)*
+             vapply(1:cores,function(c) modifyAcc(xPrev,xNew[c,]),FUN.VALUE = numeric(1))
+    # print(paste0("<alpha> = ",mean(alpha)))
     # determine acceptance or rejection:
     u <- runif(cores)
     u2 <- runif(cores)
@@ -557,21 +558,24 @@ pM_GaA <- function(propCOV, lTarg, lTargPars, x0, itermax=1000,
       # Acceptance/rejection
       if (exp(lTargNew[c]-lTtmp)>=u[c]) { # Accepted!
         lTtmp<-lTargNew[c]
-        xPrev<-xNew
+        xPrev<-xNew[c,]
       }
-      # For stochastic, likelihood free models, avoid falling into ficticious local minima
-      sigLL<-1.-2*pnorm(lTargNew[c]-lTtmp,mean = 0,sd = 1.2)
-      # Update the Global Scaling Factor (GSF), mean & covariance
-      Lgsf <- Lgsf + sigLL*gamzy[it+c-1]*(alpha[c]-Params$Pstar)
-      propMu <- propMu + sigLL*gamzy[it+c-1]*(xNew[c,] - propMu)
-      propCOV <- propCOV + sigLL*gamzy[it+c-1] * ((xNew[c,] - propMu) %*% t(xNew[c,] - propMu) - propCOV) + eps[it+c-1]
+      # Adaptive component of MCMC algorithm
+      if(it>Params$GreedyStart) {
+        # For stochastic, likelihood free models, avoid falling into ficticious local minima
+        sigLL<-1.-2*pnorm(lTargNew[c]-lTtmp,mean = 0,sd = 1.2)
+        # Update the Global Scaling Factor (GSF), mean & covariance
+        Lgsf <- Lgsf + sigLL*gamzy[it+c-1]*(alpha[c]-Params$Pstar)
+        propMu <- propMu + sigLL*gamzy[it+c-1]*(xNew[c,] - propMu)
+        propCOV <- propCOV + sigLL*gamzy[it+c-1] * ((xNew[c,] - propMu) %*% t(xNew[c,] - propMu) - propCOV) + eps[it+c-1]
+      }
     }
     # Update target value for acceptance ratio at next step
     lTargOld<-lTtmp
     # Print checks
-    print(paste0("Total covariance = ",sum(exp(2*Lgsf)*propCOV)))
-    print(paste0("Global Scaling Factor, r = ",exp(2*Lgsf)))
-    print(paste0(round(it*100/itermax),"% done. LL = ",output[it,1]))
+    # print(paste0("Total covariance = ",sum(exp(2*Lgsf)*propCOV)))
+    # print(paste0("Global Scaling Factor, r = ",exp(2*Lgsf)))
+    print(paste0(round(it*100/itermax),"% done. LL = ",output[it+c-1,1]))
     # update iterator:
     it <- it + cores
   }

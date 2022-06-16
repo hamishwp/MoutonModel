@@ -10,11 +10,11 @@ oneSex<-T
 # Is the observation probability an empirically-based fixed value or sampled as a R.V.?
 fixedObsProb<-T
 # Number of MCMC simulations
-itermax <- 5000
+itermax <- 20000
 # Number of in-chain parallelised cores
-ncores<-4
+ncores<-8
 # Define the number of size class bins
-nbks<-10
+nbks<-15
 # Particle filter initialisation function
 muModel<-'poisson' #'multinomial'
 # Observation Model

@@ -75,11 +75,12 @@ GetSoaySheep_binned <-function(SHEEP,shift=0.49,oneSex=T,nbks=10){
 # Read in the Soay sheep data
 lSHEEP<-GetSoaySheep(directory,oneSex=oneSex)
 # Make the inital values using the piecemeal GLM approach
-x0<-do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb)))
+x0<-do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb)))%>%relist(skeleton = skeleton)
 # Number of parameters
-Np<-length(x0)
-# Import covariance matrix:
-propCOV<-diag(Np)*(2.38)^2/Np
+Np<-length(unlist(x0))
+# Provide initial estimate of covariance matrix using the confidence intervals from the GLM:
+propCOV<-diag(unlist((do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,CI=T))))$sd))/Np^2
+# propCOV<-diag(Np)*(2.38)^2/Np
 # Calculate the shift factor that offsets the size class mid-point
 if(!manshift) {shift<-CalcShift_Kernel(x0,IPMLTP,nbks,oneSex,lSHEEP$L,lSHEEP$U)
 } else shift<-0.5

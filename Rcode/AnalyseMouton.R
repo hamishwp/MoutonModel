@@ -17,37 +17,28 @@ library(Hmisc)
 library(corrplot)
 
 # Is the observation probability a fixed or random effects model?
-fixedObsProb<-F
-
-returnSelf <- function(x) x
-linknum<-function(x) exp(x)+1
-links <- rep('returnSelf', 12)
-links[c(12)] <- 'plogis'
-links[8]<-'linknum'
-if (fixedObsProb) {
-  links[c(5,11)] <- 'exp'
-}else {
-  links[c(5,11,13,14)] <- 'exp'
-}
+# fixedObsProb<-F
+# Load the IPM object skeleton
+source(paste0(directory,'Rcode/CodeSkeleton.R'))
 
 lSHEEP<-GetSoaySheep(directory,oneSex=T)
 GLM<-do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb)))
-for (i in 1:length(GLM)) GLM[i] <- match.fun(links[i])(x0[i])
+for (i in 1:length(GLM)) GLM[i] <- links[[i]](x0[i])
 
 # make a data.frame, and then tables for the write-up:
 # simulated <- c(-9.65, 3.77, 1.41, 0.56, 0.08, -7.23,
 #                2.6, 1, 0.36, 0.71, 0.16, 0.873, 1)
 
 # MLE<-readRDS("./Results/MLE_svjitter")$par
-# for (i in 1:length(MLE)) MLE[i] <- match.fun(links[i])(MLE[i])
+# for (i in 1:length(MLE)) MLE[i] <- links[[i]](MLE[i])
 
 # SVjitter<-readRDS(paste0(directory,"RDSobjects/startvals_jitter"))
-# for (i in 1:length(SVjitter)) SVjitter[i] <- match.fun(links[i])(SVjitter[i])
+# for (i in 1:length(SVjitter)) SVjitter[i] <- links[[i]](SVjitter[i])
 
 if(fixedObsProb) {x0<-readRDS(paste0(directory,"RDSobjects/GLM_real"))
 } else x0<-readRDS(paste0(directory,"RDSobjects/GLM_real_beta"))
 GLM<-x0
-for (i in 1:length(GLM)) GLM[i] <- match.fun(links[i])(x0[i])
+for (i in 1:length(GLM)) GLM[i] <- links[[i]](x0[i])
 
 # propCOV<-diag(length(GLM))/60
 
@@ -60,7 +51,7 @@ for (i in 1:4){
   
   print(paste0("Max LL: ",max(tmp[,1]),", chain number: ",i))
   
-  for (j in 2:ncol(tmp)) tmp[,j] <- match.fun(links[j-1])(tmp[,j])
+  for (j in 2:ncol(tmp)) tmp[,j] <- links[[j-1]](tmp[,j])
   
   means <- apply(tmp[,-1], 2, mean,na.rm=T)
   medis <- apply(tmp[,-1], 2, median,na.rm=T)
@@ -120,7 +111,7 @@ for (i in 1:3){
   
   print(paste0("Max LL: ",max(tmp[,1]),", iteration: ",i))
   
-  for (i in 2:14) tmp[,i] <- match.fun(links[i-1])(tmp[,i])
+  for (i in 2:14) tmp[,i] <- links[[i-1]](tmp[,i])
   
   # get the MAP parameters:
   ind <- tmp[,1] %>% which.max
@@ -132,7 +123,7 @@ for (i in 1:3){
 
 combinedChosen<-rbind(Sheep1,Sheep2,Sheep3)
 
-for (i in 2:14) combinedChosen[,i] <- match.fun(links[i-1])(combinedChosen[,i])
+for (i in 2:14) combinedChosen[,i] <- links[[i-1]](combinedChosen[,i])
 
 # get the MAP parameters:
 ind <- combinedChosen[,1] %>% which.max
@@ -163,7 +154,7 @@ for (i in 1:3){
   
   print(paste0("Max LL: ",max(tmp[,1]),", chain number: ",i))
   
-  for (j in 2:ncol(tmp)) tmp[,j] <- match.fun(links[j-1])(tmp[,j])
+  for (j in 2:ncol(tmp)) tmp[,j] <- links[[j-1]](tmp[,j])
   
   means <- apply(tmp[,-1], 2, mean,na.rm=T)
   medis <- apply(tmp[,-1], 2, median,na.rm=T)
@@ -228,7 +219,7 @@ plotNamesEx <-c(plotNames[1:(length(plotNames)-1)],"Obs Prob Shape 1","Obs Prob 
   
 tmp<-c()
 for (i in 1:4) tmp%<>%rbind(get(paste0("Sheep",i)))   #[10000:30000,])
-for (i in 2:ncol(tmp)) tmp[,i] <- match.fun(links[i-1])(tmp[,i])
+for (i in 2:ncol(tmp)) tmp[,i] <- links[[i-1]](tmp[,i])
 tmp<-tmp[tmp[,1]> -275,]
 
 colnames(tmp)<- c("Log-Target",plotNames[1:(length(plotNames)-1)])
@@ -329,7 +320,7 @@ Sheep4<-readRDS("Results/REAL_GSF_beta_multMu_poisObs_GLMx0_final_autoshift_unif
 
 PoisObs<-c()
 for (i in 2:4) PoisObs%<>%rbind(get(paste0("Sheep",i))[10000:40000,])
-for (i in 2:ncol(PoisObs)) PoisObs[,i] <- match.fun(links[i-1])(PoisObs[,i])
+for (i in 2:ncol(PoisObs)) PoisObs[,i] <- links[[i-1]](PoisObs[,i])
 colnames(PoisObs)<- c("Log-Target",plotNames[1:(length(plotNames)-1)])
 
 cory<-Hmisc::rcorr(PoisObs,type = "spearman")
@@ -351,7 +342,7 @@ Sheep4<-readRDS("./Results/REAL_GSF_fixed_multMu_multObs_GLMx0_final_autoshift_u
 
 MultObs<-c()
 for (i in 1:4) MultObs%<>%rbind(get(paste0("Sheep",i))[7000:20000,])
-for (i in 2:ncol(MultObs)) MultObs[,i] <- match.fun(links[i-1])(MultObs[,i])
+for (i in 2:ncol(MultObs)) MultObs[,i] <- links[[i-1]](MultObs[,i])
 colnames(MultObs)<- c("Log-Target",plotNames[1:(length(plotNames)-1)])
 
 
@@ -404,7 +395,7 @@ Sheep4<-readRDS("./Results/REAL_GSF_fixed_multMu_multObs_GLMx0_final_uniform_its
 
 MultObs15<-c()
 for (i in 1:4) MultObs15%<>%rbind(get(paste0("Sheep",i))[7000:30000,])
-for (i in 2:ncol(MultObs15)) MultObs10[,i] <- match.fun(links[i-1])(MultObs15[,i])
+for (i in 2:ncol(MultObs15)) MultObs10[,i] <- links[[i-1]](MultObs15[,i])
 colnames(MultObs15)<- c("Log-Target",plotNames[1:(length(plotNames)-1)])
 
 Variable<-Value<-c()
@@ -437,7 +428,7 @@ Sheep4<-readRDS("./Results/REAL_GSF_fixed_multMu_MultObs_GLMx0_final_10brks_auto
 
 MultObs10<-c()
 for (i in 1:4) MultObs10%<>%rbind(get(paste0("Sheep",i))[7000:30000,])
-for (i in 2:ncol(MultObs10)) MultObs10[,i] <- match.fun(links[i-1])(MultObs10[,i])
+for (i in 2:ncol(MultObs10)) MultObs10[,i] <- links[[i-1]](MultObs10[,i])
 colnames(MultObs10)<- c("Log-Target",plotNames[1:(length(plotNames)-1)])
 
 
@@ -447,7 +438,7 @@ Sheep3<-readRDS("./Results/REAL_GSF_fixed_multMu_PoisObs_GLMx0_final_20brks_auto
 
 new20<-c()
 for (i in 1:3) new20%<>%rbind(get(paste0("Sheep",i))) #[7000:30000,])
-for (i in 2:ncol(new20)) new20[,i] <- match.fun(links[i-1])(new20[,i])
+for (i in 2:ncol(new20)) new20[,i] <- links[[i-1]](new20[,i])
 colnames(new20)<- c("Log-Target",plotNames[1:(length(plotNames)-1)])
 
 
@@ -457,7 +448,7 @@ Sheep3<-readRDS("./Results/REAL_GSF_fixed_multMu_poisObs_GLMx0_final_15brks_auto
 
 old15<-c()
 for (i in 1:3) old15%<>%rbind(get(paste0("Sheep",i))) #[7000:30000,])
-for (i in 2:ncol(old15)) old15[,i] <- match.fun(links[i-1])(old15[,i])
+for (i in 2:ncol(old15)) old15[,i] <- links[[i-1]](old15[,i])
 colnames(old15)<- c("Log-Target",plotNames[1:(length(plotNames)-1)])
 
 
@@ -468,7 +459,7 @@ Sheep4<-readRDS("./Results/REAL_GSF_fixed_multMu_PoisObs_GLMx0_final_15brks_auto
 
 old15<-c()
 for (i in 1:4) old15%<>%rbind(get(paste0("Sheep",i))) #[7000:30000,])
-for (i in 2:ncol(old15)) old15[,i] <- match.fun(links[i-1])(old15[,i])
+for (i in 2:ncol(old15)) old15[,i] <- links[[i-1]](old15[,i])
 colnames(old15)<- c("Log-Target",plotNames[1:(length(plotNames)-1)])
 
 Sheep1<-readRDS("./Results/REAL_GSF_fixed_multMu_PoisObs_GLMx0_final_15brks_autoshift_uniform_its40000_2021-12-20_132955")
@@ -482,7 +473,7 @@ Sheep8<-readRDS("./Results/REAL_GSF_fixed_multMu_PoisObs_GLMx0_final_15brks_auto
 
 new15<-c()
 for (i in 1:8) new15%<>%rbind(get(paste0("Sheep",i))) #[7000:30000,])
-for (i in 2:ncol(new15)) new15[,i] <- match.fun(links[i-1])(new15[,i])
+for (i in 2:ncol(new15)) new15[,i] <- links[[i-1]](new15[,i])
 colnames(new15)<- c("Log-Target",plotNames[1:(length(plotNames)-1)])
 
 Sheep1<-readRDS("./Results/REAL_GSF_fixed_multMu_PoisObs_GLMx0_final_10brks_autoshift_uniform_its40000_2021-12-20_095626")
@@ -492,7 +483,7 @@ Sheep4<-readRDS("./Results/REAL_GSF_fixed_multMu_PoisObs_GLMx0_final_10brks_auto
 
 new10<-c()
 for (i in 1:4) new10%<>%rbind(get(paste0("Sheep",i))) #[7000:30000,])
-for (i in 2:ncol(new10)) new10[,i] <- match.fun(links[i-1])(new10[,i])
+for (i in 2:ncol(new10)) new10[,i] <- links[[i-1]](new10[,i])
 colnames(new10)<- c("Log-Target",plotNames[1:(length(plotNames)-1)])
 
 
@@ -551,7 +542,7 @@ Sheep14<-readRDS("Results/REAL_GSF_fixed_multMu_MultObs_GLMx0_final_20brks_autos
 
 multnom<-c()
 for (i in 1:14) multnom%<>%rbind(get(paste0("Sheep",i))) #[7000:30000,])
-# for (i in 2:ncol(multnom)) multnom[,i] <- match.fun(links[i-1])(multnom[,i])
+# for (i in 2:ncol(multnom)) multnom[,i] <- links[[i-1]](multnom[,i])
 colnames(multnom)<- c("Log-Target",plotNames[1:(length(plotNames)-1)])
 
 multnom<-multnom[!(multnom[,6]< -5),]
@@ -578,7 +569,7 @@ Sheep18<-readRDS("Results/REAL_GSF_fixed_multMu_poisObs_GLMx0_final_15brks_autos
 
 poiss<-c()
 for (i in 1:14) poiss%<>%rbind(get(paste0("Sheep",i))) #[7000:30000,])
-# for (i in 2:ncol(poiss)) poiss[,i] <- match.fun(links[i-1])(poiss[,i])
+# for (i in 2:ncol(poiss)) poiss[,i] <- links[[i-1]](poiss[,i])
 colnames(poiss)<- c("Log-Target",plotNames[1:(length(plotNames)-1)])
 
 poiss<-poiss[!(poiss[,6]< -5),]

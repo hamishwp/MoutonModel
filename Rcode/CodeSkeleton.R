@@ -34,20 +34,15 @@ supports<-data.frame(
           Inf, # Offspring Size Linear Regression Intercept
           Inf, # Offspring Size Linear Regression Gradient
           Inf,    # Offspring Size Linear Regression Dispersion (Std. Dev.)
-          sexprob),    # Offspring Survival Probability
+          sexprob)    # Offspring Survival Probability
 )
-
 # When using the data obervation values directly rather than assuming a distribution of observation probabilities
 if(!fixedObsProb) {
-  # Observed Probability Beta Shape Param 1 & 2
-  IPMLTP$links%<>%c('exp','exp')
   # Make sure that the skeleton frame also includes this
-  IPMLTP$skeleton %<>% c(list(obsProbPar = rep(NA,2)))
+  skeleton %<>% c(list(obsProbPar = rep(NA,2)))
   # Add to the supports:
   supports%<>%rbind(data.frame(lower=c(0,0),upper=c(Inf,Inf)))
 }
-# Relist the initial values with respect to the skeleton template
-x0%<>%relist(skeleton = IPMLTP$skeleton)
 
 # Some basic link functions (to be used in MCMC calculations)
 returnSelf <- function(x) x
@@ -55,6 +50,7 @@ linkNum <- function(x) exp(x)+1
 invlinkNum <- function(x) log(x-1)
 if(oneSex) {Schilder <- function(x) 0.5*plogis(x)
 } else {Schilder <- function(x) plogis(x)}
+
 # Generate the appropriate functions to be passed into the MCMC algorithm
 links<-invlinks<-acceptTrans<-c()
 for (i in 1:nrow(supports)){
@@ -64,27 +60,44 @@ for (i in 1:nrow(supports)){
     invlinks%<>%c(returnSelf)
     acceptTrans%<>%c(function(xold,xnew){return(1)})
     
-  # x>a
-  } else if(!is.infinite(supports$lower[i]) & is.infinite(supports$upper[i])){
-    links%<>%c(function(x){exp(x)+supports$lower[i]})
-    invlinks%<>%c(function(x){log(x-supports$lower[i])})
-    acceptTrans%<>%c(function(xold,xnew){return((xnew-supports$lower[i])/(xold-supports$lower[i]))})
+  # WARNING: R USES GLOBAL ENV FOR VARIABLES DEFINED IN FUNCTION
+  # TO AVOID PROBLEMS, WE DEFINE supports$lower[i] & supports$upper[i] IN LOCAL ENV
+  # x>0
+  } else if(supports$lower[i]==0 & is.infinite(supports$upper[i])){
+    links%<>%c(function(x){exp(x)+0})
+    invlinks%<>%c(function(x){log(x-0)})
+    acceptTrans%<>%c(function(xold,xnew){return((xnew-0)/(xold-0))})
+  
+  # x>1
+  } else if(supports$lower[i]==1 & is.infinite(supports$upper[i])){
+    links%<>%c(function(x){exp(x)+1})
+    invlinks%<>%c(function(x){log(x-1)})
+    acceptTrans%<>%c(function(xold,xnew){return((xnew-1)/(xold-1))})
     
   # x<b
-  } else if(is.infinite(supports$lower[i]) & !is.infinite(supports$upper[i])){
-    links%<>%c(function(x){supports$upper[i]-exp(x)})
-    invlinks%<>%c(function(x){log(supports$upper[i]-x)})
-    acceptTrans%<>%c(function(xold,xnew){return((supports$upper[i]-xnew)/(supports$upper[i]-xold))})
+  # } else if(is.infinite(supports$lower[i]) & !is.infinite(supports$upper[i])){
+  #   links%<>%c(function(x){supports$upper[i]-exp(x)})
+  #   invlinks%<>%c(function(x){log(supports$upper[i]-x)})
+  #   acceptTrans%<>%c(function(xold,xnew){return((supports$upper[i]-xnew)/(supports$upper[i]-xold))})
 
-  # a<x<b
+  # 0<x<1
   } else if(supports$lower[i]==0 & supports$upper[i]==1){
-    links%<>%c(function(x){(supports$upper[i]*exp(x)+supports$upper[i])/(exp(x)+1)})
-    invlinks%<>%c(function(x){log()})
-    acceptTrans%<>%c(function(xold,xnew){return((supports$upper[i]-xnew)/(supports$upper[i]-xold))})
+    links%<>%c(function(x){(1*exp(x)+0)/(exp(x)+1)})
+    invlinks%<>%c(function(x){log(x-0) - log(1-x)})
+    acceptTrans%<>%c(function(xold,xnew){return((1-xnew)/(1-xold)*(xnew-0)/(xold-0))})
+    
+  # 0<x<0.5
+  } else if(supports$lower[i]==0 & supports$upper[i]==0.5){
+    links%<>%c(function(x){(0.5*exp(x)+0)/(exp(x)+1)})
+    invlinks%<>%c(function(x){log(x-0) - log(0.5-x)})
+    acceptTrans%<>%c(function(xold,xnew){return((0.5-xnew)/(0.5-xold)*(xnew-0)/(xold-0))})
     
   } else stop("Check your model parameter support ranges: link function not defined (CodeSkeleton.R)")
   
 }
+
+# Calculate the multiplicative factor required in the acceptance probability calculation
+modifyAcc<-function(xold,xnew) prod(sapply(1:length(xold),function(i){do.call(acceptTrans[[i]],list(xold=xold[i],xnew=xnew[i]))}))
 
 # The start of the list of functions, parameters and formatting for the logTarget
 IPMLTP <- list(
