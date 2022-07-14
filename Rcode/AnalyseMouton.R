@@ -23,7 +23,7 @@ source(paste0(directory,'Rcode/CodeSkeleton.R'))
 
 lSHEEP<-GetSoaySheep(directory,oneSex=T)
 GLM<-do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb)))
-for (i in 1:length(GLM)) GLM[i] <- links[[i]](x0[i])
+for (i in 1:length(GLM)) GLM[i] <- links[[i]](GLM[i])
 
 # make a data.frame, and then tables for the write-up:
 # simulated <- c(-9.65, 3.77, 1.41, 0.56, 0.08, -7.23,
@@ -803,6 +803,16 @@ vals<-c(-8.25, 3.77,
         log(10)
 )
 
+vals<-c(-7.25, 3.77,
+            1.41, 0.56, log(0.08),
+            -7.23, 2.6,
+            log(0.06),
+            0.36, 0.71, log(0.16),
+            qlogis(0.9),
+            log(50),
+            log(10)
+)
+
 vals%<>%unlist()
 
 allresults<-list()
@@ -850,6 +860,8 @@ for (ppp in pop){
                   }
                   
                   output<-data.frame(True=vals[1:ifelse(fff=="fixed",length(vals)-2,length(vals))])
+                  # output<-data.frame(predMean=colMeans(rBtot[,-1]))
+                  # output$True<-vals[1:12]
                   
                   # Mean & ConfInt
                   output$predMean<-colMeans(rBtot[,-1])
@@ -868,7 +880,7 @@ for (ppp in pop){
                   output$Rhat<-sapply(1:length(cBtot),function(i) rstan::Rhat(cBtot[[i]]))
                   output$essBulk<-sapply(1:length(cBtot),function(i) rstan::ess_bulk(cBtot[[i]]))
                   output$essTail<-sapply(1:length(cBtot),function(i) rstan::ess_tail(cBtot[[i]]))
-                  
+
                   metadata<-list(Nchains=lennie,pop=ppp,yrs=yyy,fibe=fff,mu=mmm,obs=ooo,brks=bbb,samp=sammy,shift=shsh)
                   
                   allresults%<>%c(list(results=output,metadata=metadata))

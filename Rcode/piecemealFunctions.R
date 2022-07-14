@@ -256,8 +256,8 @@ normal <- function(y, x, pars){
   dnorm(y, mean, sigma)  %>% return       # Calculate the probabilty of y|x
 }
 
-kernelOneVar <- function(m, growthFunc, growthPars, survFunc, survPars,
-                         repFunc, repPars, offNum, offSizeFunc, offSizePars, L, 
+kernelOneVar <- function(m, breaks=NULL, growthFunc, growthPars, survFunc, survPars,
+                         repFunc, repPars, offNum=1.067, offSizeFunc, offSizePars, L, 
                          U, childSurv=1,shift=0.5,halfPop=NULL){
   # purpose : Evaluates the Integral Projection Model Kernal for one time step,
   #           given the range of the size values, and the number of points to 
@@ -290,9 +290,14 @@ kernelOneVar <- function(m, growthFunc, growthPars, survFunc, survPars,
   # Note: uses formula 2.3.6 of Ellner, Childs & Rees for the kernel of a one
   #       variable post-reproductive IPM.
   
-  # produce mesh points for the midpoint rule:
-  h <- (U-L)/m
-  meshpts <- L + (1:m)*h - h*shift
+  if(!is.null(breaks)){
+    h<-diff(breaks)
+    meshpts<-breaks[1:(length(breaks)-1)] + shift*h
+  } else{
+    # produce mesh points for the midpoint rule:
+    h <- (U-L)/m
+    meshpts <- L + (1:m)*h - h*shift    
+  }
   
   # To account for only tracking half the population:
   multiplier <- ifelse(is.null(halfPop), 1, 0.5)
@@ -322,23 +327,14 @@ kernelOneVar <- function(m, growthFunc, growthPars, survFunc, survPars,
   return(kernel)
 } 
 
-CalcShift_Kernel<-function(x0,IPMLTP,nbks,halfpop,L,U){
+CalcShift_Kernel<-function(x0,IPMLTP,nbks,breaks=NULL,halfpop,L,U){
   
-  x0%<>%unlist()
-  
-  for (i in 1:length(IPMLTP$links))  x0[i] <- 
-      match.fun(IPMLTP$links[[i]])(x0[i])
-  x0%<>%relist(skeleton=IPMLTP$skeleton)
-  
-  x0$growthPars%<>%c(L,U)
-  x0$offSizePars%<>%c(L,U)
-  
-  
+  x0%<>%Sample2Physical(IPMLTP)
   
   popinc<-kernelOneVar(m = 500, growthFunc = IPMLTP$growthFunc,
                        growthPars = x0$growthPars, survFunc = IPMLTP$survFunc,
                        survPars = x0$survPars, repFunc = IPMLTP$reprFunc,
-                       repPars = x0$reprPars, offNum = 1,
+                       repPars = x0$reprPars, offNum = x0$offNumPars,
                        offSizeFunc =  IPMLTP$offSizeFunc,
                        offSizePars = x0$offSizePars, L = L, U = U,
                        childSurv = x0$Schild,shift=0.5,halfPop = halfpop) %>%
@@ -346,10 +342,10 @@ CalcShift_Kernel<-function(x0,IPMLTP,nbks,halfpop,L,U){
   
   shift<-optimise(f=function(shift) {
     
-    tmp<-kernelOneVar(m = nbks, growthFunc = IPMLTP$growthFunc,
+    tmp<-kernelOneVar(m = nbks, breaks = breaks, growthFunc = IPMLTP$growthFunc,
                       growthPars = x0$growthPars, survFunc = IPMLTP$survFunc,
                       survPars = x0$survPars, repFunc = IPMLTP$reprFunc,
-                      repPars = x0$reprPars, offNum = 1,
+                      repPars = x0$reprPars, offNum = x0$offNumPars,
                       offSizeFunc =  IPMLTP$offSizeFunc,
                       offSizePars = x0$offSizePars, L = L, U = U,
                       childSurv = x0$Schild,shift=shift,halfPop = halfpop) %>%

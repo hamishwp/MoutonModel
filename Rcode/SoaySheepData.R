@@ -38,32 +38,32 @@ GetSoaySheep <-function(directory="/home/patten/Documents/Coding/Oxford/MoutonMo
   
 }
 
-GetSoaySheep_binned <-function(SHEEP,shift=0.49,oneSex=T,nbks=10){
-  
+calcBreaks<-function(SHEEP,nbks,regbinspace=T){
   # Get breakpoints (histogram bin intervals), count data, and growth rate per census:
-  # breaks<-quantile(c(SHEEP$prev.size,SHEEP$size),probs = 0:(nbks-1)/(nbks-1),na.rm = T)%>%unname
-  # SHEEP$breaks<-seq(from=min(c(SHEEP$solveDF$prev.size,SHEEP$solveDF$size),na.rm = T),
-  #             to=max(c(SHEEP$solveDF$prev.size,SHEEP$solveDF$size),na.rm = T),length.out=nbks)
-  SHEEP$breaks<-ggplot_build(ggplot()+geom_histogram(data=SHEEP$solveDF,mapping=aes(size),bins = nbks))$data[[1]]$x
+  if(regbinspace){
+    breaks<-ggplot_build(ggplot()+geom_histogram(data=SHEEP$solveDF,mapping=aes(size),bins = nbks))$data[[1]]$x
+    # Merge all bins that are in the lowest 5th percentile
+    minnie<-quantile(SHEEP$solveDF$size,1/nbks,na.rm = T)%>%unname()
+    breaks<-seq(from=minnie,to=max(breaks),length.out=nbks)
+    # others<-seq(from=minnie,to=max(breaks),length.out=(nbks-1))
+    # breaks<-c(min(breaks),others)
+    if(breaks[nbks]>SHEEP$U) breaks[nbks]<-max(c(SHEEP$solveDF$size,SHEEP$solveDF$prev.size),na.rm = T)-1e-5
+    if(breaks[1]>SHEEP$L) breaks[1]<-min(c(SHEEP$solveDF$size,SHEEP$solveDF$prev.size),na.rm = T)+1e-5
+  } else {
+    breaks<-quantile(c(SHEEP$solveDF$prev.size,SHEEP$solveDF$size),probs = 0:(nbks-1)/(nbks-1),na.rm = T)%>%unname
+  }
+  return(breaks)
+}
+
+GetSoaySheep_binned <-function(SHEEP,shift=0.5,oneSex=T,nbks=10,regbinspace=F){
+  
+  SHEEP$breaks<-calcBreaks(SHEEP,nbks,regbinspace)
+  
   SHEEP$sizes <- SHEEP$breaks[-(nbks)] + shift*diff(SHEEP$breaks)
-  # Check how this pans out
-  previousState<-vectorToCounts(SHEEP$solveDF$size, SHEEP$breaks)
-  # Merge all bins that are in the lowest 5th percentile
-  minnie<-SHEEP$breaks[min(which(cumsum(previousState)/sum(previousState)>0.05))]
-  others<-seq(from=minnie,to=max(SHEEP$breaks),length.out=(nbks-1))
-  SHEEP$breaks<-c(min(SHEEP$breaks),others)
-  SHEEP$sizes <- SHEEP$breaks[-(nbks)] + shift*diff(SHEEP$breaks)
-  # breaks<-histss(SHEEP$size[!is.na(SHEEP$size)],nbks)$breaks
-  SHEEP$breaks[c(1,nbks)]<-c(-Inf,Inf)
-  # breaks <- c(0, 16, 20, 24, 28, 40)
+  breaks<-SHEEP$breaks; breaks[c(1,nbks)]<-c(-Inf,Inf)
   SHEEP$COUNTS <- getSizeDistns(SHEEP$solveDF, SHEEP$breaks)
   SHEEP$priorProbs<-rowSums(SHEEP$COUNTS)/sum(SHEEP$COUNTS)
-  
   SHEEP$obsProbTime <- apply(SHEEP$COUNTS, 2, sum)/SHEEP$detectedNum
-  
-  # Get the pars of the initial size dist:
-  # SHEEP$sheepStartSize <- SHEEP$detectedNum
-  # SHEEP$sheepMuPar <- SHEEP$COUNTS[,1] %>% countsToProbs
   
   return(SHEEP)
   
@@ -81,10 +81,17 @@ Np<-length(unlist(x0))
 # Provide initial estimate of covariance matrix using the confidence intervals from the GLM:
 propCOV<-diag(unlist((do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,CI=T))))$sd))/Np^2
 # propCOV<-diag(Np)*(2.38)^2/Np
+lSHEEP$breaks<-calcBreaks(lSHEEP,nbks,regbinspace = regbinspace)
+# for truncated normal distributions
+if(normsampler=="sampleDTN") {
+  IPMLTP$DTN<-data.frame(L=lSHEEP$L,U=lSHEEP$U)
+}
 # Calculate the shift factor that offsets the size class mid-point
-if(!manshift) {shift<-CalcShift_Kernel(x0,IPMLTP,nbks,oneSex,lSHEEP$L,lSHEEP$U)
+if(!manshift) {shift<-CalcShift_Kernel(x0 = Sample2Physical(x0,IPMLTP),IPMLTP = IPMLTP,nbks = nbks,
+                                       breaks = lSHEEP$breaks,
+                                       halfpop = oneSex,L = lSHEEP$L,U = lSHEEP$U)
 } else shift<-0.5
 print(paste0("Grid shift = ",shift, " for ",nbks," number of breaks." ))
 # Get the sheep counts and sizes from the actual data (required even if simulated data is used)
-lSHEEP<-GetSoaySheep_binned(lSHEEP,shift=shift,oneSex=T,nbks=nbks)  
+lSHEEP<-GetSoaySheep_binned(lSHEEP,shift=shift,oneSex=T,nbks=nbks,regbinspace=regbinspace)  
 

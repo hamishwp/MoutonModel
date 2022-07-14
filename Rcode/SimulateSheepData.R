@@ -1,84 +1,163 @@
-# vals<-unlist(x0)
+lSHEEP<-list(L=1.131, U=3.532)
+# for truncated normal distributions
+if(normsampler=="sampleDTN") {
+  IPMLTP$DTN<-data.frame(L=lSHEEP$L,U=lSHEEP$U)
+}
 
 x0<-vals<-c(-7.25, 3.77,
-            1.41, 0.56, log(0.08),
-            -7.23, 2.6,
-            log(0.06),
-            0.36, 0.71, log(0.16),
-            qlogis(0.9),
+            1.49111883, 0.53069364, log(0.08806918),
+            -4.619443,  1.369697,
+            log(0.067204),
+            0.6887019, 0.5931042, 0.2073659,
+            qlogis(0.4989097),
             log(50),
-            log(10)
-)
+            log(10))
+Np<-length(unlist(x0))
+
 if(fixedObsProb) {
   # Remove the last two parameters
-  x0<-x0[1:12]
+  x0<-x0[1:12]; Np<-length(unlist(x0))
   # Calculate the expected observation probability
   obsMean<-vals[13]/(vals[13]+vals[14])
-}
-
-if(!manshift) {shift<-CalcShift_Kernel(vals,IPMLTP,nbks,oneSex,lSHEEP$L,lSHEEP$U)
-} else shift<-0.5
-
-for (i in 1:length(IPMLTP$links))  vals[i] <- IPMLTP$links[[i]](vals[i])
-vals%<>%relist(skeleton=IPMLTP$skeleton)
-
-if(normsampler=="sampleDTN") {
-  vals$growthPars%<>%c(lSHEEP$L,lSHEEP$U)
-  vals$offSizePars%<>%c(lSHEEP$L,lSHEEP$U)
-}
-
-if(fixedObsProb) { lSHEEP$obsProbTime <- rep(obsMean,yearing+1)
+  # Temporal observation probability must be kept fixed
+  lSHEEP$obsProbTime <- rep(obsMean,yearing+1)
 } else lSHEEP$obsProbTime <- rbeta(yearing+1,vals$obsProbPar[1],vals$obsProbPar[2])
+# Create a fairly uninformative covariance matrix for the proposal distribution
+propCOV<-diag(Np)*(2.38)^2/Np/Np
 
-simPars <- list(n=100, t=300,
-                # set survival details:
-                survFunc = IPMLTP$survFunc, survPars = vals$survPars,
-                # set growth details:
-                growthSamp = IPMLTP$growthSamp,
-                growthPars = vals$growthPars,
-                # set reproduction details:
-                reprFunc = IPMLTP$reprFunc, reprPars = vals$reprPars,
-                # set offspring number and size distribution details:
-                offNumSamp=IPMLTP$offNumSamp, offNumPars=vals$offNumPars,
-                offSizeSamp = IPMLTP$offSizeSamp,
-                offSizePars = vals$offSizePars,
-                # Child survival probability:
-                Schild=vals$Schild,
-                # set other miscelaneous parameters:
-                Start = 2.7, thresh=10000, OneGend = TRUE,
-                popPrint = F, verbose=F)
+# Convert to physical coordinates
+vals%<>%Sample2Physical(IPMLTP)
 
-simmedData <- do.call(simulateIBM, simPars)
+# Stable population values and distribution from the eigenvalues & vectors
+popmod<-kernelOneVar(m = 500, growthFunc = IPMLTP$growthFunc,
+                     growthPars = vals$growthPars, survFunc = IPMLTP$survFunc,
+                     survPars = vals$survPars, repFunc = IPMLTP$reprFunc,
+                     repPars = vals$reprPars, offNum = vals$offNumPars,
+                     offSizeFunc =  IPMLTP$offSizeFunc,
+                     offSizePars = vals$offSizePars, L = lSHEEP$L, U = lSHEEP$U,
+                     childSurv = vals$Schild,shift=0.5,halfPop = 0.5)%>%eigen
 
-# simPars$t<-yearing
-# simPars$Start<-sample(simmedData$size,poptot)
-# simPars$n<-poptot
-# simmedData <- do.call(simulateIBM, simPars)  
+popinc<-Re(popmod$values[1])
+eigvec<-data.frame(size=seq(lSHEEP$L,lSHEEP$U,length.out=500),prob=-Re(popmod$vectors[,1]))
+cumy<-cumsum(abs(eigvec$prob)); cumy<-cumy/max(cumy)
 
-Starts<-sample(simmedData$size[!is.na(simmedData$size) & simmedData$census.number>round(0.5*max(simmedData$census.number))],poptot)
+Starties<-sample(eigvec$size,poptot,prob = abs(eigvec$prob),replace = T)
 
-lSHEEP$breaks<-ggplot_build(ggplot()+geom_histogram(data=data.frame(size=Starts),mapping=aes(size),bins = nbks))$data[[1]]$x
+# Setup the size classes based upon the eigenvector
+if(regbinspace){
+  # Let's make sure that the smallest bin contains 1/nbrks of the population
+  minbin<-eigvec$size[which.min(abs(cumy-1/nbks))]
+  lSHEEP$breaks<-seq(minbin,lSHEEP$U-1e-5,length.out=nbks)
+} else {
+  lSHEEP$breaks<-sapply(0:(nbks-1)/(nbks-1),function(quant) eigvec$size[which.min(abs(quant-cumy))])
+}
+# Calculate the ideal shift in the size classes for the state space projection
+if(!manshift) {shift<-CalcShift_Kernel(x0 = vals, IPMLTP = IPMLTP,nbks = nbks,
+                                       breaks = lSHEEP$breaks,
+                                       halfpop = oneSex,L = lSHEEP$L,U = lSHEEP$U)
+} else shift<-0.5
+# Now setup the ideal class sizes
 lSHEEP$sizes <- lSHEEP$breaks[-(nbks)] + shift*diff(lSHEEP$breaks)
 
-previousState<-vectorToCounts(Starts, lSHEEP$breaks)
+lSHEEP$COUNTS<-sapply(1:yearing, function(t) vectorToCounts(sample(eigvec$size,
+                                                                   poptot+round(poptot*(popinc-1))*(t-1),
+                                                                   prob = abs(eigvec$prob),replace = T),lSHEEP$breaks))
 
-minnie<-lSHEEP$breaks[min(which(cumsum(previousState)/sum(previousState)>0.05))]
-others<-seq(from=minnie,to=max(lSHEEP$breaks),length.out=(nbks-1))
-lSHEEP$breaks<-c(min(lSHEEP$breaks),others)
-lSHEEP$sizes <- lSHEEP$breaks[-(nbks)] + shift*diff(lSHEEP$breaks)
+lSHEEP$priorProbs<-rowSums(lSHEEP$COUNTS)/sum(lSHEEP$COUNTS)
+saveRDS(list(vals=vals,lSHEEP=lSHEEP),paste0("Results/SimulatedData_",namer,".Rdata"))
 
-previousState<-vectorToCounts(Starts, lSHEEP$breaks)
+###################### SIMULATE THE INDIVIDUAL BASED MODEL ######################
+# 
+# simPars <- list(n=100, t=300,
+#                 # set survival details:
+#                 survFunc = IPMLTP$survFunc, survPars = vals$survPars,
+#                 # set growth details:
+#                 growthSamp = IPMLTP$growthSamp,
+#                 growthPars = vals$growthPars,
+#                 # set reproduction details:
+#                 reprFunc = IPMLTP$reprFunc, reprPars = vals$reprPars,
+#                 # set offspring number and size distribution details:
+#                 offNumSamp=IPMLTP$offNumSamp, offNumPars=vals$offNumPars,
+#                 offSizeSamp = IPMLTP$offSizeSamp,
+#                 offSizePars = vals$offSizePars,
+#                 # Child survival probability:
+#                 Schild=vals$Schild,
+#                 # set other miscelaneous parameters:
+#                 Start = Starties, thresh=10000, OneGend = TRUE,
+#                 popPrint = F, verbose=F)
+# 
+# # Let's simulate some sheeepieeeesss!
+# simmedData <- do.call(simulateIBM, simPars)
+#################################################################################
 
-stateSpaceSampArgs <- list(survFunc = IPMLTP$survFunc, survPars = vals$survPars,
-                           growthSamp = IPMLTP$growthSamp, growthPars = vals$growthPars,
-                           reprFunc = IPMLTP$reprFunc, reprPars = vals$reprPars,
-                           offNumSamp = IPMLTP$offNumSamp, offNumPars = vals$offNumPars,
-                           offSizeSamp = IPMLTP$offSizeSamp, breaks = lSHEEP$breaks,
-                           offSizePars = vals$offSizePars, Schild=vals$Schild,
-                           sizes=lSHEEP$sizes, oneSex = oneSex)
+###################### SIMULATE THE STATE SPACE MODEL ######################
+# breaks<-lSHEEP$breaks; breaks[c(1,nbks)]<-c(-Inf,Inf)
+# previousState<-vectorToCounts(Starties, breaks)
+# 
+# stateSpaceSampArgs <- list(survFunc = IPMLTP$survFunc, survPars = vals$survPars,
+#                            growthSamp = IPMLTP$growthSamp, growthPars = vals$growthPars,
+#                            reprFunc = IPMLTP$reprFunc, reprPars = vals$reprPars,
+#                            offNumSamp = IPMLTP$offNumSamp, offNumPars = vals$offNumPars,
+#                            offSizeSamp = IPMLTP$offSizeSamp, breaks = lSHEEP$breaks,
+#                            offSizePars = vals$offSizePars, Schild=vals$Schild,
+#                            sizes=lSHEEP$sizes, oneSex = oneSex)
+# 
+# simmies<-50
+# tmp<-lapply(1:simmies,function(i) projectStateSpace(sampleStateIPM_red, stateSpaceSampArgs, previousState, yearing))
+# counter<-tmp[[1]]
+# for(i in 2:simmies) counter<-counter+tmp[[i]]
+# 
+# check<-round(counter/simmies)
+# diff(colSums(check)/100)+1
+# popinc
+# 
+# poptrack<-data.frame()
+# for(shsh in seq(0.05,0.95,length.out=200)){
+#   breaks<-lSHEEP$breaks
+#   sizes <- breaks[-(nbks)] + shsh*diff(breaks)
+#   breaks[c(1,nbks)]<-c(-Inf,Inf)
+#   
+#   stateSpaceSampArgs <- list(survFunc = IPMLTP$survFunc, survPars = vals$survPars,
+#                              growthSamp = IPMLTP$growthSamp, growthPars = vals$growthPars,
+#                              reprFunc = IPMLTP$reprFunc, reprPars = vals$reprPars,
+#                              offNumSamp = IPMLTP$offNumSamp, offNumPars = vals$offNumPars,
+#                              offSizeSamp = IPMLTP$offSizeSamp, breaks = breaks,
+#                              offSizePars = vals$offSizePars, Schild=vals$Schild,
+#                              sizes=sizes, oneSex = oneSex)
+#   
+#   tmp<-lapply(1:simmies,function(i) projectStateSpace(sampleStateIPM_red, stateSpaceSampArgs, previousState, yearing-1))
+#   counter<-tmp[[1]]
+#   for(i in 2:simmies) counter<-counter+tmp[[i]]
+#   poptrack%<>%rbind(data.frame(year=0:(yearing-1), pop=colSums(round(counter/simmies)),shift=shsh))
+# }
+# ggplot(poptrack,aes(year,pop,group=shift))+geom_line(aes(colour=shift))+
+#   geom_line(data=data.frame(year=0:(yearing-1),pop=colSums(COUNTS)),aes(year,pop),colour="red")
+#################################################################################
 
-lSHEEP$COUNTS<-projectStateSpace(sampleStateIPM_red, stateSpaceSampArgs, previousState, yearing)
-lSHEEP$breaks[c(1,nbks)]<-c(-Inf,Inf)
+
+
+
+
+
+
+
+
+
+# sample the sheep population t times, each time with a total:
+# poptot=poptot+round(poptot*(1-popinc))*(t-1)
+
+
+# Separate real from simulated datasets in Main.R
+
+
+
+
+
+
+
+
+
+
 
 # lSHEEP$COUNTS<-matrix(NA,nrow = (nbks-1), ncol = yearing)
 # for(t in 1:yearing){
@@ -88,8 +167,6 @@ lSHEEP$breaks[c(1,nbks)]<-c(-Inf,Inf)
 #   lSHEEP$COUNTS[,t]<-vectorToCounts(Weight, lSHEEP$breaks)
 #   
 # }
-lSHEEP$priorProbs<-rowSums(lSHEEP$COUNTS)/sum(lSHEEP$COUNTS)
-saveRDS(list(vals=vals,lSHEEP=lSHEEP),paste0("Results/SimulatedData_",namer,".Rdata"))
 
 # popdyn<-eigen(kernelOneVar(m = 1000, growthFunc = IPMLTP$growthFunc,
 #                      growthPars = vals$growthPars, survFunc = IPMLTP$survFunc,

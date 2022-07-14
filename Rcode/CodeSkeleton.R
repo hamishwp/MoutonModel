@@ -103,6 +103,7 @@ modifyAcc<-function(xold,xnew) prod(sapply(1:length(xold),function(i){do.call(ac
 IPMLTP <- list(
   skeleton = skeleton,
   links = links,
+  invlinks = invlinks,
   survFunc = match.fun('linLogit'),
   growthSamp = match.fun(normsampler),
   reprFunc = match.fun('linLogit'),
@@ -114,5 +115,28 @@ IPMLTP <- list(
 if(normsampler=="sampleDTN") {
   IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- doublyTruncatedNormal
 }else IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- normal
+
+##################### CONVERT VALUES WITH LINK FUNCTIONS  ######################
+Sample2Physical<-function(x0,IPMLTP){
+  x0%<>%unlist()
+  for (i in 1:length(IPMLTP$links))  x0[i] <- IPMLTP$links[[i]](x0[i])
+  x0%<>%relist(skeleton=IPMLTP$skeleton)
+  if(!is.null(IPMLTP$DTN)) {
+    x0$growthPars%<>%c(IPMLTP$DTN$L,IPMLTP$DTN$U)
+    x0$offSizePars%<>%c(IPMLTP$DTN$L,IPMLTP$DTN$U)
+  }
+  return(x0)
+}
+
+Physical2Sample<-function(x0,IPMLTP){
+  x0%<>%unlist()
+  for (i in 1:length(IPMLTP$invlinks))  x0[i] <- IPMLTP$invlinks[[i]](x0[i])
+  x0%<>%relist(skeleton=IPMLTP$skeleton)
+  if(!is.null(IPMLTP$DTN)) {
+    x0$growthPars%<>%c(IPMLTP$DTN$L,IPMLTP$DTN$U)
+    x0$offSizePars%<>%c(IPMLTP$DTN$L,IPMLTP$DTN$U)
+  }
+  return(x0)
+}
 
 

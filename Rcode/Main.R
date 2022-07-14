@@ -15,10 +15,9 @@ source(paste0(directory,'Rcode/GetPackages.R'))
 source(paste0(directory,'Rcode/LoadParameters.R'))
 # Load the IPM object skeleton
 source(paste0(directory,'Rcode/CodeSkeleton.R'))
-# Load the data and wrangle it appropriately
-source(paste0(directory,'Rcode/SoaySheepData.R'))
-# If we want simulated data, simulate the data into the lSHEEP object
-if(simulation) source(paste0(directory,'Rcode/SimulateSheepData.R'))
+# Either we read in the real data or generate our own!
+if(simulation) {source(paste0(directory,'Rcode/SimulateSheepData.R'))
+} else source(paste0(directory,'Rcode/SoaySheepData.R'))
 # Build up the model based on the parameters and sheep data
 source(paste0(directory,'Rcode/BuildModel.R'))
 # Check that the log-likelihood values make sense before running the full parallelised code

@@ -88,7 +88,7 @@ if(!fixedObsProb) flatPriors%<>%
   ))
 
 #################### CREATE THE LOGTARGETPARAMETERS OBJECT #####################
-# readRDS(paste0(directory,"RDSobjects/IPMLTP"))
+lSHEEP$breaks[c(1,nbks)]<-c(-Inf,Inf)
 
 IPMLTP %<>% c(list(
   priorFunc = match.fun('evalPriors'),
@@ -106,7 +106,7 @@ IPMLTP %<>% c(list(
 ))
 if(fixedObsProb) IPMLTP %<>% c(list(obsProbPar = obsProbTime))
 #if(normsampler=="sampleDTN") IPMLTP %<>% c(list(DTN = c(lSHEEP$L,lSHEEP$U)))
-IPMLTP %<>% c(list(DTN = c(lSHEEP$L,lSHEEP$U)))
+IPMLTP %<>% c(list(DTN = data.frame(L=lSHEEP$L,U=lSHEEP$U)))
 
 
 

@@ -114,15 +114,7 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   skeleton <- logTargetPars$skeleton
   vectorPars <- proposed
   
-  for (i in 1:length(logTargetPars$links))  proposed[i] <- 
-    logTargetPars$links[[i]](proposed[i])
-  proposed%<>%relist(skeleton=skeleton)
-  
-  if(!is.null(logTargetPars$DTN)) {
-    UL<-logTargetPars$DTN
-    proposed$growthPars%<>%c(UL)
-    proposed$offSizePars%<>%c(UL)
-  }
+  proposed%<>%Sample2Physical(logTargetPars)
   
   # Extract the function parameters:
   survPars <- proposed$survPars
