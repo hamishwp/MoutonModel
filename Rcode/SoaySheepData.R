@@ -62,6 +62,10 @@ GetSoaySheep_binned <-function(SHEEP,shift=0.5,oneSex=T,nbks=10,regbinspace=F){
   SHEEP$sizes <- SHEEP$breaks[-(nbks)] + shift*diff(SHEEP$breaks)
   breaks<-SHEEP$breaks; breaks[c(1,nbks)]<-c(-Inf,Inf)
   SHEEP$COUNTS <- getSizeDistns(SHEEP$solveDF, SHEEP$breaks)
+  SHEEP$cNames<-c(vapply(paste0("yr_",as.character(SHEEP$solveDF$sheep.yr),"__"), 
+                        function(yname) paste0(yname,paste0("sz_",as.character(signif(SHEEP$sizes,4)))),
+                        character(length(SHEEP$sizes))))
+  
   SHEEP$priorProbs<-rowSums(SHEEP$COUNTS)/sum(SHEEP$COUNTS)
   SHEEP$obsProbTime <- apply(SHEEP$COUNTS, 2, sum)/SHEEP$detectedNum
   

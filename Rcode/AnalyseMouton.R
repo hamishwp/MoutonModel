@@ -907,3 +907,8 @@ for (ppp in pop){
 
 
 
+Sheep1<-readRDS("Results/SIM_pop100_yr10_GSF_fixed_poissonMu_multinomialObs_GLMx0_30000_5brks_regbinspaceFALSE_sampleDTN_autoshift_uniform_its30000_2022-07-15_030311")
+Sheep2<-readRDS("Results/SIM_pop100_yr10_GSF_fixed_poissonMu_multinomialObs_GLMx0_30000_10brks_regbinspaceFALSE_sampleDTN_autoshift_uniform_its30000_2022-07-15_040235")
+Sheep3<-readRDS("Results/SIM_pop100_yr10_GSF_fixed_poissonMu_multinomialObs_GLMx0_30000_15brks_regbinspaceFALSE_sampleDTN_autoshift_uniform_its30000_2022-07-15_043946")
+
+

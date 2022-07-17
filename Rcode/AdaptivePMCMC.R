@@ -312,18 +312,18 @@ getAcceptance <- function(pMCMCoutput, start = 1, end = NULL){
   return(output)
 }
 
-grDiagnostic <- function(chains,plotty=T){
-  # purpose : Uses the CODA library to conduct a Gelman-Rubin test for MCMC
-  #           convergence
-  # inputs  : A list conatining the reult of the MCMC chains, assuming that
-  #           the first column gives the value of the log-posterior
-  # output  : Plot of the G-R convergence diagnostic test statistic
-  require(coda)
-  thinnednl <- lapply(chains, function(x) x[,-1])
-  combined <- thinnednl %>% lapply(FUN=mcmc) %>% do.call(what=mcmc.list)
-  if(plotty) return(gelman.plot(combined))
-  return(combined)
-}
+# grDiagnostic <- function(chains,plotty=T){
+#   # purpose : Uses the CODA library to conduct a Gelman-Rubin test for MCMC
+#   #           convergence
+#   # inputs  : A list conatining the reult of the MCMC chains, assuming that
+#   #           the first column gives the value of the log-posterior
+#   # output  : Plot of the G-R convergence diagnostic test statistic
+#   require(coda)
+#   thinnednl <- lapply(chains, function(x) x[,-1])
+#   combined <- thinnednl %>% lapply(FUN=mcmc) %>% do.call(what=mcmc.list)
+#   if(plotty) return(gelman.plot(combined))
+#   return(combined)
+# }
 
 ######################################################################################
 
@@ -819,3 +819,167 @@ p_HMC <- function(propCOV, lTarg, lTargPars, x0, itermax=1000,
   return(output)
   
 }
+
+
+
+
+
+
+
+
+# Find some quantiles of the accepted parameter space values
+multiQuants<-function(x,lenny=300,qmin=0.15,qmax=0.85){
+  # Find the min and max values, per parameter, to create a grid from
+  range<-vapply(1:length(x),function(i) quantile(x[,1],c(qmin,qmax),T,F), numeric(2))
+  # Output the grid of values!
+  vapply(1:length(x),function(i) seq(range[1,i],range[2,i],length.out=lenny),numeric(lenny))
+}
+
+# To adjust the ABC-threshold, we calculate the supremum of the ratio of two posteriors (at time t and t-1)
+# U. Simola, et al, 'Adaptive Approximate Bayesian Computation Tolerance Selection', Bayesian Anal. 16(2): 397-423 (June 2021). DOI: 10.1214/20-BA1211 
+Supremum<-function(c_old,xNew,xPrev){
+  # Calculate the density ratio using Kullback-Leibler Importance Estimation Procedure (KLIEP) - https://github.com/hoxo-m/densratio
+  densratio_obj <- densratio(xNew,xPrev, method="KLIEP")
+  # Values to predict on, based on quartiles of both the old & new parameters
+  x_quants<-multiQuants(rbind(xNew,xPrev))
+  # Compute the ratio for the range of prediction values
+  w_hat <- densratio_obj$compute_density_ratio(x_quants)
+  # Return the updated supremum*, as a vector that includes the older values
+  return(c((max(w_hat)+sum(c_old))/sum(c_old)),c_old)
+}
+
+# Distances were taken from https://www.biorxiv.org/content/10.1101/2021.07.29.454327v1.full.pdf
+# Note that if p=1 we are using the L1 distances - our default
+Wasserstein<-function(s,sobs,p=1){
+  # Median of the particle filter samples
+  meds<-apply(s,1,median)
+  # Median Absolute Deviation (MAD) to the sample
+  MAD<-median(abs(s[,i]-meds[i]))
+  # Median Absolute Deviation to the Observation (MADO)
+  MADO<-median(abs(s[,i]-sobs[i]))
+  # Don't punish the summary statistics that deviate more from obs data initially than others:
+  if(sum(MADO>2*MAD)/length(sobs)<1/3) PCMAD<-MAD+MADO else PCMAD<-MAD
+  # Calculate the Wasserstein distance per summary statistic
+  d_i<-vapply(1:length(sobs),function(i) abs((s[,i]-sobs[i])/PCMAD[i]),numeric(1))
+  # output total distance
+  return(pracma::nthroot(sum(d_i^p),p))
+}
+
+# https://arxiv.org/abs/2206.12235
+PerturbX<-function(){
+  
+  
+  
+}
+
+# Generate Np accepted particles (sets of model-parameters)
+# given the ABC-threshold (delta), target & resample functions and initial values
+GenAccSamples<-function(delta, xNew, lTarg, lTargPars, cores, ResampleSIR){
+  # How many particles do we want?
+  Np<-nrow(xNew); particles<-Np; 
+  # Output storage vector
+  output<-lTargPars$outshell
+  # Sample from parameter space until we have Np accepted particles
+  while (particles>0){
+    # Sample the particles (note that the weightings are dynamically defined along with the function)
+    stop("shall we multiply particles by a factor, such as round(particles/accR)?")
+    stop("need to reduce xNew, whilst retaining the index which the rejected particle comes from and post to ResampleSIR")
+    stop("rename ResampleSIR")
+    xNew<-ResampleSIR(iXinit,particles)
+    # Sample from the target distribution
+    lTargNew <- mclapply(X = 1:particles,
+                         FUN = function(c) lTarg(xNew[c,], lTargPars),
+                         mc.cores = cores)
+    stop("make sure lTargNew is the correct dimensionality for the distance calculation")
+    # Compute the Wasserstein distance
+    d<-Wasserstein(lTargNew,c(lTargPars$Y))
+    # How many of these particles made it?
+    indies<-d<delta
+    # Save both accepted & rejected values
+    output%<>%rbind(cbind(d,lTargNew,indies,xNew))
+    # Adjust the number of particles required for the next iteration
+    particles<-particles-sum(indies)
+    # print out
+    print(paste0(particles," out of ",Np," left to simulate"))
+  }
+  stop("when are the weights recalculated?")
+  return(output)
+}
+
+# InitABCSIR<-function(particles=1000,xPrev,propCOV,cores,lTarg,lTargPars,delta0){
+InitABCSIR<-function(lTarg, lTargPars, initSIR){
+  # Generate the particles
+  xNew<-multvarNormProp(xt=initSIR$xPrev, propPars=initSIR$propCOV, n=initSIR$N_init)
+  # Sample from the target distribution
+  lTargNew <- mclapply(X = 1:initSIR$N_init,
+                       FUN = function(c) lTarg(xNew[c,], lTargPars),
+                       mc.cores = lTargPars$cores)
+  # Compute the Wasserstein distance
+  d<-Wasserstein(lTargNew,c(lTargPars$Y))
+  # Calculate the initial ABC-threshold required for the ABCSIR algorithm
+  delta0<-d[order(d)[initSIR$Np]]
+  # Output both accepted & rejected values
+  list(output=rbind(lTargPars$outshell,cbind(d,lTargNew,d<delta0,xNew)),delta0=delta0)
+}
+
+ABCSIR<-function(propCOV, lTarg, lTargPars, x0, itermax=10000, particles=1000, cores=detectCores(),
+              Params=list(delta0=10, # initial ABC rejection value
+                          psi=5, # percentile to decrease delta by
+                          deltaN=NULL, # final delta value to quit simulation
+                          defperc=0.95) # if percentile delta > previous_delta, use defperc*previous_delta
+                 ){
+  # Initialisations of storage variables and algorithm parameters
+  xPrev<-x0; indy<-1:length(xPrev); it<-1; simsimma<-T; weights<-rep(1,particles)
+  # Find theta*(t=1) delta(t=1) -> the ABC-rejection value
+  Inits<-InitABCSMC(Target, TargetPars, initSIR)
+  # Setup shop for the full algorithm
+  output<-Inits$output; delta<-Inits$delta0; rm(Inits)
+  # Run the algorithm!
+  while(!(1/c_thresh[it] > 0.99 & it>3)){
+    # Define the resample & perturb function of new parameter sets
+    PertResamp<-function(indices, particles){
+      
+      # DONT DO THIS HERE, DO IT USING ANOTHER FUNCTION DEFINED BEFORE THIS ONE
+      
+      # Define a mean value that has the same length as xNew, based on xPrev
+      
+      # Define local standard deviation value that has the same length as xNew, based on xPrev
+      
+    }
+    # SIR routine
+    output<-GenAccSamples(delta, xNew, lTarg, lTargPars, cores, PertResamp)
+    # Pull out all accepted particles
+    
+    # Recalculate particle weights (and normalise them!) REMEMBER TO SAVE THE OLD WEIGHTS
+    weights%<>%calcW(xNew,xPrev)
+    
+    stop("please pull out xNew and xPrev properly")
+    # Modify the ABC-threshold adaptively
+    c_thresh%<>%Supremum(xNew,xPrev)
+    # Decrease the current ABC-threshold
+    delta<-delta/c_thresh[it]
+    it<-it+1
+    # Tell me what's good... please, please, please
+    print(paste0("Simulation block number = ",it,", ABC-threshold = ",delta))
+  }
+  return(output)
+}
+
+
+# Issues to resolve:
+# - Initial acceptance threshold (DONE)
+# - Adaptive threshold method (DONE)
+# - Distance metric (DONE)
+# - Resampling & perturbation method (NEEDS IMPLEMENTING)
+# - Stopping criteria (DONE)
+
+# Code up a new particle_filter, including providing outputting the summary statistics of each particle at each time step
+# Finish the ABCSMC algorithm!
+
+
+
+
+
+
+
+

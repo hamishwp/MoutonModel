@@ -90,6 +90,10 @@ if(!fixedObsProb) flatPriors%<>%
 #################### CREATE THE LOGTARGETPARAMETERS OBJECT #####################
 lSHEEP$breaks[c(1,nbks)]<-c(-Inf,Inf)
 
+# Storage object for the ABC-SIR algorithm
+outshell<-data.frame(matrix(nrow = 0,ncol = (1L+length(c(lSHEEP$COUNTS))+1L+length(x0))))
+names(outshell)<-c("d",lSHEEP$cNames,"Accepted",names(unlist(IPMLTP$skeleton)))
+
 IPMLTP %<>% c(list(
   priorFunc = match.fun('evalPriors'),
   priors = priorsIPM,
@@ -102,11 +106,16 @@ IPMLTP %<>% c(list(
   obsProb = obsfun, # obsProb = match.fun('detectionNumObs'), # obsProb = match.fun('poissonObs'),
   fixedObsProb=fixedObsProb,
   breaks = lSHEEP$breaks,
-  sizes = lSHEEP$sizes
+  sizes = lSHEEP$sizes,
+  outshell = outshell,
+  cNames=lSHEEP$cNames,
+  pNames=names(unlist(IPMLTP$skeleton)),
+  cores=ncores
 ))
 if(fixedObsProb) IPMLTP %<>% c(list(obsProbPar = obsProbTime))
 #if(normsampler=="sampleDTN") IPMLTP %<>% c(list(DTN = c(lSHEEP$L,lSHEEP$U)))
 IPMLTP %<>% c(list(DTN = data.frame(L=lSHEEP$L,U=lSHEEP$U)))
+
 
 
 

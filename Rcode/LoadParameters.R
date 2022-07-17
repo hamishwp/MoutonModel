@@ -4,8 +4,8 @@
 # Are we using the real Soay sheep data or are we simulating it?
 simulation<-T
 # SIMULATION PARAMETERS - UNUSED IF simulation = F
-poptot<-100 # The number of years for the simulation (IF SIMULATED)
-yearing<-20 # The total population (IF SIMULATED)
+poptot<-500 # The number of years for the simulation (IF SIMULATED)
+yearing<-10 # The total population (IF SIMULATED)
 # Is the population counted one sex or two?
 oneSex<-T
 # Is the observation probability an empirically-based fixed value or sampled as a R.V.?

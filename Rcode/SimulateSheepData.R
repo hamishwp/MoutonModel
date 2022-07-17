@@ -62,6 +62,9 @@ lSHEEP$sizes <- lSHEEP$breaks[-(nbks)] + shift*diff(lSHEEP$breaks)
 lSHEEP$COUNTS<-sapply(1:yearing, function(t) vectorToCounts(sample(eigvec$size,
                                                                    poptot+round(poptot*(popinc-1))*(t-1),
                                                                    prob = abs(eigvec$prob),replace = T),lSHEEP$breaks))
+lSHEEP$cNames<-c(vapply(paste0("yr_",as.character(1:yearing),"__"), 
+                     function(yname) paste0(yname,paste0("sz_",as.character(signif(lSHEEP$sizes,4)))),
+                     character(length(lSHEEP$sizes))))
 
 lSHEEP$priorProbs<-rowSums(lSHEEP$COUNTS)/sum(lSHEEP$COUNTS)
 saveRDS(list(vals=vals,lSHEEP=lSHEEP),paste0("Results/SimulatedData_",namer,".Rdata"))
