@@ -850,55 +850,81 @@ Supremum<-function(c_old,xNew,xPrev){
 
 # Distances were taken from https://www.biorxiv.org/content/10.1101/2021.07.29.454327v1.full.pdf
 # Note that if p=1 we are using the L1 distances - our default
-Wasserstein<-function(s,sobs,p=1){
+Minkowski<-function(sest,sobs,p=1){
   # Median of the particle filter samples
-  meds<-apply(s,1,median)
+  meds<-apply(sest,1,median)
   # Median Absolute Deviation (MAD) to the sample
-  MAD<-median(abs(s[,i]-meds[i]))
+  MAD<-median(abs(sest[,i]-meds[i]))
   # Median Absolute Deviation to the Observation (MADO)
-  MADO<-median(abs(s[,i]-sobs[i]))
+  MADO<-median(abs(sest[,i]-sobs[i]))
   # Don't punish the summary statistics that deviate more from obs data initially than others:
   if(sum(MADO>2*MAD)/length(sobs)<1/3) PCMAD<-MAD+MADO else PCMAD<-MAD
-  # Calculate the Wasserstein distance per summary statistic
-  d_i<-vapply(1:length(sobs),function(i) abs((s[,i]-sobs[i])/PCMAD[i]),numeric(1))
+  # Calculate the Minkowski distance per summary statistic
+  d_i<-vapply(1:length(sobs),function(i) abs((sest[,i]-sobs[i])/PCMAD[i]),numeric(1))
   # output total distance
   return(pracma::nthroot(sum(d_i^p),p))
 }
 
-# https://arxiv.org/abs/2206.12235
-PerturbX<-function(){
+GuidedOLCov<-function(xPrev,sest,sobs){
   
+  
+}
+
+weightedStats<-function(ss,xProp,weights){
+  
+}
+
+# https://arxiv.org/abs/2206.12235
+PerturbX<-function(indies, output, weights){
+  # Calculate the means and SDs of parameters and summary statistics at t-1
+  SStats<-weightedStats(output$s[indies,],output$x[indies,],weights[indies,])
+  # Calculate the mean function, per index
+  # (use vapply)
+  
+  # Calculate the covariance function, per index
+  # (use vapply)
+  
+  
+  stop("check that length of adjM,adjCov is same as sum(indies)")
+  # Then sample from the rnorm
+  rnorm(sum(indies),adjM, adjCov)
+  
+}
+
+# Calculate the weights of the importantce resampling distribution
+# https://arxiv.org/abs/2206.12235
+calcW<-function(){
   
   
 }
 
 # Generate Np accepted particles (sets of model-parameters)
 # given the ABC-threshold (delta), target & resample functions and initial values
-GenAccSamples<-function(delta, xNew, lTarg, lTargPars, cores, ResampleSIR){
+GenAccSamples<-function(delta, xNew, lTarg, lTargPars, cores, ResampleSIR, accR=1){
   # How many particles do we want?
-  Np<-nrow(xNew); particles<-Np; 
+  Np<-nrow(xNew); particles<-Np; Complete<-rep(F,Np)
   # Output storage vector
   output<-lTargPars$outshell
   # Sample from parameter space until we have Np accepted particles
   while (particles>0){
     # Sample the particles (note that the weightings are dynamically defined along with the function)
-    stop("shall we multiply particles by a factor, such as round(particles/accR)?")
-    stop("need to reduce xNew, whilst retaining the index which the rejected particle comes from and post to ResampleSIR")
-    stop("rename ResampleSIR")
-    xNew<-ResampleSIR(iXinit,particles)
+    xNew<-ResampleSIR(!Complete)
     # Sample from the target distribution
     lTargNew <- mclapply(X = 1:particles,
                          FUN = function(c) lTarg(xNew[c,], lTargPars),
                          mc.cores = cores)
     stop("make sure lTargNew is the correct dimensionality for the distance calculation")
-    # Compute the Wasserstein distance
-    d<-Wasserstein(lTargNew,c(lTargPars$Y))
+    # Compute the Minkowski distance
+    d<-Minkowski(lTargNew,c(lTargPars$Y))
     # How many of these particles made it?
     indies<-d<delta
+    # Modify which particles are sampled from at next iteration
+    Complete[!Complete]<-indies
     # Save both accepted & rejected values
+    stop("replace lTargNew with sbar here:")
     output%<>%rbind(cbind(d,lTargNew,indies,xNew))
     # Adjust the number of particles required for the next iteration
-    particles<-particles-sum(indies)
+    particles<-sum(!Complete)
     # print out
     print(paste0(particles," out of ",Np," left to simulate"))
   }
@@ -914,8 +940,8 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
   lTargNew <- mclapply(X = 1:initSIR$N_init,
                        FUN = function(c) lTarg(xNew[c,], lTargPars),
                        mc.cores = lTargPars$cores)
-  # Compute the Wasserstein distance
-  d<-Wasserstein(lTargNew,c(lTargPars$Y))
+  # Compute the Minkowski L1 distance
+  d<-Minkowski(lTargNew,c(lTargPars$Y))
   # Calculate the initial ABC-threshold required for the ABCSIR algorithm
   delta0<-d[order(d)[initSIR$Np]]
   # Output both accepted & rejected values
@@ -929,15 +955,15 @@ ABCSIR<-function(propCOV, lTarg, lTargPars, x0, itermax=10000, particles=1000, c
                           defperc=0.95) # if percentile delta > previous_delta, use defperc*previous_delta
                  ){
   # Initialisations of storage variables and algorithm parameters
-  xPrev<-x0; indy<-1:length(xPrev); it<-1; simsimma<-T; weights<-rep(1,particles)
+  xPrev<-x0; indy<-1:length(xPrev); it<-1; c_thresh<-0.95; weights<-rep(1/particles,particles)
   # Find theta*(t=1) delta(t=1) -> the ABC-rejection value
   Inits<-InitABCSMC(Target, TargetPars, initSIR)
   # Setup shop for the full algorithm
   output<-Inits$output; delta<-Inits$delta0; rm(Inits)
   # Run the algorithm!
   while(!(1/c_thresh[it] > 0.99 & it>3)){
-    # Define the resample & perturb function of new parameter sets
-    PertResamp<-function(indices, particles){
+    # Dynamically define the resample & perturb function of new parameter sets
+    PertResamp<-function(indices){
       
       # DONT DO THIS HERE, DO IT USING ANOTHER FUNCTION DEFINED BEFORE THIS ONE
       
@@ -960,7 +986,7 @@ ABCSIR<-function(propCOV, lTarg, lTargPars, x0, itermax=10000, particles=1000, c
     delta<-delta/c_thresh[it]
     it<-it+1
     # Tell me what's good... please, please, please
-    print(paste0("Simulation block number = ",it,", ABC-threshold = ",delta))
+    print(paste0("Simulation block number = ",it,", ABC-threshold = ",delta, " with 1/c = ",c_thresh[it]))
   }
   return(output)
 }

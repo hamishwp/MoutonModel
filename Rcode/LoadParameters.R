@@ -4,16 +4,16 @@
 # Are we using the real Soay sheep data or are we simulating it?
 simulation<-T
 # SIMULATION PARAMETERS - UNUSED IF simulation = F
-poptot<-500 # The number of years for the simulation (IF SIMULATED)
+poptot<-100 # The number of years for the simulation (IF SIMULATED)
 yearing<-10 # The total population (IF SIMULATED)
 # Is the population counted one sex or two?
 oneSex<-T
 # Is the observation probability an empirically-based fixed value or sampled as a R.V.?
 fixedObsProb<-T
 # Number of MCMC simulations
-itermax <- 20000
+itermax <- 30000
 # Number of in-chain parallelised cores
-ncores<-4
+ncores<-48
 # Define the number of size class bins
 nbks<-10
 # Bins method:

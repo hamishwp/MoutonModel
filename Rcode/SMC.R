@@ -617,7 +617,6 @@ particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
     print("ObsProbPar=")
     print(obsProbPar)
     saveRDS(list(obsProb=obsProb,wArgs=wArgs,t=t),"./ERROR.Rdata")
-    stop()
   }
   # Sometimes removing M makes -Inf values when we exp again, so we need to 
   # reset them back to something that doesn't break the maths:
@@ -653,7 +652,6 @@ particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
       print("ObsProbPar=")
       print(obsProbPar)
       saveRDS(list(obsProb=obsProb,wArgs=wArgs,t=t),"./ERROR.Rdata")
-      stop()
     }
     # Note: log(.Machine$double.xmin) = -708.39
     logw[, time] %<>% `<`(cap) %>% replace(x = logw[, time], values = cap)
