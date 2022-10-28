@@ -875,23 +875,25 @@ weightedStats<-function(ss,xProp,weights){
 }
 
 # https://arxiv.org/abs/2206.12235
+# We will try using the algorithm 'fullcond', equations 9 & 10. 
 PerturbX<-function(indies, output, weights){
   # Calculate the means and SDs of parameters and summary statistics at t-1
   SStats<-weightedStats(output$s[indies,],output$x[indies,],weights[indies,])
-  # Calculate the mean function, per index
+  # Calculate the mean function, per index with same length as xNew, based on xPrev
   # (use vapply)
   
-  # Calculate the covariance function, per index
+  # Calculate covariance matrix from global standard deviation values, must have same length as xNew, based on xPrev
   # (use vapply)
-  
   
   stop("check that length of adjM,adjCov is same as sum(indies)")
   # Then sample from the rnorm
   rnorm(sum(indies),adjM, adjCov)
   
+  stop("output a function from this routine - ResampleSIR, not numerics")
+  
 }
 
-# Calculate the weights of the importantce resampling distribution
+# Calculate the weights of the importance resampling distribution
 # https://arxiv.org/abs/2206.12235
 calcW<-function(){
   
@@ -902,8 +904,8 @@ calcW<-function(){
 # given the ABC-threshold (delta), target & resample functions and initial values
 GenAccSamples<-function(delta, xNew, lTarg, lTargPars, cores, ResampleSIR, accR=1){
   # How many particles do we want?
-  Np<-nrow(xNew); particles<-Np; Complete<-rep(F,Np)
-  # Output storage vector
+  Np<-particles<-nrow(xNew); Complete<-rep(F,Np)
+  # Output storage vector of objective function elements - summary statistics of prediction errors
   output<-lTargPars$outshell
   # Sample from parameter space until we have Np accepted particles
   while (particles>0){
@@ -921,14 +923,13 @@ GenAccSamples<-function(delta, xNew, lTarg, lTargPars, cores, ResampleSIR, accR=
     # Modify which particles are sampled from at next iteration
     Complete[!Complete]<-indies
     # Save both accepted & rejected values
-    stop("replace lTargNew with sbar here:")
+    stop("replace lTargNew with sbar here:") # summary statistics averaged across number of samples per parameter space value
     output%<>%rbind(cbind(d,lTargNew,indies,xNew))
     # Adjust the number of particles required for the next iteration
     particles<-sum(!Complete)
     # print out
     print(paste0(particles," out of ",Np," left to simulate"))
   }
-  stop("when are the weights recalculated?")
   return(output)
 }
 
@@ -963,17 +964,9 @@ ABCSIR<-function(propCOV, lTarg, lTargPars, x0, itermax=10000, particles=1000, c
   # Run the algorithm!
   while(!(1/c_thresh[it] > 0.99 & it>3)){
     # Dynamically define the resample & perturb function of new parameter sets
-    PertResamp<-function(indices){
-      
-      # DONT DO THIS HERE, DO IT USING ANOTHER FUNCTION DEFINED BEFORE THIS ONE
-      
-      # Define a mean value that has the same length as xNew, based on xPrev
-      
-      # Define local standard deviation value that has the same length as xNew, based on xPrev
-      
-    }
+    ResampleSIR<-defFsamp(inputerzzzz)
     # SIR routine
-    output<-GenAccSamples(delta, xNew, lTarg, lTargPars, cores, PertResamp)
+    output<-GenAccSamples(delta, xNew, lTarg, lTargPars, cores, ResampleSIR)
     # Pull out all accepted particles
     
     # Recalculate particle weights (and normalise them!) REMEMBER TO SAVE THE OLD WEIGHTS
@@ -1001,6 +994,74 @@ ABCSIR<-function(propCOV, lTarg, lTargPars, x0, itermax=10000, particles=1000, c
 
 # Code up a new particle_filter, including providing outputting the summary statistics of each particle at each time step
 # Finish the ABCSMC algorithm!
+
+
+
+
+
+
+
+
+
+
+
+
+
+# NOTES on ABCSMC
+# MAX:
+# Initialisation
+#   setup empty vectors, ABC thresholds, particle weights
+#   sample particles from initial prior distributions
+#   calculate distances for initial particles
+# Enter step-loop
+#   calculate new ABC tolerance based on the old one,
+#   (using alpha proportion target of particles that should make it through based on desired value ~0.9) 
+#   recalculate particle weights based on meeting the ABC threshold
+#   weighted resample of particles (if necessary... see line 818 Method.R of ODDRIN)
+#   note that Np/Ess = Np/sum(weights_i^2)
+#   add the perturbation to resampled particles
+#     update propCOV of perturbation function
+#     (using weights of the previous-step particles that would also meet current threshold)
+#   calculate distances for each perturbed particle
+#   calculate MCMC acceptance probability 
+#   (remembering to adjust acceptance ratios based on link functions - modifyAcc function)
+#   if passes acceptance test, perturbed particle is accepted, otherwise keep original particle
+
+
+# Initialisation
+#   setup empty vectors, ABC thresholds, particle weights
+#   sample particles from initial prior distributions
+#   calculate distances for initial particles
+# Enter step-loop
+
+
+# Differences with Clement/Zhixiao work
+#   we define an adaptive ABC-threshold, based on culling a certain number of particles
+#     this is slow and requires many steps
+#   they pre-define the number of particles to make it through and reduce the threshold accordingly
+#     this leads to restricting parameter space to only leave the particles with smallest distances
+#   do they still add a perturbation component?
+#   does Max keep going until Np particles are simulated?
+
+
+# Make sure I am not confusing the quartile-reduction method (using alpha - see Max)
+# with something else - should I be continuously running until all Np particles are accepted?
+# 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
