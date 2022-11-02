@@ -435,7 +435,8 @@ sampleStateIPM_red <- function(previousState, survFunc, survPars,
   
   # Get the probability that each class reproduces based on number of sheep (not observed but actual)
   # reprProbs <- reprFunc(newSizes, reprPars)
-  reprProbs <- reprFunc(previousState, reprPars)
+  reprProbs <- reprFunc(sizes, reprPars)
+  stop("what is reprProbs meant to do?")
   # Get the updated size distribution of adults:
   reprSizes <- weightedSelection(newSizes, reprProbs)
   if (length(reprSizes)==0){ return(vectorToCounts(c(newSizes), breaks))
@@ -446,8 +447,7 @@ sampleStateIPM_red <- function(previousState, survFunc, survPars,
       # if (length(reprSizes)==0) return(vectorToCounts(c(newSizes), breaks))
     }
     # Sample the size of the offspring
-    # offSizesTemp <- offSizeSamp( rep(reprSizes,offNumSamp(reprSizes, offNumPars)) , offSizePars)
-    offSizesTemp <- offSizeSamp(offNumSamp(reprSizes, offNumPars),offSizePars) 
+    offSizesTemp <- offSizeSamp(rep(reprSizes,offNumSamp(length(reprSizes), offNumPars)),offSizePars) 
     # Get the new distribution of sizes:
     offSizes <- weightedSelection(offSizesTemp,rep(Schild,length(offSizesTemp)))
     
@@ -457,7 +457,134 @@ sampleStateIPM_red <- function(previousState, survFunc, survPars,
   
 }
 
+sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
+                               growthSamp, growthPars, reprFunc, reprPars, 
+                               offNumSamp, offNumPars, offSizeSamp, offSizePars,
+                               Schild, breaks, oneSex = TRUE, checks = FALSE,
+                               verbose = FALSE, sizes){
+  # Initialise output data.frame
+  outer<-data.frame()
+  # Get the size distribution of individuals that survive:
+  D<-length(previousState)
+  # Generate the survival probability [0,1] for each 'size' bin
+  # Using previousState (X - total #sheep per bin), predict number of OBSERVED sheep per bin
+  # Generate a sample population at the bin midpoint (at 'sizes' values) but repeating the values
+  newSizesI <- rep(rbinom(n=D, size=previousState, prob = survFunc(sizes, survPars)),x=sizes)  
+  # If none survive, return empty set
+  if (length(newSizesI)==0) return(
+    data.frame(
+      avGrowAlive=rep(Inf,D),
+      avgSizeOff=rep(Inf,D),
+      NoBirths=rep(0,D),
+      NoAlive=rep(0,D),
+      avgSizeAlive=rep(Inf,D),
+      avNoOff=rep(Inf,D),
+      avSurvOff=rep(Inf,D),
+      NoDeaths=previousState
+    ))
+  # What would the growth of such a population be in one year?
+  newSizes <- growthSamp(newSizesI, growthPars)
+  
+  
+  
+  
+  
+  # Bin these by breaks
+  newCounts<-vectorToCounts(newSizes, breaks)
+  
+  
+  
+  
+  
+  # Get the probability that each class reproduces based on number of sheep (not observed but actual)
+  stop("Something is wrong here, what is reprFunc meant to do and why did it have z=previousState")
+  reprProbs <- reprFunc(sizes, reprPars)
+  # Get the size distribution of reproducing adults:
+  stop("what is reprProbs meant to do? weightedSelection?")
+  # reprSizes <- weightedSelection(newSizes, reprProbs)
+  reprCounts <- rbinom(D, newCounts, reprProbs)
+  reprSizes <- rep(sizes,reprCounts)
+  
+  
+  
+  
+  
+  
+  
+  # Check if any births occurred
+  if (length(reprSizes)==0) {
+    outer<-data.frame(
+      avGrowAlive=vectorToAvgs(c(newSizes-newSizesI),breaks),
+      avgSizeOff=rep(Inf,D),
+      NoBirths=rep(0,D),
+      NoAlive=vectorToCounts(c(newSizes), breaks),
+      avgSizeAlive=vectorToAvgs(c(newSizes), breaks),
+      avNoOff=rep(Inf,D),
+      avSurvOff=rep(Inf,D)
+    )
+    outer$NoDeaths<-previousState-outer$NoAlive    
+    return(outer)
+  } else {
+    # Modify the number of reproducing sheep to retain females only
+    if(oneSex) {
+      reprSizes <- reprSizes[sample(1:length(reprSizes),ceiling(length(reprSizes)*0.5),replace = F)] # as.logical(rbinom(length(reprSizes), 1, 0.5))
+      # if (length(reprSizes)==0) return(vectorToCounts(c(newSizes), breaks))
+    }
+    # Sample number of offspring
+    offNummies<-offNumSamp(length(reprSizes), offNumPars)
+    stop("why are all classes having babies? Surely prevent some")
+    
+    
+    
+    
+    # Sample the size of the offspring
+    # offSizesTemp <- offSizeSamp(rep(reprSizes,offNummies),offSizePars) 
+    offSizesTemp <- offSizeSamp(rep(reprSizes,offNumPars),offSizePars) 
+    
+    
+    
+    
+    
+    
+    # Get the new distribution of sizes:
+    offSizes <- weightedSelection(offSizesTemp,rep(Schild,length(offSizesTemp)))
+  }
+  # Return the ABCSIR object with all the count data, for this year only. This will be combined with rbind later
+  # Note that this data.frame has D rows (number of bins/breaks)
+  warning("be careful to notice that this is, for example, number alive at the end of the census, not the beginning")
+  outer<-data.frame(
+    avGrowAlive=vectorToAvgs(c(newSizes-newSizesI),breaks),
+    avgSizeOff=                     vectorToAvgs(c(reprSizes),breaks), # this needs to be the size of the parent, not child
+    NoBirths=                       vectorToCounts(newSizes, breaks), # this needs to be the size of the parent, not child
+    NoAlive=vectorToCounts(c(offSizes, newSizes), breaks),
+    avgSizeAlive=vectorToAvgs(c(offSizes, newSizes),breaks),
+    avNoOff=offNummies,
+    avSurvOff=rep(Schild,D)
+  )
+  outer$NoDeaths<-previousState-outer$NoAlive
+  
+  # return(vectorToCounts(c(offSizes, newSizes), breaks))
+  stop("Explain length difference between previousState and all IPM vectors")
+  stop("Change reprFunc and weightedSelection in sampleSpaceIPM_red")
+  stop("Does this explain why simulated data comparisons never worked when true parameters were provided?")
+}
+
 ################################# UTILS ########################################
+vectorisedSamplerIPM_ABCSIR <- function(initialStates, SamplerArgs){
+  # purpose : Uses the sampleStateIPM function to project a n different state
+  #           spaces forwards one step, given they all have the same parameters
+  # inputs  : samplerArgs       - The list of NAMED arguments for the state
+  #                               space sampler. Any argument which is a
+  #                               function should be passed as a character 
+  #                               instead. For example 'mean' instead of mean.
+  #           initialStates     - The matrix containing the intital states.
+  #                               Each column is a separate initial state. 
+  # output  : A Dxt matrix, where D is the dimension of the state space and t
+  #           is the number of time steps we project forwards for.
+  
+  helper <- function(vec) do.call(sampleStateIPM_ABCSIR, c(list(vec), SamplerArgs))
+  return(apply(initialStates,2, helper))
+}
 
 vectorisedSamplerIPM <- function(initialStates, SamplerArgs){
   # purpose : Uses the sampleStateIPM function to project a n different state

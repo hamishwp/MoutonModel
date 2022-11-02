@@ -178,7 +178,8 @@ growthLinear <- function(zPrime, z, par, L, U, lik=FALSE){
 # A quick function for when a model holds a quantity constant:
 returnConstant <- function(x, const) rep(x,const)
 
-PoisNum<-function(x, const) rep(x,  (rpois(n=length(x), lambda = const-1L)+1L) )
+# PoisNum<-function(x, const) rep(x,  (rpois(n=length(x), lambda = const-1L)+1L) )
+PoisNum<-function(D, const) (rpois(n=D, lambda = const-1L)+1L)
 
 offSizeNLL <- function(par, L, U, DF){
   # purpose : Calculates the negative log likelihood of the exponential 

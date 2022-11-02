@@ -865,11 +865,13 @@ Minkowski<-function(sest,sobs,p=1){
   return(pracma::nthroot(sum(d_i^p),p))
 }
 
+# fuck knows what this is... perturbation matrix covariance? just use the global one (fullcond not fullcondopt)
 GuidedOLCov<-function(xPrev,sest,sobs){
   
   
 }
 
+# this is for the perturbation gaussian, using the summary statistics and weights of all accepted particles
 weightedStats<-function(ss,xProp,weights){
   
 }
@@ -983,6 +985,12 @@ ABCSIR<-function(propCOV, lTarg, lTargPars, x0, itermax=10000, particles=1000, c
   }
   return(output)
 }
+
+# PLAN OF TO-DO
+# 1) modify logTarget function to output objective function, per particle
+# 2) develop the perturbation function (fullcond algorithm)
+# 3) particle weight recalculation based on the objective function summary stats
+#   DONE!!!!
 
 
 # Issues to resolve:
