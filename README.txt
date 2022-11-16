@@ -1,8 +1,10 @@
 In order to run these files (in particular realSheepSMC.R found in the folder Rcode)
 then you need to download the necessary packages
 (e.g. install.packages("mcmcse") )
+and need to run in the terminal:
+sudo apt-get install libgsl-dev
 but also, you need to compile the dissPackage3 c++ functions using:
-'cd /folder-location/SheepModel/'
+'cd /folder-location/MoutonModel/'
 where the subfolders should be 'dissPackage3', 'Plots', 'Rcode', etc. Then do
 'R CMD build dissPackage3'
 then

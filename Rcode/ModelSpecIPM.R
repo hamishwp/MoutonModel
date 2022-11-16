@@ -154,6 +154,8 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
     muPar$pobs<-obsProbPar
   }
   
+  if(is.null(logTargetPars$sampleState)) logTargetPars$sampleState<-vectorisedSamplerIPM
+  
   # Create the list of arguments required for the state space sampler:
   stateSpaceSampArgs <- list(survFunc = survFunc, survPars = survPars,
                              growthSamp = growthSamp, growthPars = growthPars,
@@ -165,7 +167,7 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   
   # Get an estimate of the log likelihood from the particle filter:
   ll <- tryCatch(particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
-                       sampleState = vectorisedSamplerIPM,
+                       sampleState = logTargetPars$sampleState,
                        sampleStatePar = stateSpaceSampArgs,
                        obsProbPar = obsProbPar, fixedObsProb=fixedObsProb,
                        b = b, returnW = returnW), error= function(e) -Inf)

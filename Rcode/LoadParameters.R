@@ -26,7 +26,8 @@ obsModel<-'multinomial' #'binomial' #'poisson'
 manshift<-F
 # For the individual and offspring growth function - normal or truncated normal, or otherwise?
 normsampler<-"sampleDTN"
-
+# What algorithm to use to parameterise the model?
+algorithm<-"ABCSIR"
 # Use these parameters to create a name for the output file from the simjulation
 namer<-paste0(ifelse(simulation,paste0("SIM_pop",poptot,"_yr",yearing),"REAL"),
               "_GSF_",ifelse(fixedObsProb,"fixed","beta"),"_",muModel,"Mu_",obsModel,

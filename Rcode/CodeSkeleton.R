@@ -116,6 +116,12 @@ if(normsampler=="sampleDTN") {
   IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- doublyTruncatedNormal
 }else IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- normal
 
+if(algorithm=="ABCSIR"){
+  IPMLTP$sampleState <-vectorisedSamplerIPM_ABCSIR
+} else if(algorithm=="AMCMC"){
+  IPMLTP$sampleState <-vectorisedSamplerIPM
+} else stop("Please choose an algorithm to parameterise the model, default is 'ABCSIR'")
+
 ##################### CONVERT VALUES WITH LINK FUNCTIONS  ######################
 Sample2Physical<-function(x0,IPMLTP){
   x0%<>%unlist()
