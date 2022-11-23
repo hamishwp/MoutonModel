@@ -147,6 +147,8 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   fixedObsProb <- logTargetPars$fixedObsProb
   # breaks[c(1, D)] <- c(-Inf, Inf)
   
+  stop("WHY THE FUCK DO YOU NEED TO UNLIST ALL THIS SHIT")
+  
   if(fixedObsProb) {
     obsProbPar <- logTargetPars$obsProbPar
   } else {
@@ -169,7 +171,9 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   ll <- tryCatch(particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
                        sampleState = logTargetPars$sampleState,
                        sampleStatePar = stateSpaceSampArgs,
-                       obsProbPar = obsProbPar, fixedObsProb=fixedObsProb,
+                       obsProbPar = obsProbPar, 
+                       wDist = logTargetPars$wDist,
+                       fixedObsProb=fixedObsProb,
                        b = b, returnW = returnW), error= function(e) -Inf)
   if(is.infinite(ll)) warning("failure to calc LL for current parameter choice, adapt covariance matrix")
   

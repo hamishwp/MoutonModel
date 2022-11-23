@@ -295,11 +295,11 @@ fixedMuObs<-function(Y, X, p, logy=T, time, NoParts){
 }
 
 fixedPoisObs<-function(Y, X, p, logy=T, time, NoParts){
-  return(poissonObs(Y, X, p[time], logy=logy))
+  return(poissonObs(Y[,rep(time,NoParts)], X, p[time], logy=logy))
 }
 
 fixedBinObs<-function(Y, X, p, logy=T, time, NoParts){
-  return(detectionNumObs(Y, X, p[time], logy=logy))
+  return(detectionNumObs(Y[,rep(time,NoParts)], X, p[time], logy=logy))
 }
 
 ####################### IPM STATE SPACE SAMPLER ################################
@@ -476,10 +476,9 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
       NoSurv=reppie,
       NoAlive=reppie,
       NoParents=reppie,
-      avSurvOff=rep(Schild,D),
-      NoOff=reppie,
       GrowCounts=reppie,
-      NoBirths=reppie
+      avSurvOff=c(0,Schild,rep(0,D-2L)),
+      NoOff=reppie
     ))
   # What would the growth of such a population be in one year?
   newSizes <- growthSamp(newSizesI, growthPars)
@@ -491,19 +490,16 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
   # Parent counts
   # stop("what is reprProbs meant to do? weightedSelection?")
   reprCounts <- rbinom(D, newCounts, reprProbs)
-  # Convert to parent sizes
-  reprSizes <- rep(sizes,reprCounts)
   # Check if any births occurred
-  if (length(reprSizes)==0) {
+  if (sum(reprCounts)==0) {
     outer<-data.frame(
       NoSurv=newCounts,
       NoAlive=newCounts,
       NoParents=reprCounts,
-      avSurvOff=rep(Schild,D),
+      GrowCounts=vectorToCounts(c(newSizesI),breaks)-newCounts,
+      avSurvOff=c(0,Schild,rep(0,D-2L)),
       NoOff=reppie
     )
-    # The difference in counts per bin caused by growth 
-    outer$GrowCounts=vectorToCounts(c(newSizesI),breaks)-outer$NoSurv
     # Note that this isn't the actual number of children per group, but the expected value
     outer$NoBirths<-reppie
     # return it!
@@ -511,28 +507,30 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
   } else {
     # Modify the number of reproducing sheep to retain females only
     if(oneSex) {
-      reprSizes <- reprSizes[sample(1:length(reprSizes),ceiling(length(reprSizes)*0.5),replace = F)] # as.logical(rbinom(length(reprSizes), 1, 0.5))
-      # if (length(reprSizes)==0) return(vectorToCounts(c(newSizes), breaks))
+      # Are all sheep included in the study female?
+      offCounts<-rbinom(D, reprCounts, 0.5)
     }
+    # Number of offspring born per PARENT size class
+    offCounts[offCounts!=0]<-offNumSamp(offCounts[offCounts!=0],offNumPars)
+    # Save the total number born
+    bornCount<-sum(offCounts)
+    # How many survive to the next year?
+    offCounts <- rbinom(D, offCounts, Schild)
+    # Convert to parent sizes
+    reprSizes <- rep(sizes,offCounts)
     # Sample the size of the offspring
-    offSizesTemp <- offSizeSamp(rep(reprSizes,offNumPars),offSizePars) 
-    # Get the new distribution of sizes:
-    offSizes <- weightedSelection(offSizesTemp,rep(Schild,length(offSizesTemp)))
+    offSizes <- offSizeSamp(reprSizes,offSizePars) 
   }
   # Return the ABCSIR object with all the count data, for this year only. This will be combined with rbind later
   # Note that this data.frame has D rows (number of bins/breaks)
-  warning("be careful to notice that this is, for example, number alive at the end of the census, not the beginning")
   outer<-data.frame(
     NoSurv=newCounts,
     NoAlive=vectorToCounts(c(offSizes, newSizes), breaks),
-    NoParents=reprCounts,
-    avSurvOff=rep(Schild,D),
+    NoParents=reprCounts,    
+    GrowCounts=vectorToCounts(c(newSizesI),breaks)-newCounts,
+    avSurvOff=c(sum(offCounts),bornCount,rep(0,D-2L)),
     NoOff=vectorToCounts(c(offSizes),breaks)
   )
-  # The difference in counts per bin caused by growth 
-  outer$GrowCounts=vectorToCounts(c(newSizesI),breaks)-outer$NoSurv
-  # Note that this isn't the actual number of children per group, but the expected value
-  outer$NoBirths<-outer$NoParents*offNumPars
   
   # stop("Explain length difference between previousState and all IPM vectors")
   # stop("Change reprFunc and weightedSelection in sampleSpaceIPM_red")
@@ -649,11 +647,72 @@ makeFakeTrueSizeDist <- function(probs, sizes){
   for (i in 1:length(sizes)) output[,i] <- rmultinom(1, sizes[i], probs)
   return(output)
 }
-
 ################### PARTICLE FILTER AND PMCMC IMPLEMENTATION ###################
-
+# Minkowski distance function
+# Distances were taken from https://www.biorxiv.org/content/10.1101/2021.07.29.454327v1.full.pdf
+# Note that if p=1 we are using the L1 distances - our default
+Minkowski<-function(sest,sobs,weights,p=1){
+  # Median of the particle filter samples
+  meds<-apply(sest,1,median)
+  # Median Absolute Deviation (MAD) to the sample
+  MAD<-median(abs(sest[,i]-meds[i]))
+  # Median Absolute Deviation to the Observation (MADO)
+  MADO<-median(abs(sest[,i]-sobs[i]))
+  # Don't punish the summary statistics that deviate more from obs data initially than others:
+  if(sum(MADO>2*MAD)/length(sobs)<1/3) PCMAD<-MAD+MADO else PCMAD<-MAD
+  # Calculate the Minkowski distance per summary statistic
+  d_i<-vapply(1:length(sobs),function(i) abs((sest[,i]-sobs[i])/PCMAD[i]),numeric(1))
+  # output total distance
+  return(list(d_i=d_i,d=pracma::nthroot(sum((d_i*weights)^p),p)))
+}
+# Log likelihood calculation based on mean of the log values without the bias from the max value:
+LLpf<-function(output,obsProb,wArgs){
+  # Calculate the log likelihood of the census-specific states
+  stop("modify obsProb to return the obj fun elems")
+  stop("obsProb should not return the LL, nor have access to the Y observed matrix")
+  stop("rename obsProb to obs2true")
+  Ystar <- tryCatch(do.call(obsProb, wArgs),error = function(e) NA)
+  
+  # Note that: c(matrix(1:16,nrow = 4)) to convert between matrices and vectors
+  
+  Minkowski(Ystar,output$Y,wArgs$wDist,p=1)
+  
+  
+  
+  
+  
+  
+  
+  # Print in case of dodgy values
+  if(any(is.na(logw[,wArgs$time-1L]))) {
+    print("X=")
+    print(rowMeans(wArgs$X))
+    print(paste0("Y[t=",time,"]="))
+    print(wArgs$Y[,wArgs$time-1L])
+    print("ObsProbPar=")
+    print(wArgs$p)
+    saveRDS(list(obsProb=obsProb,wArgs=wArgs),"./ERROR.Rdata")
+  }
+  # Sometimes removing M makes -Inf values when we exp again, so we need to 
+  # reset them back to something that doesn't break the maths:
+  logw[logw<wArgs$cap] <- wArgs$cap
+  # Remove the max for numerical stability, and then get standardised weights:
+  if(max(logw,na.rm = T)!=min(logw,na.rm = T)){
+    M <- max(logw,na.rm = T)
+    #@@@@@@@@@ Get rid of residw by using piping options @@@@@@@
+    residw <- logw - M
+  } else {
+    M<-0
+    residw<-logw
+  }
+  output$sw[,wArgs$time-1L] <- exp(residw)
+  # Return me
+  output$LL<-output$LL + M + log(mean(output$sw[,wArgs$time-1L],na.rm = T))
+}
+# Actual Particle Filter function
 particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
-                           obsProbPar, NoParts, fixedObsProb=F, checks=F, returnW=F, l=T, cap=-300){
+                           obsProbPar, NoParts, wDist, fixedObsProb=F, 
+                           checks=F, returnW=F, l=T, cap=-300){
   # purpose : Produces an estimate of the log likelihood of the model, given
   #           NoParts particles projected through the state space
   # inputs  : Y              - The matrix of observations. Columns are time
@@ -692,86 +751,42 @@ particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
   
   # In case of a single observation:
   Y %<>% as.matrix
-  
-  # So function names can be passed:
-  mu <- match.fun(mu) ; sampleState <- match.fun(sampleState)
-  obsProb <-  match.fun(obsProb)
   t <-  ncol(Y)
-  
-  # Setup matrix to store the states for the previous time step:
+  # Setup initial states
   prevStates <- do.call(mu, muPar)
   # Setup weight matrix and standardised weight matrix:
-  logw <- matrix(NA, nrow=NoParts, ncol=t)
-  sw <- matrix(NA, nrow=NoParts, ncol=t)
-  
+  output <- list(LL=0, sw=matrix(NA, nrow=NoParts, ncol=(t-1L)))
   # Update weights for first time step:
-  wArgs <- list(Y = Y, X = prevStates, p=obsProbPar, time=1, NoParts=NoParts, logy = T)
-  # if(fixedObsProb) wArgs%<>%c(list(time=1))
-  logw[,1] <- tryCatch(do.call(obsProb, wArgs),error = function(e) NA)
-  if(any(is.na(logw[,1]))) {
-    print("X=")
-    print(rowMeans(prevStates))
-    print("Y[t=1]=")
-    print(Y[,1])
-    print("ObsProbPar=")
-    print(obsProbPar)
-    saveRDS(list(obsProb=obsProb,wArgs=wArgs),"./ERROR.Rdata")
-  }
-  # Sometimes removing M makes -Inf values when we exp again, so we need to 
-  # reset them back to something that doesn't break the maths:
-  logw[,1] %<>% `<`(cap) %>% replace(x = logw[, 1], values = cap)
-  # Remove the max for numerical stability, and then get standardised weights:
-  M <- max(logw[,1],na.rm = T) ; residw <- logw[,1] - M
-  sw[,1] <- exp(residw)
-  
-  # Create the LL object:
-  # output<-cap
-  output <- M + log(mean(sw[,1],na.rm = T))
+  wArgs <- list(Y = Y, p=obsProbPar, NoParts=NoParts, wDist=wDist, logy = T, cap=cap)
+  # Initial weights
+  output$sw[,1L]<-1.
   
   for (time in 2:t){
     # Sample from the previous states:
     # Using importance resampling (weighted & with replacement)
-    particleIndices <- sample(1:NoParts, NoParts, replace = T, prob = (sw[, time - 1]+1-max(sw[, time - 1])))
+    stop("modify sw")
+    particleIndices <- sample(1L:NoParts, NoParts, replace = T, 
+                              prob = (output$sw[, time - 1L]+1L-max(output$sw[, time - 1L])))
     sampledStates <-  prevStates[, particleIndices]
     prevStates <- sampleState(sampledStates, sampleStatePar)
-    
+    stop("calculate the average objective function element over all particles")
+    stop("but find a way to know if there are infinite values present?")
+    stop("obsProb function should directly calculate avg obj fun elems? No?")
+    stop("don't store prevStates but only the avg obj fun elems (per census)")
     # Evaluate the conditional likelihood of the data given the states:
     #@@@@@@@@@ Get rid of this unnecessary creation and combination of matrices @@@@@@@
     wArgs$X<-prevStates; wArgs$time<-time
-    # if(fixedObsProb) wArgs$time<-time
-    
-    # logw[, time] <- do.call(obsProb, wArgs)
-    logw[,time] <- tryCatch(do.call(obsProb, wArgs),error = function(e) NA)
-    if(any(is.na(logw[,time]))) {
-      print("X=")
-      print(rowMeans(prevStates))
-      print(paste0("Y[t=",time,"]="))
-      print(Y[,time])
-      print("ObsProbPar=")
-      print(obsProbPar)
-      saveRDS(list(obsProb=obsProb,wArgs=wArgs),"./ERROR.Rdata")
-    }
-    # Note: log(.Machine$double.xmin) = -708.39
-    logw[, time] %<>% `<`(cap) %>% replace(x = logw[, time], values = cap)
-    
-    if(!max(logw[, time],na.rm = T)==min(logw[, time],na.rm = T)){
-      M <- max(logw[, time],na.rm = T)
-      #@@@@@@@@@ Get rid of residw by using piping options @@@@@@@
-      residw <- logw[, time] - M
-    } else {
-      M<-0
-      residw<-logw[, time]
-    }
-    
-    # residw %<>% replace(residw < -100, -100)
-    sw[, time] <- exp(residw)
-    
+    stop("check that Y and X having different dimensions is taken into account")
     # Update the LL:
-    output <- output + M + log(mean(sw[, time],na.rm = T))
+    output <- obsProb(output,wArgs)
+    # Generate the summary statistics of the particles
+    output <- Minkowski(output)
+    
   }
   
-  if (returnW) return(sw)
-  else return(output)
+  stop("modify all outputs to read each element of the list instead of a single value")
+  return(output)
+  
 }
 
 ##################################################

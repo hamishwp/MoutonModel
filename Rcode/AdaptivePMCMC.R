@@ -848,23 +848,6 @@ Supremum<-function(c_old,xNew,xPrev){
   return(c((max(w_hat)+sum(c_old))/sum(c_old)),c_old)
 }
 
-# Distances were taken from https://www.biorxiv.org/content/10.1101/2021.07.29.454327v1.full.pdf
-# Note that if p=1 we are using the L1 distances - our default
-Minkowski<-function(sest,sobs,p=1){
-  # Median of the particle filter samples
-  meds<-apply(sest,1,median)
-  # Median Absolute Deviation (MAD) to the sample
-  MAD<-median(abs(sest[,i]-meds[i]))
-  # Median Absolute Deviation to the Observation (MADO)
-  MADO<-median(abs(sest[,i]-sobs[i]))
-  # Don't punish the summary statistics that deviate more from obs data initially than others:
-  if(sum(MADO>2*MAD)/length(sobs)<1/3) PCMAD<-MAD+MADO else PCMAD<-MAD
-  # Calculate the Minkowski distance per summary statistic
-  d_i<-vapply(1:length(sobs),function(i) abs((sest[,i]-sobs[i])/PCMAD[i]),numeric(1))
-  # output total distance
-  return(pracma::nthroot(sum(d_i^p),p))
-}
-
 # fuck knows what this is... perturbation matrix covariance? just use the global one (fullcond not fullcondopt)
 GuidedOLCov<-function(xPrev,sest,sobs){
   
@@ -966,11 +949,12 @@ ABCSIR<-function(propCOV, lTarg, lTargPars, x0, itermax=10000, particles=1000, c
   # Run the algorithm!
   while(!(1/c_thresh[it] > 0.99 & it>3)){
     # Dynamically define the resample & perturb function of new parameter sets
-    ResampleSIR<-defFsamp(inputerzzzz)
+    ResampleSIR<-defFsamp(inputerzzzz,weights)
+    stop("lTargPars needs wDist weights of the distance function")
     # SIR routine
     output<-GenAccSamples(delta, xNew, lTarg, lTargPars, cores, ResampleSIR)
     # Pull out all accepted particles
-    
+    stop("modify the minkowski distance wrt objective function elements")
     # Recalculate particle weights (and normalise them!) REMEMBER TO SAVE THE OLD WEIGHTS
     weights%<>%calcW(xNew,xPrev)
     

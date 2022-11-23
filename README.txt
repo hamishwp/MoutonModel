@@ -11,6 +11,23 @@ then
 'R CMD INSTALL dissPackage3'
 This will insert the package into the user executables for Linux OS.
 
+Additionally, run:
+sudo apt-get install libgsl-dev
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 For GPU programming in R such as through gmatrix, using HWP GPU updates to SMC code.

@@ -2,31 +2,48 @@
 IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- NULL; x0%<>%unlist(); lSHEEP$solveDF<-NULL
 
 if(algorithm=="ABCSIR"){
-  
-  
-  # we have one data frame 
-  outer<-data.frame(
-    # count data (vectorToCounts):
-    NoSurv=newCounts, 
-    # count data (vectorToCounts):
-    NoAlive=vectorToCounts(c(offSizes, newSizes), breaks),
-    # count data (vectorToCounts):
-    NoParents=reprCounts,
-    # positive [0,1] data:
-    avSurvOff=rep(Schild,D),
-    # count data (vectorToCounts):
-    NoOff=vectorToCounts(c(offSizes),breaks),
-    # count data (vectorToCounts):
-    GrowCounts=vectorToCounts(c(newSizesI),breaks)-outer$NoSurv,
-    # positive real data:
-    NoBirths<-outer$NoParents*offNumPars
-  )
-
-  # Do we make a flag for different types of data (e.g. count) then group by variable
-  # and flag and apply the function?
-  # Or do we make a distance function for each element instead? i.e. no multinomials but all binomials?
-  # Do both and compare them!
-  # and need to generate an observation model per variable
+  if(obsModel=='poisson'){
+    funcys<-list(
+      NoSurv=function(true,sim,wArgs) {dpois(wArgs$pobs*sim+1L, lambda = true+1L,log = T)},
+      NoAlive=function(true,sim,wArgs) {dpois(wArgs$pobs*sim+1L, lambda = true+1L,log = T)},
+      NoParents=function(true,sim,wArgs) {dpois(wArgs$pobs*sim+1L, lambda = true+1L,log = T)},
+      GrowCounts=function(true,sim,wArgs) {dpois(abs(wArgs$pobs*sim-true)+1L, lambda = 1,log = T)},
+      avSurvOff=function(true,sim,wArgs) {rep(dbinom(sim[1],sim[2],prob = true[1]/true[2],log = T),D)},
+      NoOff=function(true,sim,wArgs) {dpois(wArgs$pobs*sim+1L, lambda = true+1L,log = T)}
+    )
+  } else if(obsModel=='binomial'){
+    funcys<-list(
+      NoSurv=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)},
+      NoAlive=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)},
+      NoParents=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)},
+      GrowCounts=function(true,sim,wArgs) {dpois(abs(wArgs$pobs*sim-true)+1L, lambda = 1,log = T)},
+      avSurvOff=function(true,sim,wArgs) {rep(dbinom(sim[1],sim[2],prob = true[1]/true[2],log = T),D)},
+      NoOff=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)}
+    )
+  }
+  if(fixedObsProb){
+    
+    obsfun<-function(true,sim,funcys,wArgs){
+      # first modify the true population from the observed to the latent/true values
+      # column-wise calculations of objective function elements (is a matrix)
+      vapply(1:length(funcys),
+             FUN = function(i) funcys[[i]](true[,i,rep(wArgs$time,wArgs$NoParts)],sim[,i,],wArgs),
+             FUN.VALUE = numeric(nrow(true)))
+    }
+  } else {
+    
+    obsfun<-function(true,sim,funcys,wArgs){
+      
+      
+      # Simulate the obsProbPar from the beta distribution here
+      wArgs$pobs<-rbeta(ncol(true),wArgs$p[1],wArgs$p[2])
+      # first modify the true population from the observed to the latent/true values
+      # column-wise calculations of objective function elements (is a matrix)
+      vapply(1:ncol(true),
+             FUN = function(i) funcys[[i]](true[,i],sim[,i],wArgs),
+             FUN.VALUE = numeric(nrow(true)))
+    }
+  }
   
   # Selecting dependent upon configuration
   if(obsModel=='multinomial'){
@@ -50,7 +67,16 @@ if(algorithm=="ABCSIR"){
     # Number of SMC particles
     SMC_parts<-1750  # 6700 # 200
     
-  } else stop("Error in Mu Model input, we recommend muModel<-'poissonMu' ")
+  } else stop("Error in Obs Model input ")
+  
+  
+  
+  
+  
+  
+  
+  
+  
   
   # Particle filter initialisation parameters
   if(muModel=='multinomial'){
