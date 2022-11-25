@@ -651,7 +651,7 @@ makeFakeTrueSizeDist <- function(probs, sizes){
 # Minkowski distance function
 # Distances were taken from https://www.biorxiv.org/content/10.1101/2021.07.29.454327v1.full.pdf
 # Note that if p=1 we are using the L1 distances - our default
-Minkowski<-function(sest,sobs,weights,p=1){
+Minkowski<-function(sest,sobs,p=1){
   # Median of the particle filter samples
   meds<-apply(sest,1,median)
   # Median Absolute Deviation (MAD) to the sample
@@ -660,56 +660,13 @@ Minkowski<-function(sest,sobs,weights,p=1){
   MADO<-median(abs(sest[,i]-sobs[i]))
   # Don't punish the summary statistics that deviate more from obs data initially than others:
   if(sum(MADO>2*MAD)/length(sobs)<1/3) PCMAD<-MAD+MADO else PCMAD<-MAD
+  stop("check that d_i below can be used to evaluate particle weight")
   # Calculate the Minkowski distance per summary statistic
   d_i<-vapply(1:length(sobs),function(i) abs((sest[,i]-sobs[i])/PCMAD[i]),numeric(1))
   # output total distance
-  return(list(d_i=d_i,d=pracma::nthroot(sum((d_i*weights)^p),p)))
+  return(list(d_i=d_i,d=pracma::nthroot(sum(d_i^p),p)))
 }
-# Log likelihood calculation based on mean of the log values without the bias from the max value:
-LLpf<-function(output,obsProb,wArgs){
-  # Calculate the log likelihood of the census-specific states
-  stop("modify obsProb to return the obj fun elems")
-  stop("obsProb should not return the LL, nor have access to the Y observed matrix")
-  stop("rename obsProb to obs2true")
-  Ystar <- tryCatch(do.call(obsProb, wArgs),error = function(e) NA)
-  
-  # Note that: c(matrix(1:16,nrow = 4)) to convert between matrices and vectors
-  
-  Minkowski(Ystar,output$Y,wArgs$wDist,p=1)
-  
-  
-  
-  
-  
-  
-  
-  # Print in case of dodgy values
-  if(any(is.na(logw[,wArgs$time-1L]))) {
-    print("X=")
-    print(rowMeans(wArgs$X))
-    print(paste0("Y[t=",time,"]="))
-    print(wArgs$Y[,wArgs$time-1L])
-    print("ObsProbPar=")
-    print(wArgs$p)
-    saveRDS(list(obsProb=obsProb,wArgs=wArgs),"./ERROR.Rdata")
-  }
-  # Sometimes removing M makes -Inf values when we exp again, so we need to 
-  # reset them back to something that doesn't break the maths:
-  logw[logw<wArgs$cap] <- wArgs$cap
-  # Remove the max for numerical stability, and then get standardised weights:
-  if(max(logw,na.rm = T)!=min(logw,na.rm = T)){
-    M <- max(logw,na.rm = T)
-    #@@@@@@@@@ Get rid of residw by using piping options @@@@@@@
-    residw <- logw - M
-  } else {
-    M<-0
-    residw<-logw
-  }
-  output$sw[,wArgs$time-1L] <- exp(residw)
-  # Return me
-  output$LL<-output$LL + M + log(mean(output$sw[,wArgs$time-1L],na.rm = T))
-}
-# Actual Particle Filter function
+# IPM Particle Filter function
 particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
                            obsProbPar, NoParts, wDist, fixedObsProb=F, 
                            checks=F, returnW=F, l=T, cap=-300){
@@ -755,18 +712,19 @@ particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
   # Setup initial states
   prevStates <- do.call(mu, muPar)
   # Setup weight matrix and standardised weight matrix:
-  output <- list(LL=0, sw=matrix(NA, nrow=NoParts, ncol=(t-1L)))
+  output <- list(d=0, d_i=matrix(NA, nrow=NoParts, ncol=t))
   # Update weights for first time step:
   wArgs <- list(Y = Y, p=obsProbPar, NoParts=NoParts, wDist=wDist, logy = T, cap=cap)
   # Initial weights
   output$sw[,1L]<-1.
+  stop("Don't waste the first census: generate mu function for t = -1")
   
   for (time in 2:t){
     # Sample from the previous states:
     # Using importance resampling (weighted & with replacement)
-    stop("modify sw")
+    stop("modify d_i - use apply(d_i,1/2,mean or something)")
     particleIndices <- sample(1L:NoParts, NoParts, replace = T, 
-                              prob = (output$sw[, time - 1L]+1L-max(output$sw[, time - 1L])))
+                              prob = (output$d_i[, time - 1L]+1L-max(output$d_i[, time - 1L])))
     sampledStates <-  prevStates[, particleIndices]
     prevStates <- sampleState(sampledStates, sampleStatePar)
     stop("calculate the average objective function element over all particles")
@@ -777,11 +735,8 @@ particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
     #@@@@@@@@@ Get rid of this unnecessary creation and combination of matrices @@@@@@@
     wArgs$X<-prevStates; wArgs$time<-time
     stop("check that Y and X having different dimensions is taken into account")
-    # Update the LL:
+    # Convert to observed from latent space & calculate the objective function vector
     output <- obsProb(output,wArgs)
-    # Generate the summary statistics of the particles
-    output <- Minkowski(output)
-    
   }
   
   stop("modify all outputs to read each element of the list instead of a single value")
