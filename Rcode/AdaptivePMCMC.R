@@ -900,9 +900,6 @@ GenAccSamples<-function(delta, xNew, lTarg, lTargPars, cores, ResampleSIR, accR=
     lTargNew <- mclapply(X = 1:particles,
                          FUN = function(c) lTarg(xNew[c,], lTargPars),
                          mc.cores = cores)
-    stop("make sure lTargNew is the correct dimensionality for the distance calculation")
-    # Compute the Minkowski distance
-    d<-Minkowski(lTargNew,c(lTargPars$Y))
     # How many of these particles made it?
     indies<-d<delta
     # Modify which particles are sampled from at next iteration

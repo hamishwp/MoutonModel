@@ -58,11 +58,10 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 ###################################################################################
 
 # Short-term to do
-# - vectorisedStateSpace needs to condense everything into a matrix
-# - Redo Y to sort the array out
+# - 
+
+
 # - check that redoing Y doesn't mess up the initial mu function
-# - then need to modify obsFun to modify w.r.t latent space
-# - finish off changing Y and X input to obsFun
 # - Ensure obsFun is parallelised across all particles
 # - fixedObsProb & betaObsProb models
 # - check how parallelised obsProb deals with pobs: is it a vector of same length as the rest?

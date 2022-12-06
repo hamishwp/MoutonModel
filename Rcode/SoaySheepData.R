@@ -69,6 +69,42 @@ GetSoaySheep_binned <-function(SHEEP,shift=0.5,oneSex=T,nbks=10,regbinspace=F){
   SHEEP$priorProbs<-rowSums(SHEEP$COUNTS)/sum(SHEEP$COUNTS)
   SHEEP$obsProbTime <- apply(SHEEP$COUNTS, 2, sum)/SHEEP$detectedNum
   
+  # What form? array? We have size bins, variable and year, so 3D matrix?
+  
+  formData<-function(SHEEP, censy, censymin){
+    # Filter by census first
+    solveDF<-SHEEP$solveDF[SHEEP$solveDF$census.number==censy,]
+    D<-length(SHEEP$breaks)
+    # Initialise output array - dimension are c(size bins, validation variables)
+    output<-array(NA,dim = c(D-1,6))
+    # Fill it up!
+    # Sheep that survived from last census
+    output[,1]<-vectorToCounts(c(solveDF$size[solveDF$survived==1]), SHEEP$breaks)
+    # 
+    output[,2]<-vectorToCounts(c(solveDF$size), SHEEP$breaks)
+    output[,3]<-vectorToCounts(c(solveDF$size[solveDF$reproduced==1]), SHEEP$breaks)
+    output[,4]<-output[,1] - vectorToCounts(c(solveDF$prev.size[solveDF$survived==1]), 
+                               SHEEP$breaks)
+    # uniquers<-unique(solveDF$id)
+    # if(censy!=min(SHEEP$solveDF$census.number)) {
+    #   uniquers_old<-unique(SHEEP$solveDF$id[SHEEP$solveDF$census.number==censymin])
+    #   output[,5]<-length(uniquers[!uniquers%in%uniquers_old]) / sum(SHEEP$solveDF$off.born[SHEEP$solveDF$census.number==censymin])
+    # }
+    output[,5]<-rep(NA,D-1)
+    output[,6]<-vectorToCounts(c(solveDF$rec1.wt,solveDF$rec2.wt), SHEEP$breaks)
+
+    return(output)
+  }
+
+  cen<-c(-99,unique(SHEEP$solveDF$census.number))
+  SHEEP$SumStats<-sapply(2:length(cen),
+                         FUN = function(i) formData(SHEEP,cen[i],cen[i-1]),
+                         simplify = F) %>% unlist() %>%
+                         array(dim=c(D-1,6,length(cen)))
+
+  stop("Check Soay sheep census - e.g. does survived represent from previous census or to the next?")
+  stop("Modify output[,5] values")
+  
   return(SHEEP)
   
 }

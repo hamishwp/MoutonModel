@@ -472,14 +472,10 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
   newSizesI <- rep(rbinom(n=D, size=previousState, prob = survFunc(sizes, survPars)),x=sizes)  
   # If none survive, return empty set
   if (length(newSizesI)==0) return(
-    data.frame(
-      NoSurv=reppie,
-      NoAlive=reppie,
-      NoParents=reppie,
-      GrowCounts=reppie,
-      avSurvOff=c(0,Schild,rep(0,D-2L)),
-      NoOff=reppie
-    ))
+    array(c(reppie,reppie,reppie,reppie,reppie,c(0,Schild,rep(0,D-2L)),reppie),
+          dim = c(6,length(sizes)),
+          dimnames = list(round(sizes,digits = 2),
+                          c("NoSurv","NoAlive","NoParents","GrowCounts","avSurvOff","NoOff"))))
   # What would the growth of such a population be in one year?
   newSizes <- growthSamp(newSizesI, growthPars)
   # Bin these by breaks
@@ -492,18 +488,15 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
   reprCounts <- rbinom(D, newCounts, reprProbs)
   # Check if any births occurred
   if (sum(reprCounts)==0) {
-    outer<-data.frame(
-      NoSurv=newCounts,
-      NoAlive=newCounts,
-      NoParents=reprCounts,
-      GrowCounts=vectorToCounts(c(newSizesI),breaks)-newCounts,
-      avSurvOff=c(0,Schild,rep(0,D-2L)),
-      NoOff=reppie
-    )
-    # Note that this isn't the actual number of children per group, but the expected value
-    outer$NoBirths<-reppie
-    # return it!
-    return(outer)
+    return(array(c(newCounts,
+                   newCounts,
+                   reprCounts,
+                   newCounts-vectorToCounts(c(newSizesI),breaks),
+                   c(0,Schild,rep(0,D-2L)),
+                   reppie),
+          dim = c(6,length(sizes)),
+          dimnames = list(round(sizes,digits = 2),
+                          c("NoSurv","NoAlive","NoParents","GrowCounts","avSurvOff","NoOff"))))
   } else {
     # Modify the number of reproducing sheep to retain females only
     if(oneSex) {
@@ -523,20 +516,17 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
   }
   # Return the ABCSIR object with all the count data, for this year only. This will be combined with rbind later
   # Note that this data.frame has D rows (number of bins/breaks)
-  outer<-data.frame(
-    NoSurv=newCounts,
-    NoAlive=vectorToCounts(c(offSizes, newSizes), breaks),
-    NoParents=reprCounts,    
-    GrowCounts=vectorToCounts(c(newSizesI),breaks)-newCounts,
-    avSurvOff=c(sum(offCounts),bornCount,rep(0,D-2L)),
-    NoOff=vectorToCounts(c(offSizes),breaks)
-  )
-  
-  # stop("Explain length difference between previousState and all IPM vectors")
   # stop("Change reprFunc and weightedSelection in sampleSpaceIPM_red")
   # stop("Does this explain why simulated data comparisons never worked when true parameters were provided?")
-  
-  return(outer)
+  return(array(c(newCounts,
+                 vectorToCounts(c(offSizes, newSizes), breaks),
+                 reprCounts,
+                 newCounts-vectorToCounts(c(newSizesI),breaks),
+                 c(sum(offCounts),bornCount,rep(0,D-2L)),
+                 vectorToCounts(c(offSizes),breaks)),
+               dim = c(length(sizes),6),
+               dimnames = list(round(sizes,digits = 2),
+                               c("NoSurv","NoAlive","NoParents","GrowCounts","avSurvOff","NoOff"))))
 }
 
 ################################# UTILS ########################################
@@ -553,7 +543,10 @@ vectorisedSamplerIPM_ABCSIR <- function(initialStates, SamplerArgs){
   #           is the number of time steps we project forwards for.
   
   helper <- function(vec) do.call(sampleStateIPM_ABCSIR, c(list(vec), SamplerArgs))
-  return(apply(initialStates,2, helper))
+  
+  array(apply(initialStates,2, helper,simplify = T),
+        dim=c(length(SamplerArgs$sizes),6,ncol(initialStates)))
+  
 }
 
 vectorisedSamplerIPM <- function(initialStates, SamplerArgs){
@@ -651,25 +644,28 @@ makeFakeTrueSizeDist <- function(probs, sizes){
 # Minkowski distance function
 # Distances were taken from https://www.biorxiv.org/content/10.1101/2021.07.29.454327v1.full.pdf
 # Note that if p=1 we are using the L1 distances - our default
-Minkowski<-function(sest,sobs,p=1){
-  # Median of the particle filter samples
-  meds<-apply(sest,1,median)
+Minkowski<-function(sest,sobs,dimmie,p=1){
+  # Median of columns
+  meds<-apply(sest,1,median,na.rm=T)
   # Median Absolute Deviation (MAD) to the sample
-  MAD<-median(abs(sest[,i]-meds[i]))
+  MAD<-abs(sest-meds)
   # Median Absolute Deviation to the Observation (MADO)
-  MADO<-median(abs(sest[,i]-sobs[i]))
+  MADO<-abs(sest-sobs)
   # Don't punish the summary statistics that deviate more from obs data initially than others:
-  if(sum(MADO>2*MAD)/length(sobs)<1/3) PCMAD<-MAD+MADO else PCMAD<-MAD
-  stop("check that d_i below can be used to evaluate particle weight")
+  if(sum(MADO>2*MAD,na.rm = T)/length(sobs)<1/3) PCMAD<-MAD+MADO else PCMAD<-MAD
   # Calculate the Minkowski distance per summary statistic
-  d_i<-vapply(1:length(sobs),function(i) abs((sest[,i]-sobs[i])/PCMAD[i]),numeric(1))
+  d_i<--abs(sest-sobs)/PCMAD
+  # Find number of infinite and NaN values to artificially add to the LL:  
+  infies<-length(d_i[is.infinite(d_i) | is.na(d_i)])
+  infiesSW<-apply(d_i,2,function(dd) length(dd[is.infinite(dd) | is.na(dd)]))
   # output total distance
-  return(list(d_i=d_i,d=pracma::nthroot(sum(d_i^p),p)))
+  return(list(d_i=array(d_i,dim=dimmie), shat=meds,
+              d=pracma::nthroot(sum(d_i[!is.infinite(d_i)]^p,na.rm = T),p)*infies,
+              sw=apply(d_i,2,function(dd) pracma::nthroot(sum(dd[!is.infinite(dd)]^p,na.rm = T),p))*infiesSW))
 }
 # IPM Particle Filter function
 particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
-                           obsProbPar, NoParts, wDist, fixedObsProb=F, 
-                           checks=F, returnW=F, l=T, cap=-300){
+                           obsProbPar, NoParts, fixedObsProb=F, returnW=F){
   # purpose : Produces an estimate of the log likelihood of the model, given
   #           NoParts particles projected through the state space
   # inputs  : Y              - The matrix of observations. Columns are time
@@ -705,41 +701,33 @@ particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
   #                            cap=log(.Machine$double.xmin)
   # output  : A matrix or array with n rows, t columns and the third dimension
   #           equal to the dimension of the state space.
-  
   # In case of a single observation:
+  stop("Pass in SumStats instead of Y")
   Y %<>% as.matrix
   t <-  ncol(Y)
   # Setup initial states
   prevStates <- do.call(mu, muPar)
   # Setup weight matrix and standardised weight matrix:
-  output <- list(d=0, d_i=matrix(NA, nrow=NoParts, ncol=t))
+  output <- list(d=1, sw=rep(1.,NoParts),
+                 d_i=array(NA, dim=c(length(sizes),6,NoParts,t)), 
+                 shat=array(NA, dim=c(length(sizes),6,NoParts,t)))
   # Update weights for first time step:
-  wArgs <- list(Y = Y, p=obsProbPar, NoParts=NoParts, wDist=wDist, logy = T, cap=cap)
-  # Initial weights
-  output$sw[,1L]<-1.
+  wArgs <- list(Y=Y, pobs=obsProbPar, NoParts=NoParts)
   stop("Don't waste the first census: generate mu function for t = -1")
   
   for (time in 2:t){
-    # Sample from the previous states:
-    # Using importance resampling (weighted & with replacement)
-    stop("modify d_i - use apply(d_i,1/2,mean or something)")
+    wArgs$time<-time
+    # Importance resample from the previous states 
+    stop("Shouldn't we use the old SW values - iterative process?")
     particleIndices <- sample(1L:NoParts, NoParts, replace = T, 
-                              prob = (output$d_i[, time - 1L]+1L-max(output$d_i[, time - 1L])))
+                              prob = (output$sw)/min(output$sw))
     sampledStates <-  prevStates[, particleIndices]
-    prevStates <- sampleState(sampledStates, sampleStatePar)
-    stop("calculate the average objective function element over all particles")
-    stop("but find a way to know if there are infinite values present?")
-    stop("obsProb function should directly calculate avg obj fun elems? No?")
-    stop("don't store prevStates but only the avg obj fun elems (per census)")
-    # Evaluate the conditional likelihood of the data given the states:
-    #@@@@@@@@@ Get rid of this unnecessary creation and combination of matrices @@@@@@@
-    wArgs$X<-prevStates; wArgs$time<-time
-    stop("check that Y and X having different dimensions is taken into account")
+    # IPM push forward
+    wArgs$X <- sampleState(sampledStates, sampleStatePar)
     # Convert to observed from latent space & calculate the objective function vector
     output <- obsProb(output,wArgs)
   }
-  
-  stop("modify all outputs to read each element of the list instead of a single value")
+  output$sw<-NULL
   return(output)
   
 }
