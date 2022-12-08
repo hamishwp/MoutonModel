@@ -58,28 +58,24 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 ###################################################################################
 
 # Short-term to do
-# - 
-
-
-# - check that redoing Y doesn't mess up the initial mu function
-# - Ensure obsFun is parallelised across all particles
-# - fixedObsProb & betaObsProb models
-# - check how parallelised obsProb deals with pobs: is it a vector of same length as the rest?
-# - use the Minkowski distances instead of the particle filter stuff
-# - Must calculate the Minkowski distances at each year for the particle filtering
-# - Create the 3D matrix (variable, bin, particle) then adapt Minkowski function for it
-#   Actually, make it 2D (variable + bin, particle) - transform the variable and bin matrix into a vector for the Minkowski distance
-# - Make sure it outputs the objective elements as well as LL value
-# - Instead of modifying the entire Minkowski function at every ABCSIR step, modify only the weights
-#   then provide only the weights to the logTarget function (and thus also the PF function)
+# - parallelise properly obsFun when funcys is only one function
+# - check Sstar dimensionality is consistent across all possible models
+# - instead of mu initialisation for only total number of individuals,
+#   shouldn't we generate all summary statistics?
+# - check if sw is iteratively-additive/multiplicative
+# - check the output dimension order for output$d_i and output$shat
+# - code-up algorithm to evaluate number of SMC particles required
+# - sort outshell thing
+# - make it possible to choose between Minkowski or distribution-based obsFun
+# - median summary stats to be output to the ABCSMC algorithm
 # - what is NoParts doing in all the old obsProb models?
+# - is output$d_i even needed?
 
 
 # PLAN OF TO-DO
 # 1) modify logTarget function to output objective function, per ABC particle
 # 2) develop the perturbation function (fullcond algorithm)
 # 3) particle weight recalculation based on the objective function summary stats
-# 4) Pass distance function weights into logTarget, being changed in ABCSIR algorithm
 #   DONE!!!!
 
 

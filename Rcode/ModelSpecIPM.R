@@ -126,7 +126,7 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   
   # Extract function arguments:
   b <- logTargetPars$b
-  Y <- logTargetPars$Y
+  Sd <- logTargetPars$SumStats
   obsProb <- logTargetPars$obsProb %>% match.fun
   survFunc <- logTargetPars$survFunc
   growthSamp <- logTargetPars$growthSamp
@@ -159,22 +159,21 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   if(is.null(logTargetPars$sampleState)) logTargetPars$sampleState<-vectorisedSamplerIPM
   
   # Create the list of arguments required for the state space sampler:
-  stateSpaceSampArgs <- list(survFunc = survFunc, survPars = survPars,
-                             growthSamp = growthSamp, growthPars = growthPars,
-                             reprFunc = reprFunc, reprPars = reprPars, 
-                             offNumSamp = offNumSamp, offNumPars = offNumPars,
-                             offSizeSamp = offSizeSamp, breaks = breaks,
-                             offSizePars = offSizePars, Schild=Schild,
-                             sizes=sizes, oneSex = oneSex)
+  stateSpaceSampArgs <- list(survFunc = logTargetPars$survFunc, survPars = proposed$survPars,
+                             growthSamp = logTargetPars$growthSamp, growthPars = proposed$growthPars,
+                             reprFunc = logTargetPars$reprFunc, reprPars = proposed$reprPars, 
+                             offNumSamp = logTargetPars$offNumSamp, offNumPars = proposed$offNumPars,
+                             offSizeSamp = logTargetPars$offSizeSamp, breaks = logTargetPars$breaks,
+                             offSizePars = proposed$offSizePars, Schild=proposed$Schild,
+                             sizes=logTargetPars$sizes, oneSex = logTargetPars$oneSex)
   
   # Get an estimate of the log likelihood from the particle filter:
-  ll <- tryCatch(particleFilter(Y=Y, mu=mu, muPar=muPar, obsProb = obsProb,
+  ll <- tryCatch(particleFilter(Sd=Sd, mu=mu, muPar=muPar, obsProb = obsProb,
                        sampleState = logTargetPars$sampleState,
                        sampleStatePar = stateSpaceSampArgs,
                        obsProbPar = obsProbPar, 
-                       wDist = logTargetPars$wDist,
                        fixedObsProb=fixedObsProb,
-                       b = b, returnW = returnW), error= function(e) -Inf)
+                       NoParts = b, returnW = returnW), error= function(e) -Inf)
   if(is.infinite(ll)) warning("failure to calc LL for current parameter choice, adapt covariance matrix")
   
   if (returnW) return(ll)

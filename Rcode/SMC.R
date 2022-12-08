@@ -472,8 +472,8 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
   newSizesI <- rep(rbinom(n=D, size=previousState, prob = survFunc(sizes, survPars)),x=sizes)  
   # If none survive, return empty set
   if (length(newSizesI)==0) return(
-    array(c(reppie,reppie,reppie,reppie,reppie,c(0,Schild,rep(0,D-2L)),reppie),
-          dim = c(6,length(sizes)),
+    array(c(reppie,reppie,reppie,reppie,reppie),
+          dim = c(length(sizes),5),
           dimnames = list(round(sizes,digits = 2),
                           c("NoSurv","NoAlive","NoParents","GrowCounts","avSurvOff","NoOff"))))
   # What would the growth of such a population be in one year?
@@ -492,9 +492,8 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
                    newCounts,
                    reprCounts,
                    newCounts-vectorToCounts(c(newSizesI),breaks),
-                   c(0,Schild,rep(0,D-2L)),
                    reppie),
-          dim = c(6,length(sizes)),
+          dim = c(length(sizes),5),
           dimnames = list(round(sizes,digits = 2),
                           c("NoSurv","NoAlive","NoParents","GrowCounts","avSurvOff","NoOff"))))
   } else {
@@ -522,9 +521,8 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
                  vectorToCounts(c(offSizes, newSizes), breaks),
                  reprCounts,
                  newCounts-vectorToCounts(c(newSizesI),breaks),
-                 c(sum(offCounts),bornCount,rep(0,D-2L)),
                  vectorToCounts(c(offSizes),breaks)),
-               dim = c(length(sizes),6),
+               dim = c(length(sizes),5),
                dimnames = list(round(sizes,digits = 2),
                                c("NoSurv","NoAlive","NoParents","GrowCounts","avSurvOff","NoOff"))))
 }
@@ -659,17 +657,17 @@ Minkowski<-function(sest,sobs,dimmie,p=1){
   infies<-length(d_i[is.infinite(d_i) | is.na(d_i)])
   infiesSW<-apply(d_i,2,function(dd) length(dd[is.infinite(dd) | is.na(dd)]))
   # output total distance
-  return(list(d_i=array(d_i,dim=dimmie), shat=meds,
+  return(list(shat=meds,
               d=pracma::nthroot(sum(d_i[!is.infinite(d_i)]^p,na.rm = T),p)*infies,
               sw=apply(d_i,2,function(dd) pracma::nthroot(sum(dd[!is.infinite(dd)]^p,na.rm = T),p))*infiesSW))
 }
 # IPM Particle Filter function
-particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
-                           obsProbPar, NoParts, fixedObsProb=F, returnW=F){
+particleFilter <- function(Sd, mu, muPar, sampleState, sampleStatePar, obsProb,
+                           obsProbPar, NoParts, fixedObsProb=F){
   # purpose : Produces an estimate of the log likelihood of the model, given
   #           NoParts particles projected through the state space
-  # inputs  : Y              - The matrix of observations. Columns are time
-  #                            steps.
+  # inputs  : Sd             - Matrix of summary statistics of the observations.
+  #                            Columns are time steps.
   #           mu             - The function which produces a sample from the 
   #                            initial distribution of the state space.
   #                          - multinomial with probability for each size class detection
@@ -688,42 +686,31 @@ particleFilter <- function(Y, mu, muPar, sampleState, sampleStatePar, obsProb,
   #                          - binomial with observed probability p
   #           obsProbPars    - The parameters of the conditional likelihood of
   #                            the observations. Must be a list.
-  #           NoParts              - The number of particles to produce.
-  #           t              - The number of time steps to simulate each 
-  #                            particle for.
-  #           checks         - If TRUE, does some type checking on inputs.
-  #           returnW        - if TRUE, returns the weights instead of the 
-  #                            del Moral estimator of the likelihood
-  #           l              - If TRUE, returns the log lik
-  #           cap            - Any log likelihood smaller than cap for a
-  #                            single observation will be rounded up to cap,
-  #                            to help limit numerical errors
-  #                            cap=log(.Machine$double.xmin)
+  #           NoParts        - The number of particles to produce.
+  #           fixedObsProb   - Binary indicator of whether the observed probability 
+  #                            is taken directly from the data (TRUE) or 
+  #                            sampled from a beta distribution
   # output  : A matrix or array with n rows, t columns and the third dimension
   #           equal to the dimension of the state space.
   # In case of a single observation:
-  stop("Pass in SumStats instead of Y")
-  Y %<>% as.matrix
-  t <-  ncol(Y)
+  Sd %<>% as.matrix
+  t <- ncol(Sd)
   # Setup initial states
   prevStates <- do.call(mu, muPar)
   # Setup weight matrix and standardised weight matrix:
   output <- list(d=1, sw=rep(1.,NoParts),
-                 d_i=array(NA, dim=c(length(sizes),6,NoParts,t)), 
-                 shat=array(NA, dim=c(length(sizes),6,NoParts,t)))
+                 shat=array(NA, dim=c(length(sizes),5,t)))
   # Update weights for first time step:
-  wArgs <- list(Y=Y, pobs=obsProbPar, NoParts=NoParts)
-  stop("Don't waste the first census: generate mu function for t = -1")
+  wArgs <- list(Sd=Sd, pobs=obsProbPar, NoParts=NoParts)
   
-  for (time in 2:t){
+  for (time in 1:t){
     wArgs$time<-time
     # Importance resample from the previous states 
-    stop("Shouldn't we use the old SW values - iterative process?")
     particleIndices <- sample(1L:NoParts, NoParts, replace = T, 
-                              prob = (output$sw)/min(output$sw))
+                              prob = (output$sw)/min(output$sw,na.rm = T))
     sampledStates <-  prevStates[, particleIndices]
     # IPM push forward
-    wArgs$X <- sampleState(sampledStates, sampleStatePar)
+    wArgs$Sstar <- sampleState(sampledStates, sampleStatePar)
     # Convert to observed from latent space & calculate the objective function vector
     output <- obsProb(output,wArgs)
   }

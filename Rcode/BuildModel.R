@@ -6,8 +6,7 @@ IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- NULL; x0%<>%unlist(); lSHEEP$solveDF<
 #     NoSurv=function(true,sim,wArgs) {dpois(wArgs$pobs*sim+1L, lambda = true+1L,log = T)},
 #     NoAlive=function(true,sim,wArgs) {dpois(wArgs$pobs*sim+1L, lambda = true+1L,log = T)},
 #     NoParents=function(true,sim,wArgs) {dpois(wArgs$pobs*sim+1L, lambda = true+1L,log = T)},
-#     GrowCounts=function(true,sim,wArgs) {dpois(abs(wArgs$pobs*sim-true)+1L, lambda = 1,log = T)},
-#     avSurvOff=function(true,sim,wArgs) {rep(dbinom(sim[1],sim[2],prob = true[1]/true[2],log = T),D)},
+#     GrowCounts=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)},
 #     NoOff=function(true,sim,wArgs) {dpois(wArgs$pobs*sim+1L, lambda = true+1L,log = T)}
 #   )
 # } else if(obsModel=='binomial'){
@@ -15,47 +14,78 @@ IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- NULL; x0%<>%unlist(); lSHEEP$solveDF<
 #     NoSurv=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)},
 #     NoAlive=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)},
 #     NoParents=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)},
-#     GrowCounts=function(true,sim,wArgs) {dpois(abs(wArgs$pobs*sim-true)+1L, lambda = 1,log = T)},
-#     avSurvOff=function(true,sim,wArgs) {rep(dbinom(sim[1],sim[2],prob = true[1]/true[2],log = T),D)},
+#     GrowCounts=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)},,
 #     NoOff=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)}
 #   )
+# } else if(obsModel=='Minkowski'){
+# funcys<-list(
+#   NoSurv=function(sim,pobs) sim*pobs,
+#   NoAlive=function(sim,pobs) sim*pobs,
+#   NoParents=function(sim,pobs) sim*pobs,
+#   GrowCounts=function(sim,pobs) sim*pobs,
+#   NoOff=function(sim,pobs) sim*pobs
+# )
 # }
-funcys<-list(
-  NoSurv=function(sim,pobs) pobs*sim,
-  NoAlive=function(sim,pobs) pobs*sim,
-  NoParents=function(sim,pobs) pobs*sim,
-  GrowCounts=function(sim,pobs) pobs*sim,
-  avSurvOff=function(sim,pobs) sim,
-  NoOff=function(sim,pobs) pobs*sim
-)
-
-if(fixedObsProb){
-  # The observed probability is extracted directly from the data
-  obsfun<-function(output,wArgs){
-    # first modify the true population from the observed to the latent/true values
-    Sstar<-sapply(1:dim(wArgs$X)[3],function(j) sapply(1:ncol(wArgs$X),function(i) funcys[[i]](wArgs$X[,i,j],wArgs$pobs)))
-    # Calculate the distances
-    disties<-Minkowski(Sstar, c(wArgs$SumStats[,wArgs$time]),dimmie=dim(wArgs$X))
-    # Merge into a single output object
-    output$d<-disties$d*output$d; output$sw<-disties$sw
-    # Census-dependent dataframes
-    output$d_i[,time]<-disties$d_i; output$shat[,time]<-disties$shat
-    return(output)
+# I know that this is ugly to generate functions using so many conditions, but it saves on computation!
+if(is.null(funcys)){
+  if(fixedObsProb){
+    # The observed probability is extracted directly from the data
+    obsfun<-function(output,wArgs){
+      # first modify the true population from the observed to the latent/true values
+      Sstar<-apply(wArgs$Sstar*wArgs$pobs[wArgs$time],3,rbind)
+      # Calculate the distances
+      disties<-Minkowski(Sstar, c(wArgs$SumStats[,wArgs$time]),dimmie=dim(wArgs$Sstar))
+      # Merge into a single output object
+      output$d<-disties$d*output$d; output$sw<-disties$sw
+      # Census-dependent dataframe
+      output$shat[,,time]<-disties$shat
+      return(output)
+    }
+  } else {
+    # The observed probability is sampled, per particle, from a beta distribution
+    obsfun<-function(output,wArgs){
+      # Simulate the obsProbPar from the beta distribution here
+      pobs<-rbeta(dim(wArgs$Sstar)[3],wArgs$pobs[1],wArgs$pobs[2])
+      # first modify the true population from the observed to the latent/true values
+      Sstar<-apply(wArgs$Sstar*pobs,3,rbind)
+      # Calculate the distances
+      disties<-Minkowski(Sstar, c(wArgs$SumStats[,wArgs$time]),dimmie=dim(wArgs$Sstar))
+      # Merge into a single output object
+      output$d<-disties$d*output$d; output$sw<-disties$sw
+      # Census-dependent dataframe
+      output$shat[,,time]<-disties$shat
+      return(output)
+    }
   }
 } else {
-  # The observed probability is sampled, per particle, from a beta distribution
-  obsfun<-function(output,wArgs){
-    # Simulate the obsProbPar from the beta distribution here
-    pobs<-rbeta(dim(wArgs$X)[3],wArgs$pobs[1],wArgs$pobs[2])
-    # first modify the true population from the observed to the latent/true values
-    Sstar<-sapply(1:dim(wArgs$X)[3],function(j) sapply(1:ncol(wArgs$X),function(i) funcys[[i]](wArgs$X[,i,j],pobs[j])))
-    # Calculate the distances
-    disties<-Minkowski(Sstar, c(wArgs$SumStats[,wArgs$time]),dimmie=dim(wArgs$X))
-    # Merge into a single output object
-    output$d<-disties$d*output$d; output$sw<-disties$sw
-    # Census-dependent dataframes
-    output$d_i[,time]<-disties$d_i; output$shat[,time]<-disties$shat
-    return(output)
+  if(fixedObsProb){
+    # The observed probability is extracted directly from the data
+    obsfun<-function(output,wArgs){
+      # first modify the true population from the observed to the latent/true values
+      Sstar<-sapply(1:dim(wArgs$Sstar)[3],function(j) sapply(1:ncol(wArgs$Sstar),function(i) funcys[[i]](wArgs$Sstar[,i,j],wArgs$pobs[wArgs$time])))
+      # Calculate the distances
+      disties<-Minkowski(Sstar, c(wArgs$SumStats[,wArgs$time]),dimmie=dim(wArgs$Sstar))
+      # Merge into a single output object
+      output$d<-disties$d*output$d; output$sw<-disties$sw
+      # Census-dependent dataframe
+      output$shat[,,time]<-disties$shat
+      return(output)
+    }
+  } else {
+    # The observed probability is sampled, per particle, from a beta distribution
+    obsfun<-function(output,wArgs){
+      # Simulate the obsProbPar from the beta distribution here
+      pobs<-rbeta(dim(wArgs$Sstar)[3],wArgs$pobs[1],wArgs$pobs[2])
+      # first modify the true population from the observed to the latent/true values
+      Sstar<-sapply(1:dim(wArgs$Sstar)[3],function(j) sapply(1:ncol(wArgs$Sstar),function(i) funcys[[i]](wArgs$Sstar[,i,j],pobs[j])))
+      # Calculate the distances
+      disties<-Minkowski(Sstar, c(wArgs$SumStats[,wArgs$time]),dimmie=dim(wArgs$Sstar))
+      # Merge into a single output object
+      output$d<-disties$d*output$d; output$sw<-disties$sw
+      # Census-dependent dataframe
+      output$shat[,,time]<-disties$shat
+      return(output)
+    }
   }
 }
 # Particle filter initialisation parameters
@@ -75,6 +105,58 @@ if(fixedObsProb){
   obsProbTime<-lSHEEP$obsProbTime
   muPar$pobs<-obsProbTime[1]
 }
+
+
+
+
+
+
+
+
+
+##################### ESTIMATE REQUIRED SMC PARTICLES ########################
+# First check if this specific model has already been run
+if(file.exists()){SMC_parts<-readRDS(paste0("./Results/SMCPARTS__",namer,".RData"))
+} else {
+  # Run particleFilter with varying NoParts
+  # First prepare everything for sampling, including initial values
+  stateSpaceSampArgs <- list(survFunc = IPMLTP$survFunc, survPars = proposed$survPars,
+                             growthSamp = IPMLTP$growthSamp, growthPars = proposed$growthPars,
+                             reprFunc = IPMLTP$reprFunc, reprPars = proposed$reprPars, 
+                             offNumSamp = IPMLTP$offNumSamp, offNumPars = proposed$offNumPars,
+                             offSizeSamp = IPMLTP$offSizeSamp, breaks = IPMLTP$breaks,
+                             offSizePars = proposed$offSizePars, Schild=proposed$Schild,
+                             sizes=IPMLTP$sizes, oneSex = IPMLTP$oneSex)
+  proposed<-Sample2Physical(x0,IPMLTP)
+  
+  particleFilter(Sd=lSHEEP$COUNTS[,1], mu=mu, muPar=muPar, obsProb = obsfun,
+                 sampleState = vectorisedSamplerIPM_ABCSIR,
+                 sampleStatePar = stateSpaceSampArgs,
+                 obsProbPar = IPMLTP$obsProbPar, 
+                 fixedObsProb=fixedObsProb,
+                 NoParts = 100)
+  
+  stop("Make sure that obsProbPar respects fixedObsProb")
+  
+  saveRDS(SMC_parts,paste0("./Results/SMCPARTS__",namer,".RData"))
+}
+
+
+
+
+
+
+
+
+
+if(muModel=='multinomial'){
+  # Multinomial Mu initialisation function
+  muPar<-list(popSize=sum(lSHEEP$COUNTS[,1]), n=SMC_parts, probs=lSHEEP$priorProbs)
+} else if(muModel=='poisson'){
+  # Poisson Mu initialisation function
+  muPar<-list(popSize=lSHEEP$COUNTS[,1],n=SMC_parts)
+} else stop("Error in Mu Model input, we recommend muModel<-'poissonMu' ")
+
 ########################### SPECIFYING THE PRIORS ##############################
 
 priorName<-"uniform"
