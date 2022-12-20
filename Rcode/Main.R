@@ -58,8 +58,11 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 ###################################################################################
 
 # Short-term to do
+# - mu function to apply across all summary statistics
+# - code-up algorithm to evaluate number of mSMC particles required
+# - 
+
 # - parallelise properly obsFun when funcys is only one function
-# - check Sstar dimensionality is consistent across all possible models
 # - instead of mu initialisation for only total number of individuals,
 #   shouldn't we generate all summary statistics?
 # - check if sw is iteratively-additive/multiplicative
@@ -69,7 +72,6 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 # - make it possible to choose between Minkowski or distribution-based obsFun
 # - median summary stats to be output to the ABCSMC algorithm
 # - what is NoParts doing in all the old obsProb models?
-# - is output$d_i even needed?
 
 
 # PLAN OF TO-DO

@@ -179,7 +179,7 @@ growthLinear <- function(zPrime, z, par, L, U, lik=FALSE){
 returnConstant <- function(x, const) rep(x,const)
 
 # PoisNum<-function(x, const) rep(x,  (rpois(n=length(x), lambda = const-1L)+1L) )
-PoisNum<-function(x, const) (rpois(n=length(x), lambda = x*offNumPars-1)+1L)
+PoisNum<-function(x, const) (rpois(n=length(x), lambda = x*const-1)+1L)
 
 offSizeNLL <- function(par, L, U, DF){
   # purpose : Calculates the negative log likelihood of the exponential 

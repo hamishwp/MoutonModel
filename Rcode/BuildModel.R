@@ -1,5 +1,5 @@
 # Housekeeping
-IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- NULL; x0%<>%unlist(); lSHEEP$solveDF<-NULL
+IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- NULL; x0%<>%unlist(); lSHEEP$solveDF<-NULL; funcys<-NULL
 # Functions that map from estimated 'true' simulated values into the observed sim vals
 # if(obsModel=='poisson'){
 #   funcys<-list(
@@ -34,11 +34,13 @@ if(is.null(funcys)){
       # first modify the true population from the observed to the latent/true values
       Sstar<-apply(wArgs$Sstar*wArgs$pobs[wArgs$time],3,rbind)
       # Calculate the distances
-      disties<-Minkowski(Sstar, c(wArgs$SumStats[,wArgs$time]),dimmie=dim(wArgs$Sstar))
+      disties<-Minkowski(sest = Sstar,
+                         sobs = c(wArgs$Sd[,,wArgs$time]),
+                         dimmie=dim(wArgs$Sstar))
       # Merge into a single output object
       output$d<-disties$d*output$d; output$sw<-disties$sw
       # Census-dependent dataframe
-      output$shat[,,time]<-disties$shat
+      output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
       return(output)
     }
   } else {
@@ -49,11 +51,13 @@ if(is.null(funcys)){
       # first modify the true population from the observed to the latent/true values
       Sstar<-apply(wArgs$Sstar*pobs,3,rbind)
       # Calculate the distances
-      disties<-Minkowski(Sstar, c(wArgs$SumStats[,wArgs$time]),dimmie=dim(wArgs$Sstar))
+      disties<-Minkowski(sest = Sstar, 
+                         sobs = c(wArgs$Sd[,,wArgs$time]),
+                         dimmie=dim(wArgs$Sstar))
       # Merge into a single output object
       output$d<-disties$d*output$d; output$sw<-disties$sw
       # Census-dependent dataframe
-      output$shat[,,time]<-disties$shat
+      output$shat[,,wArgs$time]<-disties$shat
       return(output)
     }
   }
@@ -64,11 +68,13 @@ if(is.null(funcys)){
       # first modify the true population from the observed to the latent/true values
       Sstar<-sapply(1:dim(wArgs$Sstar)[3],function(j) sapply(1:ncol(wArgs$Sstar),function(i) funcys[[i]](wArgs$Sstar[,i,j],wArgs$pobs[wArgs$time])))
       # Calculate the distances
-      disties<-Minkowski(Sstar, c(wArgs$SumStats[,wArgs$time]),dimmie=dim(wArgs$Sstar))
+      disties<-Minkowski(sest = Sstar, 
+                         sobs = c(wArgs$Sd[,,wArgs$time]),
+                         dimmie=dim(wArgs$Sstar))
       # Merge into a single output object
       output$d<-disties$d*output$d; output$sw<-disties$sw
       # Census-dependent dataframe
-      output$shat[,,time]<-disties$shat
+      output$shat[,,wArgs$time]<-disties$shat
       return(output)
     }
   } else {
@@ -79,19 +85,23 @@ if(is.null(funcys)){
       # first modify the true population from the observed to the latent/true values
       Sstar<-sapply(1:dim(wArgs$Sstar)[3],function(j) sapply(1:ncol(wArgs$Sstar),function(i) funcys[[i]](wArgs$Sstar[,i,j],pobs[j])))
       # Calculate the distances
-      disties<-Minkowski(Sstar, c(wArgs$SumStats[,wArgs$time]),dimmie=dim(wArgs$Sstar))
+      disties<-Minkowski(sest = Sstar, 
+                         sobs = c(wArgs$Sd[,,wArgs$time]),
+                         dimmie=dim(wArgs$Sstar))
       # Merge into a single output object
       output$d<-disties$d*output$d; output$sw<-disties$sw
       # Census-dependent dataframe
-      output$shat[,,time]<-disties$shat
+      output$shat[,,wArgs$time]<-disties$shat
       return(output)
     }
   }
 }
+# Temporarily set the number of mSMC particles at 500:
+SMC_parts<-500
 # Particle filter initialisation parameters
 if(muModel=='multinomial'){
   # Multinomial Mu initialisation function
-  muPar<-list(popSize=sum(lSHEEP$COUNTS[,1]), n=SMC_parts, probs=lSHEEP$priorProbs)
+  muPar<-list(popSize=rowSums(lSHEEP$COUNTS[,1]), n=SMC_parts, probs=lSHEEP$priorProbs)
   if(fixedObsProb) mufun<-match.fun("multnomMu")
   else mufun<-match.fun("beta_mnMu")
 } else if(muModel=='poisson'){
@@ -102,17 +112,24 @@ if(muModel=='multinomial'){
 } else stop("Error in Mu Model input, we recommend muModel<-'poissonMu' ")
 # If we want to avoid parameterising the probability of being observed, we can extract it empirically straight from the data
 if(fixedObsProb){
-  obsProbTime<-lSHEEP$obsProbTime
-  muPar$pobs<-obsProbTime[1]
+  obsProbPar<-lSHEEP$obsProbTime
+  muPar$pobs<-obsProbPar[1]
+  IPMLTP %<>% c(list(obsProbPar = obsProbPar))
+} else {
+  obsProbPar <- proposed$obsProbPar
+  muPar$pobs<-obsProbPar
 }
-
-
-
-
-
-
-
-
+# For the integral component we need infinite bounds
+lSHEEP$breaks[c(1,nbks)]<-c(-Inf,Inf)
+# Add to the log target parameters
+IPMLTP %<>% c(list(oneSex = oneSex,
+                   mu = mufun, # mu = match.fun('multnomMu'), 
+                   Y = lSHEEP$COUNTS,
+                   SumStats=lSHEEP$SumStats,
+                   obsProb = obsfun, # obsProb = match.fun('detectionNumObs'), # obsProb = match.fun('poissonObs'),
+                   fixedObsProb=fixedObsProb,
+                   breaks = lSHEEP$breaks,
+                   sizes = lSHEEP$sizes))
 
 ##################### ESTIMATE REQUIRED SMC PARTICLES ########################
 # First check if this specific model has already been run
@@ -120,6 +137,7 @@ if(file.exists()){SMC_parts<-readRDS(paste0("./Results/SMCPARTS__",namer,".RData
 } else {
   # Run particleFilter with varying NoParts
   # First prepare everything for sampling, including initial values
+  proposed<-Sample2Physical(x0,IPMLTP)
   stateSpaceSampArgs <- list(survFunc = IPMLTP$survFunc, survPars = proposed$survPars,
                              growthSamp = IPMLTP$growthSamp, growthPars = proposed$growthPars,
                              reprFunc = IPMLTP$reprFunc, reprPars = proposed$reprPars, 
@@ -127,14 +145,22 @@ if(file.exists()){SMC_parts<-readRDS(paste0("./Results/SMCPARTS__",namer,".RData
                              offSizeSamp = IPMLTP$offSizeSamp, breaks = IPMLTP$breaks,
                              offSizePars = proposed$offSizePars, Schild=proposed$Schild,
                              sizes=IPMLTP$sizes, oneSex = IPMLTP$oneSex)
-  proposed<-Sample2Physical(x0,IPMLTP)
   
-  particleFilter(Sd=lSHEEP$COUNTS[,1], mu=mu, muPar=muPar, obsProb = obsfun,
-                 sampleState = vectorisedSamplerIPM_ABCSIR,
-                 sampleStatePar = stateSpaceSampArgs,
-                 obsProbPar = IPMLTP$obsProbPar, 
-                 fixedObsProb=fixedObsProb,
-                 NoParts = 100)
+  parties<-(1:20)*500
+  coster<-mclapply(parties,mc.cores=10,function(pp) {
+    muPar$n<-pp
+    sapply(1:50, function(i) {particleFilter(Sd=lSHEEP$SumStats, mu=mufun, muPar=muPar, obsProb = obsfun,
+                      sampleState = vectorisedSamplerIPM_ABCSIR,
+                      sampleStatePar = stateSpaceSampArgs,
+                      obsProbPar = obsProbPar, 
+                      fixedObsProb=fixedObsProb,
+                      NoParts = pp)$d})
+    })
+  
+  plot(parties,log(sapply(coster,sd)))
+  plot(parties,log(-sapply(coster,mean)))
+  
+  
   
   stop("Make sure that obsProbPar respects fixedObsProb")
   
@@ -201,8 +227,6 @@ if(!fixedObsProb) flatPriors%<>%
   ))
 
 #################### CREATE THE LOGTARGETPARAMETERS OBJECT #####################
-lSHEEP$breaks[c(1,nbks)]<-c(-Inf,Inf)
-
 # Storage object for the ABC-SIR algorithm
 stop("Sort this out!")
 outshell<-data.frame(matrix(nrow = 0,ncol = (1L+length(c(lSHEEP$COUNTS))+1L+length(x0))))
@@ -212,24 +236,14 @@ IPMLTP %<>% c(list(
   priorFunc = match.fun('evalPriors'),
   priors = priorsIPM,
   priorPars = flatPriors,
-  oneSex = oneSex,
-  mu = mufun, # mu = match.fun('multnomMu'), 
-  muPar = muPar, # muPar = list(popSize=sum(lSHEEP$COUNTS[,1]), n=SMC_parts, probs=priorProbs),
-  b = SMC_parts, 
-  Y = lSHEEP$COUNTS,
-  SumStats=lSHEEP$SumStats,
-  obsProb = obsfun, # obsProb = match.fun('detectionNumObs'), # obsProb = match.fun('poissonObs'),
-  fixedObsProb=fixedObsProb,
-  breaks = lSHEEP$breaks,
-  sizes = lSHEEP$sizes,
   outshell = outshell,
   cNames=lSHEEP$cNames,
   pNames=names(unlist(IPMLTP$skeleton)),
-  cores=ncores
+  cores=ncores,
+  DTN = data.frame(L=lSHEEP$L,U=lSHEEP$U),
+  muPar = muPar, 
+  b = SMC_parts
 ))
-if(fixedObsProb) IPMLTP %<>% c(list(obsProbPar = obsProbTime))
-#if(normsampler=="sampleDTN") IPMLTP %<>% c(list(DTN = c(lSHEEP$L,lSHEEP$U)))
-IPMLTP %<>% c(list(DTN = data.frame(L=lSHEEP$L,U=lSHEEP$U)))
 
 
 

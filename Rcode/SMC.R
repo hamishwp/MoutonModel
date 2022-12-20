@@ -475,7 +475,7 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
     array(c(reppie,reppie,reppie,reppie,reppie),
           dim = c(length(sizes),5),
           dimnames = list(round(sizes,digits = 2),
-                          c("NoSurv","NoAlive","NoParents","GrowCounts","avSurvOff","NoOff"))))
+                          c("NoSurv","NoAlive","NoParents","avSurvOff","NoOff"))))
   # What would the growth of such a population be in one year?
   newSizes <- growthSamp(newSizesI, growthPars)
   # Bin these by breaks
@@ -488,14 +488,14 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
   reprCounts <- rbinom(D, newCounts, reprProbs)
   # Check if any births occurred
   if (sum(reprCounts)==0) {
-    return(array(c(newCounts,
+    return(array(c(vectorToCounts(c(newSizesI),breaks),
                    newCounts,
                    reprCounts,
-                   newCounts-vectorToCounts(c(newSizesI),breaks),
+                   newCounts,
                    reppie),
           dim = c(length(sizes),5),
           dimnames = list(round(sizes,digits = 2),
-                          c("NoSurv","NoAlive","NoParents","GrowCounts","avSurvOff","NoOff"))))
+                          c("NoSurv","NoAlive","NoParents","avSurvOff","NoOff"))))
   } else {
     # Modify the number of reproducing sheep to retain females only
     if(oneSex) {
@@ -517,14 +517,14 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
   # Note that this data.frame has D rows (number of bins/breaks)
   # stop("Change reprFunc and weightedSelection in sampleSpaceIPM_red")
   # stop("Does this explain why simulated data comparisons never worked when true parameters were provided?")
-  return(array(c(newCounts,
+  return(array(c(vectorToCounts(c(newSizesI),breaks),
                  vectorToCounts(c(offSizes, newSizes), breaks),
                  reprCounts,
-                 newCounts-vectorToCounts(c(newSizesI),breaks),
+                 newCounts,
                  vectorToCounts(c(offSizes),breaks)),
                dim = c(length(sizes),5),
                dimnames = list(round(sizes,digits = 2),
-                               c("NoSurv","NoAlive","NoParents","GrowCounts","avSurvOff","NoOff"))))
+                               c("NoSurv","NoAlive","NoParents","avSurvOff","NoOff"))))
 }
 
 ################################# UTILS ########################################
@@ -543,7 +543,7 @@ vectorisedSamplerIPM_ABCSIR <- function(initialStates, SamplerArgs){
   helper <- function(vec) do.call(sampleStateIPM_ABCSIR, c(list(vec), SamplerArgs))
   
   array(apply(initialStates,2, helper,simplify = T),
-        dim=c(length(SamplerArgs$sizes),6,ncol(initialStates)))
+        dim=c(length(SamplerArgs$sizes),5,ncol(initialStates)))
   
 }
 
@@ -693,13 +693,12 @@ particleFilter <- function(Sd, mu, muPar, sampleState, sampleStatePar, obsProb,
   # output  : A matrix or array with n rows, t columns and the third dimension
   #           equal to the dimension of the state space.
   # In case of a single observation:
-  Sd %<>% as.matrix
   t <- ncol(Sd)
   # Setup initial states
   prevStates <- do.call(mu, muPar)
   # Setup weight matrix and standardised weight matrix:
   output <- list(d=1, sw=rep(1.,NoParts),
-                 shat=array(NA, dim=c(length(sizes),5,t)))
+                 shat=array(NA, dim=c(nrow(Sd),5,t)))
   # Update weights for first time step:
   wArgs <- list(Sd=Sd, pobs=obsProbPar, NoParts=NoParts)
   
