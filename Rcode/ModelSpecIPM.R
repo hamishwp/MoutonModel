@@ -41,6 +41,10 @@ evalPriors <-  function(vals, funcs, listOfPars, Log=T, checks=F){
   sapply(1:length(vals), h) %>% logfunc %>% sum %>% return
 }
 
+# For multiple logTarget functions, we need to combine them from a list into one value
+CombLogTargs<-function(lTarg)  list(d=vapply(seq_along(lTarg),function(i) lTarg[[i]]$d,1),
+       shat=sapply(seq_along(lTarg),function(i) lTarg[[i]]$shat))
+  
 logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F, 
                          returnW = F, printProp = F, returnLL = F){
   # purpose : Evaluates the log target distribution of the IPM state space model
@@ -116,44 +120,11 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   
   proposed%<>%Sample2Physical(logTargetPars)
   
-  # Extract the function parameters:
-  survPars <- proposed$survPars
-  growthPars <- proposed$growthPars
-  reprPars <- proposed$reprPars
-  offNumPars <- proposed$offNumPars
-  offSizePars <- proposed$offSizePars
-  Schild <- proposed$Schild
-  
-  # Extract function arguments:
-  b <- logTargetPars$b
-  Sd <- logTargetPars$SumStats
-  obsProb <- logTargetPars$obsProb %>% match.fun
-  survFunc <- logTargetPars$survFunc
-  growthSamp <- logTargetPars$growthSamp
-  reprFunc <- logTargetPars$reprFunc
-  offNumSamp <- logTargetPars$offNumSamp
-  oneSex <- logTargetPars$oneSex
-  if (is.null(oneSex)) oneSex=T
-  offSizeSamp <- logTargetPars$offSizeSamp
-  
-  # Extract prior arguments:
-  mu <- logTargetPars$mu
-  muPar <- logTargetPars$muPar
-  priorFunc <- logTargetPars$priorFunc %>% match.fun
-  priorPars <- logTargetPars$priorPars
-  breaks <- logTargetPars$breaks
-  funcs <- logTargetPars$priors
-  sizes <- logTargetPars$sizes
-  fixedObsProb <- logTargetPars$fixedObsProb
-  # breaks[c(1, D)] <- c(-Inf, Inf)
-  
-  stop("WHY THE FUCK DO YOU NEED TO UNLIST ALL THIS SHIT")
-  
-  if(fixedObsProb) {
+  if(logTargetPars$fixedObsProb) {
     obsProbPar <- logTargetPars$obsProbPar
   } else {
     obsProbPar <- proposed$obsProbPar
-    muPar$pobs<-obsProbPar
+    logTargetPars$muPar$pobs<-obsProbPar
   }
   
   if(is.null(logTargetPars$sampleState)) logTargetPars$sampleState<-vectorisedSamplerIPM
@@ -168,21 +139,22 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
                              sizes=logTargetPars$sizes, oneSex = logTargetPars$oneSex)
   
   # Get an estimate of the log likelihood from the particle filter:
-  ll <- tryCatch(particleFilter(Sd=Sd, mu=mu, muPar=muPar, obsProb = obsProb,
+  ll <- particleFilter(Sd=logTargetPars$SumStats, mu=logTargetPars$mu, 
+                       muPar=logTargetPars$muPar, obsProb = logTargetPars$obsProb,
                        sampleState = logTargetPars$sampleState,
                        sampleStatePar = stateSpaceSampArgs,
                        obsProbPar = obsProbPar, 
-                       fixedObsProb=fixedObsProb,
-                       NoParts = b, returnW = returnW), error= function(e) -Inf)
-  if(is.infinite(ll)) warning("failure to calc LL for current parameter choice, adapt covariance matrix")
+                       fixedObsProb=logTargetPars$fixedObsProb,
+                       NoParts = logTargetPars$b)#, error= function(e) -Inf)
+  # if(is.infinite(ll)) warning("failure to calc LL for current parameter choice, adapt covariance matrix")
   
   if (returnW) return(ll)
   
   else{
     if (returnLL) return(ll)
     else # Get the evaluation of the priors:
-      (ll + priorFunc(vectorPars, funcs, priorPars)) %>%
-      `*`(multiplier) %>% return
+      ll$d <- multiplier*(ll$d + logTargetPars$priorFunc(vectorPars, logTargetPars$priors, logTargetPars$priorPars))
+      return(ll)
   }
 }
 

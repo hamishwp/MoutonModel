@@ -638,6 +638,9 @@ makeFakeTrueSizeDist <- function(probs, sizes){
   for (i in 1:length(sizes)) output[,i] <- rmultinom(1, sizes[i], probs)
   return(output)
 }
+# Min-max scaling for the particle filter sample function
+minmaxScale<-function(sw) (sw-min(sw,na.rm = T))/(max(sw,na.rm = T)-min(sw,na.rm = T))
+eminmaxScale<-function(sw) exp((sw-min(sw,na.rm = T))/(max(sw,na.rm = T)-min(sw,na.rm = T)))/exp(1)
 ################### PARTICLE FILTER AND PMCMC IMPLEMENTATION ###################
 # Minkowski distance function
 # Distances were taken from https://www.biorxiv.org/content/10.1101/2021.07.29.454327v1.full.pdf
@@ -654,12 +657,12 @@ Minkowski<-function(sest,sobs,dimmie,p=1){
   # Calculate the Minkowski distance per summary statistic
   d_i<--abs(sest-sobs)/PCMAD
   # Find number of infinite and NaN values to artificially add to the LL:  
-  infies<-length(d_i[is.infinite(d_i) | is.na(d_i)])
-  infiesSW<-apply(d_i,2,function(dd) length(dd[is.infinite(dd) | is.na(dd)]))
+  infies<-length(d_i[is.infinite(d_i) | is.na(d_i)])/dimmie[3]
+  infiesSW<-apply(d_i,2,function(dd) length(dd[is.infinite(dd) | is.na(dd)]))/dimmie[3]
   # output total distance
   return(list(shat=meds,
-              d=pracma::nthroot(sum(d_i[!is.infinite(d_i)]^p,na.rm = T),p)*infies,
-              sw=apply(d_i,2,function(dd) pracma::nthroot(sum(dd[!is.infinite(dd)]^p,na.rm = T),p))*infiesSW))
+              d=pracma::nthroot(mean(d_i[!is.infinite(d_i)]^p,na.rm = T),p)*infies,
+              sw=eminmaxScale(apply(d_i,2,function(dd) pracma::nthroot(mean(dd[!is.infinite(dd)]^p,na.rm = T),p))*infiesSW)))
 }
 # IPM Particle Filter function
 particleFilter <- function(Sd, mu, muPar, sampleState, sampleStatePar, obsProb,
@@ -693,11 +696,11 @@ particleFilter <- function(Sd, mu, muPar, sampleState, sampleStatePar, obsProb,
   # output  : A matrix or array with n rows, t columns and the third dimension
   #           equal to the dimension of the state space.
   # In case of a single observation:
-  t <- ncol(Sd)
+  t <- dim(Sd)[3]
   # Setup initial states
   prevStates <- do.call(mu, muPar)
   # Setup weight matrix and standardised weight matrix:
-  output <- list(d=1, sw=rep(1.,NoParts),
+  output <- list(d=1, sw=rep(1,NoParts),
                  shat=array(NA, dim=c(nrow(Sd),5,t)))
   # Update weights for first time step:
   wArgs <- list(Sd=Sd, pobs=obsProbPar, NoParts=NoParts)
@@ -706,7 +709,7 @@ particleFilter <- function(Sd, mu, muPar, sampleState, sampleStatePar, obsProb,
     wArgs$time<-time
     # Importance resample from the previous states 
     particleIndices <- sample(1L:NoParts, NoParts, replace = T, 
-                              prob = (output$sw)/min(output$sw,na.rm = T))
+                              prob = output$sw)
     sampledStates <-  prevStates[, particleIndices]
     # IPM push forward
     wArgs$Sstar <- sampleState(sampledStates, sampleStatePar)

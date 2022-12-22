@@ -57,7 +57,7 @@ if(is.null(funcys)){
       # Merge into a single output object
       output$d<-disties$d*output$d; output$sw<-disties$sw
       # Census-dependent dataframe
-      output$shat[,,wArgs$time]<-disties$shat
+      output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
       return(output)
     }
   }
@@ -74,7 +74,7 @@ if(is.null(funcys)){
       # Merge into a single output object
       output$d<-disties$d*output$d; output$sw<-disties$sw
       # Census-dependent dataframe
-      output$shat[,,wArgs$time]<-disties$shat
+      output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
       return(output)
     }
   } else {
@@ -91,7 +91,7 @@ if(is.null(funcys)){
       # Merge into a single output object
       output$d<-disties$d*output$d; output$sw<-disties$sw
       # Census-dependent dataframe
-      output$shat[,,wArgs$time]<-disties$shat
+      output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
       return(output)
     }
   }
@@ -133,8 +133,9 @@ IPMLTP %<>% c(list(oneSex = oneSex,
 
 ##################### ESTIMATE REQUIRED SMC PARTICLES ########################
 # First check if this specific model has already been run
-if(file.exists()){SMC_parts<-readRDS(paste0("./Results/SMCPARTS__",namer,".RData"))
+if(!calcParts & file.exists(paste0(directory,"Results/SMCPARTS_calc.RData"))){SMC_parts<-readRDS(paste0(directory,"Results/SMCPARTS_calc.RData"))$SMC_parts
 } else {
+  print("Recalculating the number of particles required in the particle filter of the model, this will take some time...")
   # Run particleFilter with varying NoParts
   # First prepare everything for sampling, including initial values
   proposed<-Sample2Physical(x0,IPMLTP)
@@ -146,35 +147,50 @@ if(file.exists()){SMC_parts<-readRDS(paste0("./Results/SMCPARTS__",namer,".RData
                              offSizePars = proposed$offSizePars, Schild=proposed$Schild,
                              sizes=IPMLTP$sizes, oneSex = IPMLTP$oneSex)
   
-  parties<-(1:20)*500
-  coster<-mclapply(parties,mc.cores=10,function(pp) {
+  # Now we calculate the standard deviation of the samples, when using specific numbers of particles - NoParts
+  tmp<-c(unlist(mclapply(1:2000, function(i) {particleFilter(Sd=lSHEEP$SumStats, mu=mufun, muPar=muPar, obsProb = obsfun,
+                                                    sampleState = vectorisedSamplerIPM_ABCSIR,
+                                                    sampleStatePar = stateSpaceSampArgs,
+                                                    obsProbPar = obsProbPar, 
+                                                    fixedObsProb=fixedObsProb,
+                                                    NoParts = 500)$d},mc.cores = ncores)))
+  # We can see how many samples we need to achieve a stable standard deviation by plotting the cumulative SD (around 1800)
+  plot(vapply(seq_along(tmp), function(i) sd(tmp[1:i]), 1),xlab = "Number of Samples",ylab = "Cumulative S.D.",main = "How many samples required for S.D. ~ 600")
+  numsam<-2000
+  
+  parties<-(1:30)*500
+  coster<-sapply(parties,function(pp) {
     muPar$n<-pp
-    sapply(1:50, function(i) {particleFilter(Sd=lSHEEP$SumStats, mu=mufun, muPar=muPar, obsProb = obsfun,
+    c(unlist(mclapply(1:numsam, function(i) {particleFilter(Sd=lSHEEP$SumStats, mu=mufun, muPar=muPar, obsProb = obsfun,
                       sampleState = vectorisedSamplerIPM_ABCSIR,
                       sampleStatePar = stateSpaceSampArgs,
                       obsProbPar = obsProbPar, 
                       fixedObsProb=fixedObsProb,
-                      NoParts = pp)$d})
+                      NoParts = pp)$d},mc.cores=ncores)))
     })
+  # Calculate the running (k=3) standard deviation of the distance by number of particles
+  runSD<-data.frame(parties=parties[3:length(parties)],runSD=vapply(3:length(parties), function(i) sd(log(-apply(coster,2,mean))[(i-3):i]), 1))
+  # To find the ideal number of particles, fit various linear models trained with 
+  # the data using sequentially less of the lower no. particle values
+  # and predict when the gradient of the linear model equals zero.
+  # Note that this method most likely over-estimates the required number of particles.
+  tmp<-data.frame(parties=parties[1:(nrow(runSD)-1)],grad=vapply(1:(nrow(runSD)-1),function(i) (lm(runSD~parties,runSD[i:nrow(runSD),]))$coefficients[2],1))
+  # Predict the required number of mSMC particles!
+  SMC_parts<-round(unname(predict(lm(parties~poly(grad,4),tmp),newdata = data.frame(grad=c(0)))))
+
+  p<-runSD%>%ggplot(aes(parties,runSD))+geom_point()+geom_vline(xintercept = SMC_parts)+
+    xlab("Number of Particles in mSMC")+ylab("Running S.D (k=3)")+
+    ggtitle("Convergence in No. Particles by S.D")+theme(plot.title = element_text(hjust = 0.5))
+  q<-data.frame(meany=apply(coster,2,mean),parties=parties)%>%ggplot(aes(parties,meany))+geom_point()+geom_vline(xintercept = SMC_parts)+
+    xlab("Number of Particles in mSMC")+ylab("Average Distance")+
+    ggtitle("Convergence in No. Particles w.r.t Distance")+theme(plot.title = element_text(hjust = 0.5))
+  ggsave(filename = paste0(directory,"Plots/Hamish/Convergence/NoPart_mSMC.png"),
+         gridExtra::grid.arrange(q,p,nrow=1),width = 10,height = 4); gridExtra::grid.arrange(q,p,nrow=1)
   
-  plot(parties,log(sapply(coster,sd)))
-  plot(parties,log(-sapply(coster,mean)))
-  
-  
-  
-  stop("Make sure that obsProbPar respects fixedObsProb")
-  
-  saveRDS(SMC_parts,paste0("./Results/SMCPARTS__",namer,".RData"))
+  saveRDS(list(SMC_parts=SMC_parts,parties=parties,coster=coster,runSD=runSD),paste0(directory,"Results/SMCPARTS_calc.RData"))
 }
 
-
-
-
-
-
-
-
-
+# Particle initialisation of the population size distributions
 if(muModel=='multinomial'){
   # Multinomial Mu initialisation function
   muPar<-list(popSize=sum(lSHEEP$COUNTS[,1]), n=SMC_parts, probs=lSHEEP$priorProbs)
@@ -182,7 +198,12 @@ if(muModel=='multinomial'){
   # Poisson Mu initialisation function
   muPar<-list(popSize=lSHEEP$COUNTS[,1],n=SMC_parts)
 } else stop("Error in Mu Model input, we recommend muModel<-'poissonMu' ")
-
+# Make sure to add the observation probability parameters
+if(fixedObsProb){
+  muPar$pobs<-obsProbPar[1]
+} else {
+  muPar$pobs<-obsProbPar
+}
 ########################### SPECIFYING THE PRIORS ##############################
 
 priorName<-"uniform"
@@ -228,17 +249,12 @@ if(!fixedObsProb) flatPriors%<>%
 
 #################### CREATE THE LOGTARGETPARAMETERS OBJECT #####################
 # Storage object for the ABC-SIR algorithm
-stop("Sort this out!")
-outshell<-data.frame(matrix(nrow = 0,ncol = (1L+length(c(lSHEEP$COUNTS))+1L+length(x0))))
-names(outshell)<-c("d",lSHEEP$cNames,"Accepted",names(unlist(IPMLTP$skeleton)))
+# stop("Sort this out!")
 
 IPMLTP %<>% c(list(
   priorFunc = match.fun('evalPriors'),
   priors = priorsIPM,
   priorPars = flatPriors,
-  outshell = outshell,
-  cNames=lSHEEP$cNames,
-  pNames=names(unlist(IPMLTP$skeleton)),
   cores=ncores,
   DTN = data.frame(L=lSHEEP$L,U=lSHEEP$U),
   muPar = muPar, 

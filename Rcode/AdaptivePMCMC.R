@@ -845,7 +845,7 @@ Supremum<-function(c_old,xNew,xPrev){
   # Compute the ratio for the range of prediction values
   w_hat <- densratio_obj$compute_density_ratio(x_quants)
   # Return the updated supremum*, as a vector that includes the older values
-  return(c((max(w_hat)+sum(c_old))/sum(c_old)),c_old)
+  return(c(((max(w_hat)+sum(c_old))/sum(c_old)),c_old))
 }
 
 # fuck knows what this is... perturbation matrix covariance? just use the global one (fullcond not fullcondopt)
@@ -859,25 +859,6 @@ weightedStats<-function(ss,xProp,weights){
   
 }
 
-# https://arxiv.org/abs/2206.12235
-# We will try using the algorithm 'fullcond', equations 9 & 10. 
-PerturbX<-function(indies, output, weights){
-  # Calculate the means and SDs of parameters and summary statistics at t-1
-  SStats<-weightedStats(output$s[indies,],output$x[indies,],weights[indies,])
-  # Calculate the mean function, per index with same length as xNew, based on xPrev
-  # (use vapply)
-  
-  # Calculate covariance matrix from global standard deviation values, must have same length as xNew, based on xPrev
-  # (use vapply)
-  
-  stop("check that length of adjM,adjCov is same as sum(indies)")
-  # Then sample from the rnorm
-  rnorm(sum(indies),adjM, adjCov)
-  
-  stop("output a function from this routine - ResampleSIR, not numerics")
-  
-}
-
 # Calculate the weights of the importance resampling distribution
 # https://arxiv.org/abs/2206.12235
 calcW<-function(){
@@ -885,28 +866,125 @@ calcW<-function(){
   
 }
 
+# https://arxiv.org/abs/2206.12235
+# We will try using the algorithm 'fullcond', equations 9 & 10. 
+
+# NOOOOOOOOOOOOOOOO! Use this one instead due to covariance matrix non-positive definiteness:
+# Generator Parameter Calibration by Adaptive Approximate Bayesian Computation with Sequential Monte Carlo Sampler
+# Seyyed Rashid Khazeiynasab Student Member, IEEE and Junjian Qi, Senior Member, IEEE, 2021
+# DOI:     10.1109/TSG.2021.3077734
+
+defFsamp<-function(output,SumStats,weights=NULL){
+  # If no weights are provided for the samples:
+  if(is.null(weights)) weights<-rep(1,ncol(output$shat))
+  # Combine (theta,s) into a vector
+  xxx<-cbind(output$theta,t(output$shat))
+  OLS<-apply(output$shat,2,function(x) abs(x-c(SumStats)))%>%t()
+  # Find the variance of each parameter on the summary statistics to see what most influences posterior
+  standies<-sapply(seq_along(output$theta[1,]),function(i) {
+    sapply(seq_along(OLS[1,]),function(j) abs(cor(output$theta[,i],OLS[,j])))
+  })
+  ParamVar<-apply(standies,2,median,na.rm=T)
+  # Then also calculate the weight of the different summary statistics in terms of contribution to the posterior
+  SSweight<-apply(standies,1,median,na.rm=T)
+  
+  
+  
+  
+  # Recalculate the distances:
+  distie<-Minkowski(output$shat,SumStats,rep(ncol(output$shat),3),p=1)
+  # Reduce the objective function vector to remove values that didn't change
+  sy<-Rfast::rowmeans(output$shat)
+  # Checks to ensure covariance matrix is positive-definite:
+  # Need to ensure that any permanently zero summary stats are removed for collinearity
+  inds<-apply(output$shat,1,sd)!=0 & sy!=0
+  # Now create a non-parametric kernel density estimate with the parameter space
+  cory<-apply(OLS[,inds],2,function(x) cor(x,distie$sw))
+  # Set the weights for the summary statistics 
+  SSweight<-rep(0,length(inds))
+  SSweight[inds]<-minmaxScale(cory)
+  
+  
+  
+  
+  
+  
+  
+  
+  # DF<-output$shat%>%t()%>%as.data.frame.array()
+  # namers<-paste0("V",1:ncol(DF))
+  # colnames(DF)<-namers
+  # tmp<-mclapply(seq_along(DF),function(i) {
+  #   formy<-paste0(namers[i],"~",paste(namers[-i],collapse = "+"))
+  #   return(mean(abs(lm(formy,DF)$residuals)))
+  # },mc.cores = ncores)%>%unlist()%>%c()
+  # 
+  # 
+  # 
+  # # Average summary statistic per objective function element
+  # sy<-Rfast::rowmeans(output$shat)
+  # # Checks to ensure covariance matrix is positive-definite:
+  # # Need to ensure that any permanently zero summary stats are removed for collinearity
+  # inds<-apply(output$shat,1,sd)!=0 & sy!=0 & log(tmp)> -10
+  # # Prevent zeros from impacting calculation of inverse of covariance matrix
+  # output$shat<-output$shat[inds,]; sy<-sy[inds]
+  # # Make sure all variables with perfect collinearity are removed
+  # cory<-cov.wt(t(output$shat),weights,cor = T)$cor;
+  # # Remove for multicollinearity
+  # inds<-!(1:nrow(cory)%in%caret::findCorrelation(cory, cutoff=0.99))
+  # output$shat<-output$shat[inds,]; sy<-sy[inds]
+  # # Generate full matrix of (theta,s)
+  # xxx<-cbind(output$theta,t(output$shat))
+  # # Calculate full (theta,s) covariance matrices
+  # COVhat<-cov.wt(xxx,weights)
+  # # Take the mean from the weighted covariance calculation to save time
+  # Mhat<-COVhat$center; COVhat<-COVhat$cov
+  # # Store length of theta vector
+  # lennie<-ncol(output$theta); lsy<-length(sy)
+  # # This should be vectorised, but it actually won't take long compared to the particle filter
+  # Maddy<-rep(NA,lennie)
+  # Mmulty<-SigStar<-array(NA,c(lennie,lsy+lennie-1))
+  # for(k in 1:lennie){
+  #   Mmulty[k,]<-c(COVhat[k,-k]%*%chol2inv(COVhat[-k,-k]))
+  #   Maddy[k]<-Mhat[k] - c(Mmulty[k,]%*%Mhat[-k])
+  #   SigStar[k]<-sqrt(COVhat[k,k] - c(Mmulty[k,]%*%COVhat[-k,k]))
+  # }
+  # # Then sample from the rnorm
+  # ResampleSIR<-function(NN) {
+  #   # First sample particles based on the distance function
+  #   theta<-output$theta[sample(seq_along(output$theta),NN,T,prob = output$distance),]
+  #   # Then perturb the particles based on the location in parameter-summary statistic space
+  #   Mstar<-Maddy+Multy%*%rbind(t(theta[,-k]), array(rep(sy,NN),c(lsy,NN)))
+  #   # Return samples from parameter space
+  #   array(rnorm(NN*lennie, Mstar, sigStar),dim=c(NN,lennie))
+  # }
+  
+  stop("insert sy not s_sample into mean equation")
+  
+  return(ResampleSIR)
+}
+
+
+
 # Generate Np accepted particles (sets of model-parameters)
 # given the ABC-threshold (delta), target & resample functions and initial values
-GenAccSamples<-function(delta, xNew, lTarg, lTargPars, cores, ResampleSIR, accR=1){
+GenAccSamples<-function(output, xNew, lTarg, lTargPars, ResampleSIR, accR=1){
   # How many particles do we want?
   Np<-particles<-nrow(xNew); Complete<-rep(F,Np)
-  # Output storage vector of objective function elements - summary statistics of prediction errors
-  output<-lTargPars$outshell
   # Sample from parameter space until we have Np accepted particles
   while (particles>0){
     # Sample the particles (note that the weightings are dynamically defined along with the function)
-    xNew<-ResampleSIR(!Complete)
+    xNew<-ResampleSIR(sum(!Complete))
     # Sample from the target distribution
     lTargNew <- mclapply(X = 1:particles,
                          FUN = function(c) lTarg(xNew[c,], lTargPars),
-                         mc.cores = cores)
-    # How many of these particles made it?
-    indies<-d<delta
+                         mc.cores = lTargPars$cores) %>% CombLogTargs()
     # Modify which particles are sampled from at next iteration
-    Complete[!Complete]<-indies
+    Complete[!Complete]<-lTargNew$d>output$delta
     # Save both accepted & rejected values
-    stop("replace lTargNew with sbar here:") # summary statistics averaged across number of samples per parameter space value
-    output%<>%rbind(cbind(d,lTargNew,indies,xNew))
+    output$distance%<>%rbind(lTargNew$d)
+    output$theta%<>%abind(xNew)
+    output$shat%<>%abind(lTargNew$shat)
     # Adjust the number of particles required for the next iteration
     particles<-sum(!Complete)
     # print out
@@ -915,51 +993,73 @@ GenAccSamples<-function(delta, xNew, lTarg, lTargPars, cores, ResampleSIR, accR=
   return(output)
 }
 
-# InitABCSIR<-function(particles=1000,xPrev,propCOV,cores,lTarg,lTargPars,delta0){
+# Initialise the first round of the ABCSMC algorithm
 InitABCSIR<-function(lTarg, lTargPars, initSIR){
+  # Total number of parameter-space particles to run through particle filter
+  Ninit<-initSIR$Np*initSIR$k
   # Generate the particles
-  xNew<-multvarNormProp(xt=initSIR$xPrev, propPars=initSIR$propCOV, n=initSIR$N_init)
+  xNew<-multvarNormProp(xt=initSIR$x0, propPars=initSIR$propCOV, n=Ninit)
   # Sample from the target distribution
-  lTargNew <- mclapply(X = 1:initSIR$N_init,
+  lTargNew <- mclapply(X = 1:Ninit,
                        FUN = function(c) lTarg(xNew[c,], lTargPars),
-                       mc.cores = lTargPars$cores)
-  # Compute the Minkowski L1 distance
-  d<-Minkowski(lTargNew,c(lTargPars$Y))
+                       mc.cores = lTargPars$cores) %>% CombLogTargs()
   # Calculate the initial ABC-threshold required for the ABCSIR algorithm
-  delta0<-d[order(d)[initSIR$Np]]
+  delta0<-lTargNew$d[order(lTargNew$d,decreasing = T)[initSIR$Np]]
   # Output both accepted & rejected values
-  list(output=rbind(lTargPars$outshell,cbind(d,lTargNew,d<delta0,xNew)),delta0=delta0)
+  outy<-list(distance=lTargNew$d,
+             theta=xNew,
+             shat=lTargNew$shat,
+             delta=delta0)
+  
+  return(outy)
 }
 
-ABCSIR<-function(propCOV, lTarg, lTargPars, x0, itermax=10000, particles=1000, cores=detectCores(),
-              Params=list(delta0=10, # initial ABC rejection value
-                          psi=5, # percentile to decrease delta by
-                          deltaN=NULL, # final delta value to quit simulation
-                          defperc=0.95) # if percentile delta > previous_delta, use defperc*previous_delta
+ABCSIR<-function(initSIR, lTarg, lTargPars,
+                 Params=list(psi=5, # percentile to decrease delta by
+                             deltaN=NULL, # final delta value to quit simulation
+                             defperc=0.95) # if percentile delta > previous_delta, use defperc*previous_delta
                  ){
   # Initialisations of storage variables and algorithm parameters
-  xPrev<-x0; indy<-1:length(xPrev); it<-1; c_thresh<-0.95; weights<-rep(1/particles,particles)
+  xPrev<-initSIR$x0; indy<-1:length(xPrev); it<-1; c_thresh<-0.95; weights<-rep(1/initSIR$Np,initSIR$Np)
+  stop("Make sure that weights reflect that we can over-sample particles in GenAccSamples function")
   # Find theta*(t=1) delta(t=1) -> the ABC-rejection value
-  Inits<-InitABCSMC(Target, TargetPars, initSIR)
+  Inits<-InitABCSIR(lTarg, lTargPars, initSIR)
   # Setup shop for the full algorithm
-  output<-Inits$output; delta<-Inits$delta0; rm(Inits)
+  output<-Inits
   # Run the algorithm!
-  while(!(1/c_thresh[it] > 0.99 & it>3)){
+  while(!(1/c_thresh[it] > 0.99 & it>3) | nrow(output)>initSIR$itermax){
+    
+    
+    stop("Make sure that output$x values only contain those that passed ABC threshold")
     # Dynamically define the resample & perturb function of new parameter sets
-    ResampleSIR<-defFsamp(inputerzzzz,weights)
+    ResampleSIR<-defFsamp(output,c(lTargPars$SumStats),weights)
+    
+    
+    
+    
+    
     stop("lTargPars needs wDist weights of the distance function")
     # SIR routine
-    output<-GenAccSamples(delta, xNew, lTarg, lTargPars, cores, ResampleSIR)
+    output<-GenAccSamples(output, xNew, lTarg, lTargPars, ResampleSIR)
     # Pull out all accepted particles
     stop("modify the minkowski distance wrt objective function elements")
+    
+    
+    
+    
     # Recalculate particle weights (and normalise them!) REMEMBER TO SAVE THE OLD WEIGHTS
     weights%<>%calcW(xNew,xPrev)
+    
+    
+    
+    
+    
     
     stop("please pull out xNew and xPrev properly")
     # Modify the ABC-threshold adaptively
     c_thresh%<>%Supremum(xNew,xPrev)
     # Decrease the current ABC-threshold
-    delta<-delta/c_thresh[it]
+    output$delta<-output$delta/c_thresh[it]
     it<-it+1
     # Tell me what's good... please, please, please
     print(paste0("Simulation block number = ",it,", ABC-threshold = ",delta, " with 1/c = ",c_thresh[it]))

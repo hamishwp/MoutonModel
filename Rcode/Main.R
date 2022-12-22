@@ -22,7 +22,11 @@ if(simulation) {source(paste0(directory,'Rcode/SimulateSheepData.R'))
 source(paste0(directory,'Rcode/BuildModel.R'))
 # Check that the log-likelihood values make sense before running the full parallelised code
 print("Initial Values Log-Likelihood=")
-print(logTargetIPM(x0, logTargetPars = IPMLTP, returnNeg = T, printProp = F))
+print(logTargetIPM(x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F))
+# Setup the initial values for the ABSSIR algorithm:
+initSIR<-list(x0=x0, propCOV=propCOV, itermax=itermax,
+              Np=3000L, # this is the number of particles to pass the ABC threshold
+              k=2L) # this sets the number of particles to trial in ABC as N_trial=k*N (see table 2, U. Simola, et al, Bayesian Analysis (2021) 16, Number 2, Adaptive Approximate Bayesian Computation
 # Save everything we need to replicate this run:
 earlytag<-paste0(namer,"_",priorName,"_its",itermax,"_",
                  gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = ""),"_rand",round(runif(1,max = 1000)))
@@ -36,13 +40,9 @@ saveRDS(list(
 ###################################################################################
 print("And so it begins...")
 ptm <- proc.time()
-Sheepies <- pM_GaA(propCOV = propCOV,
-                         lTarg = logTargetIPM, lTargPars = IPMLTP,
-                         cores = ncores,
-                         x0 = x0,
-                         itermax=itermax,
-                         Params=list(GreedyStart=500,Pstar=0.234, gamzy0=NA, epsilon=1, minVar=1e-9),
-                         clNeeds = clNeeds, packages = "dissPackage3", prntPars=TRUE)
+
+Sheepies<-ABCSIR(initSIR, lTarg = logTargetIPM, lTargPars = IPMLTP)
+
 ptm_fin<-proc.time() - ptm;
 print(paste0("ncpus= ",ncores," : ",ptm_fin))
 ###################################################################################
@@ -58,21 +58,22 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 ###################################################################################
 
 # Short-term to do
-# - mu function to apply across all summary statistics
-# - code-up algorithm to evaluate number of mSMC particles required
-# - 
-
+# - sort the error in the dimensionality of the output from Minkowski
 # - parallelise properly obsFun when funcys is only one function
-# - instead of mu initialisation for only total number of individuals,
-#   shouldn't we generate all summary statistics?
-# - check if sw is iteratively-additive/multiplicative
-# - check the output dimension order for output$d_i and output$shat
-# - code-up algorithm to evaluate number of SMC particles required
 # - sort outshell thing
 # - make it possible to choose between Minkowski or distribution-based obsFun
-# - median summary stats to be output to the ABCSMC algorithm
 # - what is NoParts doing in all the old obsProb models?
 
+
+proposed<-Sample2Physical(x0,IPMLTP)
+stateSpaceSampArgs <- list(survFunc = IPMLTP$survFunc, survPars = proposed$survPars,
+                           growthSamp = IPMLTP$growthSamp, growthPars = proposed$growthPars,
+                           reprFunc = IPMLTP$reprFunc, reprPars = proposed$reprPars,
+                           offNumSamp = IPMLTP$offNumSamp, offNumPars = proposed$offNumPars,
+                           offSizeSamp = IPMLTP$offSizeSamp, breaks = IPMLTP$breaks,
+                           offSizePars = proposed$offSizePars, Schild=proposed$Schild,
+                           sizes=IPMLTP$sizes, oneSex = IPMLTP$oneSex)
+sampleState <- vectorisedSamplerIPM_ABCSIR
 
 # PLAN OF TO-DO
 # 1) modify logTarget function to output objective function, per ABC particle
@@ -147,3 +148,10 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 
 
 
+# Sheepies <- pM_GaA(propCOV = propCOV,
+#                          lTarg = logTargetIPM, lTargPars = IPMLTP,
+#                          cores = ncores,
+#                          x0 = x0,
+#                          itermax=itermax,
+#                          Params=list(GreedyStart=500,Pstar=0.234, gamzy0=NA, epsilon=1, minVar=1e-9),
+#                          clNeeds = clNeeds, packages = "dissPackage3", prntPars=TRUE)
