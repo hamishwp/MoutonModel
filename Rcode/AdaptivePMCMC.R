@@ -968,7 +968,7 @@ defFsamp<-function(output,SumStats,weights=NULL){
 
 # Generate Np accepted particles (sets of model-parameters)
 # given the ABC-threshold (delta), target & resample functions and initial values
-GenAccSamples<-function(output, xNew, lTarg, lTargPars, ResampleSIR, accR=1){
+GenAccSamples<-function(output, xNew, lTarg, lTargPars, ResampleSIR){
   # How many particles do we want?
   Np<-particles<-nrow(xNew); Complete<-rep(F,Np)
   # Sample from parameter space until we have Np accepted particles
@@ -1028,9 +1028,13 @@ ABCSIR<-function(initSIR, lTarg, lTargPars,
   output<-Inits
   # Run the algorithm!
   while(!(1/c_thresh[it] > 0.99 & it>3) | nrow(output)>initSIR$itermax){
+    # Recalculate particle weights (and normalise them!) REMEMBER TO SAVE THE OLD WEIGHTS
+    weights%<>%calcW(xNew,xPrev)
     
     
-    stop("Make sure that output$x values only contain those that passed ABC threshold")
+    
+    
+    stop("Make sure that proposal distribution is only trained on the particles that passed the ABC threshold")
     # Dynamically define the resample & perturb function of new parameter sets
     ResampleSIR<-defFsamp(output,c(lTargPars$SumStats),weights)
     
@@ -1047,9 +1051,10 @@ ABCSIR<-function(initSIR, lTarg, lTargPars,
     
     
     
-    # Recalculate particle weights (and normalise them!) REMEMBER TO SAVE THE OLD WEIGHTS
-    weights%<>%calcW(xNew,xPrev)
     
+    
+    stop("Save current output object into a file in Results folder and save to it at every iteration")
+    stop("But make sure that the while loop will still work despite this")
     
     
     

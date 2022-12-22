@@ -65,15 +65,15 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 # - what is NoParts doing in all the old obsProb models?
 
 
-proposed<-Sample2Physical(x0,IPMLTP)
-stateSpaceSampArgs <- list(survFunc = IPMLTP$survFunc, survPars = proposed$survPars,
-                           growthSamp = IPMLTP$growthSamp, growthPars = proposed$growthPars,
-                           reprFunc = IPMLTP$reprFunc, reprPars = proposed$reprPars,
-                           offNumSamp = IPMLTP$offNumSamp, offNumPars = proposed$offNumPars,
-                           offSizeSamp = IPMLTP$offSizeSamp, breaks = IPMLTP$breaks,
-                           offSizePars = proposed$offSizePars, Schild=proposed$Schild,
-                           sizes=IPMLTP$sizes, oneSex = IPMLTP$oneSex)
-sampleState <- vectorisedSamplerIPM_ABCSIR
+# proposed<-Sample2Physical(x0,IPMLTP)
+# stateSpaceSampArgs <- list(survFunc = IPMLTP$survFunc, survPars = proposed$survPars,
+#                            growthSamp = IPMLTP$growthSamp, growthPars = proposed$growthPars,
+#                            reprFunc = IPMLTP$reprFunc, reprPars = proposed$reprPars,
+#                            offNumSamp = IPMLTP$offNumSamp, offNumPars = proposed$offNumPars,
+#                            offSizeSamp = IPMLTP$offSizeSamp, breaks = IPMLTP$breaks,
+#                            offSizePars = proposed$offSizePars, Schild=proposed$Schild,
+#                            sizes=IPMLTP$sizes, oneSex = IPMLTP$oneSex)
+# sampleState <- vectorisedSamplerIPM_ABCSIR
 
 # PLAN OF TO-DO
 # 1) modify logTarget function to output objective function, per ABC particle
