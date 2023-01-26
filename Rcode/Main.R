@@ -9,10 +9,10 @@
 #@@@                                                                           @@@#
 #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#
 directory<-paste0(getwd(),"/")
-# Load the packages required for the code, and install them if they don't already exist
-source(paste0(directory,'Rcode/GetPackages.R'))
 # Load the simulation parameters required for this run
 source(paste0(directory,'Rcode/LoadParameters.R'))
+# Load the packages required for the code, and install them if they don't already exist
+source(paste0(directory,'Rcode/GetPackages.R'))
 # Load the IPM object skeleton
 source(paste0(directory,'Rcode/CodeSkeleton.R'))
 # Either we read in the real data or generate our own!
@@ -58,22 +58,74 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 ###################################################################################
 
 # Short-term to do
-# - sort the error in the dimensionality of the output from Minkowski
+# - sort out and check GenAccSamples function
+# - sort out and check ABCSIR function 
+
+# - deal with weightings being passed out of ResampleSIR function
 # - parallelise properly obsFun when funcys is only one function
-# - sort outshell thing
 # - make it possible to choose between Minkowski or distribution-based obsFun
 # - what is NoParts doing in all the old obsProb models?
+# - Sample from priors for initialisation: 
+#   if no prior values are provided, setup the priors distributions from the GLM
+# - Do we try using as many threshold values as there are summary statistics?
+#   by doing the local-distance weighting in NN MVN models we could use this as 
+#   a way of justifying not having to use k-epsilon thresholds which is more computationally expensive
+# - Encode the ESS and include a threshold of N/2 lower than which the code spits out a warning (or stops entirely)
+#   this ESS threshold comes from Moral, et al, 2011 -  10.1007/s11222-011-9271-y
+# - Implement Euclidean distance function which is scaled in parameter space (by the range of values or variance?)
+#   that will be used to find the M nearest neighbours
+# - Check that the ABC threshold tolerance is constantly decreasing
 
 
-# proposed<-Sample2Physical(x0,IPMLTP)
-# stateSpaceSampArgs <- list(survFunc = IPMLTP$survFunc, survPars = proposed$survPars,
-#                            growthSamp = IPMLTP$growthSamp, growthPars = proposed$growthPars,
-#                            reprFunc = IPMLTP$reprFunc, reprPars = proposed$reprPars,
-#                            offNumSamp = IPMLTP$offNumSamp, offNumPars = proposed$offNumPars,
-#                            offSizeSamp = IPMLTP$offSizeSamp, breaks = IPMLTP$breaks,
-#                            offSizePars = proposed$offSizePars, Schild=proposed$Schild,
-#                            sizes=IPMLTP$sizes, oneSex = IPMLTP$oneSex)
-# sampleState <- vectorisedSamplerIPM_ABCSIR
+# A tutorial introduction to Bayesian inference for stochastic epidemic
+# models using Approximate Bayesian Computation.
+# T. Kypraios, 2016, mathematical biosciences
+# 10.1016/j.mbs.2016.07.001
+
+# ABCSMC with high summary statistic dimensionality (Kypraios, 2016):
+# 'The problem is that simulations which produce good matches
+# of all summaries simultaneously become increasingly unlikely as p
+# grows. A formal treatment of the issue is given by Blum [9], Barber
+# et al. [3] and Biau et al. [8] amongst others.'
+
+# Adaptive ABC threshold schemes (Kypraios, 2016):
+# 'We found that adaptive tolerances sometimes perform poorly
+# for discrete summary statistics, which several of our applications
+# use. The problem occurs when most of the distances from accepted
+# simulations exactly equal the tolerance epsilon_t.' 
+# What happens is that epsilon_t = epsilon_t-1 and the algorithm gets stuck.
+# This could be navigated by having monotonically decreasing thresholds
+
+# Union metric - one single ABC threshold that requires a distance metric of the summary statistics 
+#                in order to accept or reject the particle
+# Intersection metric - either individual thresholds are produced, per summary statistic,
+#                       or every summary statistic needs to pass a single threshold individually
+#                       making the threshold max(S_h)<epsilon instead
+# We could create and use three types here: union, max-intersection and full-intersection
+# whereby the full-intersection method would be created by quantiles of each individual summary statistic
+# just as the union method currently does for us!
+
+# Approximate Bayesian Computation and Simulation-Based Inference for Complex Stochastic Epidemic Models
+# T.J. McKinley, 2018, 10.1214/17-STS618
+# 'Combining metrics in a sensible manner is sometimes challenging,
+# especially if they are defined on different scales (see 
+# e.g., Conlan et al., 2012). Union metrics can sometimes
+# lead to simulations being regularly accepted when they
+# do not fit certain outputs very well at all, whereas in-
+#   tersection metrics can penalise misfitting simulations
+# more, but at a cost of reduced acceptance rates.'
+
+# PERTURBATION KERNELS
+# need to distinguish between guided-centered normal distributions and non-guided
+# - Local-distance mean- & covariance-weighted kernel using multivariate normal distribution centered and scaled by M-nearest neighbours
+# - Local-distance mean-weighted only kernel using multivariate normal distribution centered and scaled by M-nearest neighbours
+# - Global-distance weighted kernel using multivariate normal distribution centered and scaled by M-nearest neighbours
+# - Un-weighted kernel using multivariate normal distribution centered and scaled by M-nearest neighbours
+# - Global multivariate normal distrbution
+# - Global univariate (component-wise) normal distribution 
+# - Multivariate normal kernel with optimal local covariance matrix
+# - Guided (by weighted - by distance - average of theta* and mean(theta_t-1)) multivariate normal kernel with optimal local covariance matrix
+
 
 # PLAN OF TO-DO
 # 1) modify logTarget function to output objective function, per ABC particle
@@ -96,7 +148,15 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 
 
 
-
+# proposed<-Sample2Physical(x0,IPMLTP)
+# stateSpaceSampArgs <- list(survFunc = IPMLTP$survFunc, survPars = proposed$survPars,
+#                            growthSamp = IPMLTP$growthSamp, growthPars = proposed$growthPars,
+#                            reprFunc = IPMLTP$reprFunc, reprPars = proposed$reprPars,
+#                            offNumSamp = IPMLTP$offNumSamp, offNumPars = proposed$offNumPars,
+#                            offSizeSamp = IPMLTP$offSizeSamp, breaks = IPMLTP$breaks,
+#                            offSizePars = proposed$offSizePars, Schild=proposed$Schild,
+#                            sizes=IPMLTP$sizes, oneSex = IPMLTP$oneSex)
+# sampleState <- vectorisedSamplerIPM_ABCSIR
 
 
 

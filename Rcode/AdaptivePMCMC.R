@@ -3,11 +3,11 @@
 #### FILTER WHICH ESTIMATES THE LIKELIHOOD, BUT MOST OF THIS FILE SHOULD BE 
 #### CONSIDERED AS WORK WHICH WAS UNDERTAKEN AS PART OF A DIFFERENT PROJECT.
 
-library(mvtnorm)
 library(parallel)
 library(doParallel)
 library(foreach)
-library(package=Rfast,exclude = "rmvnorm")
+library(package=Rfast)
+if(algorithm=="ABCSIR") source(paste0(directory,"./Rcode/PerturbABC.R"))
 
 ################ PROPOSAL FUNCTIONS AND CORRELATION FINDING FUNCTIONS ##########
 
@@ -848,148 +848,36 @@ Supremum<-function(c_old,xNew,xPrev){
   return(c(((max(w_hat)+sum(c_old))/sum(c_old)),c_old))
 }
 
-# fuck knows what this is... perturbation matrix covariance? just use the global one (fullcond not fullcondopt)
-GuidedOLCov<-function(xPrev,sest,sobs){
-  
-  
-}
-
-# this is for the perturbation gaussian, using the summary statistics and weights of all accepted particles
-weightedStats<-function(ss,xProp,weights){
-  
-}
-
-# Calculate the weights of the importance resampling distribution
-# https://arxiv.org/abs/2206.12235
-calcW<-function(){
-  
-  
-}
-
-# https://arxiv.org/abs/2206.12235
-# We will try using the algorithm 'fullcond', equations 9 & 10. 
-
-# NOOOOOOOOOOOOOOOO! Use this one instead due to covariance matrix non-positive definiteness:
-# Generator Parameter Calibration by Adaptive Approximate Bayesian Computation with Sequential Monte Carlo Sampler
-# Seyyed Rashid Khazeiynasab Student Member, IEEE and Junjian Qi, Senior Member, IEEE, 2021
-# DOI:     10.1109/TSG.2021.3077734
-
-defFsamp<-function(output,SumStats,weights=NULL){
-  # If no weights are provided for the samples:
-  if(is.null(weights)) weights<-rep(1,ncol(output$shat))
-  # Combine (theta,s) into a vector
-  xxx<-cbind(output$theta,t(output$shat))
-  OLS<-apply(output$shat,2,function(x) abs(x-c(SumStats)))%>%t()
-  # Find the variance of each parameter on the summary statistics to see what most influences posterior
-  standies<-sapply(seq_along(output$theta[1,]),function(i) {
-    sapply(seq_along(OLS[1,]),function(j) abs(cor(output$theta[,i],OLS[,j])))
-  })
-  ParamVar<-apply(standies,2,median,na.rm=T)
-  # Then also calculate the weight of the different summary statistics in terms of contribution to the posterior
-  SSweight<-apply(standies,1,median,na.rm=T)
-  
-  
-  
-  
-  # Recalculate the distances:
-  distie<-Minkowski(output$shat,SumStats,rep(ncol(output$shat),3),p=1)
-  # Reduce the objective function vector to remove values that didn't change
-  sy<-Rfast::rowmeans(output$shat)
-  # Checks to ensure covariance matrix is positive-definite:
-  # Need to ensure that any permanently zero summary stats are removed for collinearity
-  inds<-apply(output$shat,1,sd)!=0 & sy!=0
-  # Now create a non-parametric kernel density estimate with the parameter space
-  cory<-apply(OLS[,inds],2,function(x) cor(x,distie$sw))
-  # Set the weights for the summary statistics 
-  SSweight<-rep(0,length(inds))
-  SSweight[inds]<-minmaxScale(cory)
-  
-  
-  
-  
-  
-  
-  
-  
-  # DF<-output$shat%>%t()%>%as.data.frame.array()
-  # namers<-paste0("V",1:ncol(DF))
-  # colnames(DF)<-namers
-  # tmp<-mclapply(seq_along(DF),function(i) {
-  #   formy<-paste0(namers[i],"~",paste(namers[-i],collapse = "+"))
-  #   return(mean(abs(lm(formy,DF)$residuals)))
-  # },mc.cores = ncores)%>%unlist()%>%c()
-  # 
-  # 
-  # 
-  # # Average summary statistic per objective function element
-  # sy<-Rfast::rowmeans(output$shat)
-  # # Checks to ensure covariance matrix is positive-definite:
-  # # Need to ensure that any permanently zero summary stats are removed for collinearity
-  # inds<-apply(output$shat,1,sd)!=0 & sy!=0 & log(tmp)> -10
-  # # Prevent zeros from impacting calculation of inverse of covariance matrix
-  # output$shat<-output$shat[inds,]; sy<-sy[inds]
-  # # Make sure all variables with perfect collinearity are removed
-  # cory<-cov.wt(t(output$shat),weights,cor = T)$cor;
-  # # Remove for multicollinearity
-  # inds<-!(1:nrow(cory)%in%caret::findCorrelation(cory, cutoff=0.99))
-  # output$shat<-output$shat[inds,]; sy<-sy[inds]
-  # # Generate full matrix of (theta,s)
-  # xxx<-cbind(output$theta,t(output$shat))
-  # # Calculate full (theta,s) covariance matrices
-  # COVhat<-cov.wt(xxx,weights)
-  # # Take the mean from the weighted covariance calculation to save time
-  # Mhat<-COVhat$center; COVhat<-COVhat$cov
-  # # Store length of theta vector
-  # lennie<-ncol(output$theta); lsy<-length(sy)
-  # # This should be vectorised, but it actually won't take long compared to the particle filter
-  # Maddy<-rep(NA,lennie)
-  # Mmulty<-SigStar<-array(NA,c(lennie,lsy+lennie-1))
-  # for(k in 1:lennie){
-  #   Mmulty[k,]<-c(COVhat[k,-k]%*%chol2inv(COVhat[-k,-k]))
-  #   Maddy[k]<-Mhat[k] - c(Mmulty[k,]%*%Mhat[-k])
-  #   SigStar[k]<-sqrt(COVhat[k,k] - c(Mmulty[k,]%*%COVhat[-k,k]))
-  # }
-  # # Then sample from the rnorm
-  # ResampleSIR<-function(NN) {
-  #   # First sample particles based on the distance function
-  #   theta<-output$theta[sample(seq_along(output$theta),NN,T,prob = output$distance),]
-  #   # Then perturb the particles based on the location in parameter-summary statistic space
-  #   Mstar<-Maddy+Multy%*%rbind(t(theta[,-k]), array(rep(sy,NN),c(lsy,NN)))
-  #   # Return samples from parameter space
-  #   array(rnorm(NN*lennie, Mstar, sigStar),dim=c(NN,lennie))
-  # }
-  
-  stop("insert sy not s_sample into mean equation")
-  
-  return(ResampleSIR)
-}
-
-
-
 # Generate Np accepted particles (sets of model-parameters)
 # given the ABC-threshold (delta), target & resample functions and initial values
-GenAccSamples<-function(output, xNew, lTarg, lTargPars, ResampleSIR){
+GenAccSamples<-function(delta, initSIR, lTarg, lTargPars, ResampleSIR){
   # How many particles do we want?
-  Np<-particles<-nrow(xNew); Complete<-rep(F,Np)
+  Complete<-rep(F,initSIR$Np); particles<-initSIR$Np; tmp<-array(dim = c(0,length(initSIR$x0)))
+  # Output skeleton
+  output<-list(delta=delta,distance=c(),theta=tmp,weightings=c(),shat=tmp)
   # Sample from parameter space until we have Np accepted particles
   while (particles>0){
     # Sample the particles (note that the weightings are dynamically defined along with the function)
-    xNew<-ResampleSIR(sum(!Complete))
+    SIR<-ResampleSIR(sum(!Complete))
     # Sample from the target distribution
     lTargNew <- mclapply(X = 1:particles,
-                         FUN = function(c) lTarg(xNew[c,], lTargPars),
+                         FUN = function(c) lTarg(SIR$theta[c,], lTargPars),
                          mc.cores = lTargPars$cores) %>% CombLogTargs()
     # Modify which particles are sampled from at next iteration
-    Complete[!Complete]<-lTargNew$d>output$delta
+    Complete[!Complete]<-lTargNew$d>delta
     # Save both accepted & rejected values
-    output$distance%<>%rbind(lTargNew$d)
-    output$theta%<>%abind(xNew)
-    output$shat%<>%abind(lTargNew$shat)
+    output$distance%<>%c(lTargNew$d)
+    output$theta%<>%rbind(SIR$theta)
+    output$weightings%<>%c(SIR$weightings)
+    output$shat%<>%rbind(lTargNew$shat)
     # Adjust the number of particles required for the next iteration
     particles<-sum(!Complete)
     # print out
-    print(paste0(particles," out of ",Np," left to simulate"))
+    print(paste0(particles," out of ",initSIR$Np," left to simulate"))
   }
+  # Normalise the weights
+  output$weightings<-output$weightings/sum(output$weightings)
+  
   return(output)
 }
 
@@ -1008,12 +896,17 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
   # Output both accepted & rejected values
   outy<-list(distance=lTargNew$d,
              theta=xNew,
+             modWeights=rep(1,length(lTargNew$d)),
              shat=lTargNew$shat,
              delta=delta0)
   
   return(outy)
 }
 
+# Define the function that will be used to resample the SIR-particles
+defFsamp<-match.fun(perturber)
+
+# The ABCSIR (also referred to as ABCSMC) algorithm 
 ABCSIR<-function(initSIR, lTarg, lTargPars,
                  Params=list(psi=5, # percentile to decrease delta by
                              deltaN=NULL, # final delta value to quit simulation
@@ -1021,32 +914,20 @@ ABCSIR<-function(initSIR, lTarg, lTargPars,
                  ){
   # Initialisations of storage variables and algorithm parameters
   xPrev<-initSIR$x0; indy<-1:length(xPrev); it<-1; c_thresh<-0.95; weights<-rep(1/initSIR$Np,initSIR$Np)
-  stop("Make sure that weights reflect that we can over-sample particles in GenAccSamples function")
   # Find theta*(t=1) delta(t=1) -> the ABC-rejection value
   Inits<-InitABCSIR(lTarg, lTargPars, initSIR)
   # Setup shop for the full algorithm
   output<-Inits
+  # Make a simpler function out of the priors
+  priorF<-function(thth) lTargPars$priorFunc(thth, lTargPars$priors, lTargPars$priorPars)
   # Run the algorithm!
   while(!(1/c_thresh[it] > 0.99 & it>3) | nrow(output)>initSIR$itermax){
-    # Recalculate particle weights (and normalise them!) REMEMBER TO SAVE THE OLD WEIGHTS
-    weights%<>%calcW(xNew,xPrev)
-    
-    
-    
-    
-    stop("Make sure that proposal distribution is only trained on the particles that passed the ABC threshold")
+    # Save previous parameter space samples
+    xPrev<-output$theta[output$distance>output$delta,]
     # Dynamically define the resample & perturb function of new parameter sets
-    ResampleSIR<-defFsamp(output,c(lTargPars$SumStats),weights)
-    
-    
-    
-    
-    
-    stop("lTargPars needs wDist weights of the distance function")
+    ResampleSIR<-defFsamp(output,c(lTargPars$SumStats),priorF,weights)
     # SIR routine
-    output<-GenAccSamples(output, xNew, lTarg, lTargPars, ResampleSIR)
-    # Pull out all accepted particles
-    stop("modify the minkowski distance wrt objective function elements")
+    output<-GenAccSamples(output$delta, initSIR, lTarg, lTargPars, ResampleSIR)
     
     
     
@@ -1060,9 +941,8 @@ ABCSIR<-function(initSIR, lTarg, lTargPars,
     
     
     
-    stop("please pull out xNew and xPrev properly")
     # Modify the ABC-threshold adaptively
-    c_thresh%<>%Supremum(xNew,xPrev)
+    c_thresh%<>%Supremum(output$theta[output$distance>output$delta,],xPrev)
     # Decrease the current ABC-threshold
     output$delta<-output$delta/c_thresh[it]
     it<-it+1

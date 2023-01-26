@@ -15,7 +15,7 @@ itermax <- 30000
 # Do we need to calculate the number of particles required for the 
 calcParts<-F
 # Number of in-chain parallelised cores
-ncores<-48
+ncores<-14
 # Define the number of size class bins
 nbks<-10
 # Bins method:
@@ -30,9 +30,13 @@ manshift<-F
 normsampler<-"sampleDTN"
 # What algorithm to use to parameterise the model?
 algorithm<-"ABCSIR"
+# Which perturbation function to the aSMC resampler?
+perturber<-"pert_GlobCov"
+# If using a nearest neighbour perturbation, how many neighbours are required?
+pNNs<-50
 # Use these parameters to create a name for the output file from the simjulation
 namer<-paste0(ifelse(simulation,paste0("SIM_pop",poptot,"_yr",yearing),"REAL"),
-              "_GSF_",ifelse(fixedObsProb,"fixed","beta"),"_",muModel,"Mu_",obsModel,
+              "_",algorithm,"_",perturber,"_",ifelse(fixedObsProb,"fixed","beta"),"_",muModel,"Mu_",obsModel,
               "Obs_GLMx0_",itermax,"_",nbks,"brks_","regbinspace",regbinspace,"_",normsampler,"_",ifelse(manshift,"manshift","autoshift"))
 
 ###################################################################################

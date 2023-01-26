@@ -655,10 +655,10 @@ Minkowski<-function(sest,sobs,dimmie,p=1){
   # Don't punish the summary statistics that deviate more from obs data initially than others:
   if(sum(MADO>2*MAD,na.rm = T)/length(sobs)<1/3) PCMAD<-MAD+MADO else PCMAD<-MAD
   # Calculate the Minkowski distance per summary statistic
-  d_i<--abs(sest-sobs)/PCMAD
+  d_i<--MADO/PCMAD
   # Find number of infinite and NaN values to artificially add to the LL:  
-  infies<-length(d_i[is.infinite(d_i) | is.na(d_i)])/dimmie[3]
-  infiesSW<-apply(d_i,2,function(dd) length(dd[is.infinite(dd) | is.na(dd)]))/dimmie[3]
+  infies<-length(d_i[is.infinite(d_i) | is.na(d_i)])/dimmie
+  infiesSW<-apply(d_i,2,function(dd) length(dd[is.infinite(dd) | is.na(dd)]))/dimmie
   # output total distance
   return(list(shat=meds,
               d=pracma::nthroot(mean(d_i[!is.infinite(d_i)]^p,na.rm = T),p)*infies,

@@ -36,7 +36,7 @@ if(is.null(funcys)){
       # Calculate the distances
       disties<-Minkowski(sest = Sstar,
                          sobs = c(wArgs$Sd[,,wArgs$time]),
-                         dimmie=dim(wArgs$Sstar))
+                         dimmie=dim(wArgs$Sstar)[3])
       # Merge into a single output object
       output$d<-disties$d*output$d; output$sw<-disties$sw
       # Census-dependent dataframe
@@ -53,7 +53,7 @@ if(is.null(funcys)){
       # Calculate the distances
       disties<-Minkowski(sest = Sstar, 
                          sobs = c(wArgs$Sd[,,wArgs$time]),
-                         dimmie=dim(wArgs$Sstar))
+                         dimmie=dim(wArgs$Sstar)[3])
       # Merge into a single output object
       output$d<-disties$d*output$d; output$sw<-disties$sw
       # Census-dependent dataframe
@@ -70,7 +70,7 @@ if(is.null(funcys)){
       # Calculate the distances
       disties<-Minkowski(sest = Sstar, 
                          sobs = c(wArgs$Sd[,,wArgs$time]),
-                         dimmie=dim(wArgs$Sstar))
+                         dimmie=dim(wArgs$Sstar)[3])
       # Merge into a single output object
       output$d<-disties$d*output$d; output$sw<-disties$sw
       # Census-dependent dataframe
@@ -87,7 +87,7 @@ if(is.null(funcys)){
       # Calculate the distances
       disties<-Minkowski(sest = Sstar, 
                          sobs = c(wArgs$Sd[,,wArgs$time]),
-                         dimmie=dim(wArgs$Sstar))
+                         dimmie=dim(wArgs$Sstar)[3])
       # Merge into a single output object
       output$d<-disties$d*output$d; output$sw<-disties$sw
       # Census-dependent dataframe
@@ -260,7 +260,5 @@ IPMLTP %<>% c(list(
   muPar = muPar, 
   b = SMC_parts
 ))
-
-
 
 

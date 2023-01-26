@@ -1,7 +1,7 @@
-warning("Please run 'sudo apt-get install libgsl-dev' in terminal (Linux, Mac only)")
+# warning("Please run 'sudo apt-get install libgsl-dev' in terminal (Linux, Mac only)")
 
-list.of.packages <- c("xtable","magrittr","doParallel","Rfast","mc2d", "tidyverse",
-                      "abind","skellam")
+list.of.packages <- c("xtable","magrittr","doParallel","Rfast", "tidyverse",
+                      "abind")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 print(new.packages)
 if(length(new.packages)>0) install.packages(new.packages)
@@ -19,5 +19,6 @@ library(xtable)
 # library(mcmcse)
 library(tidyverse)
 library(magrittr)
+library(Rfast)
 
-dir.create("./Results")
+dir.create("./Results",showWarnings = F)
