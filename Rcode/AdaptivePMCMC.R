@@ -820,58 +820,54 @@ p_HMC <- function(propCOV, lTarg, lTargPars, x0, itermax=1000,
   
 }
 
-
-
-
-
-
-
-
 # Find some quantiles of the accepted parameter space values
 multiQuants<-function(x,lenny=300,qmin=0.15,qmax=0.85){
   # Find the min and max values, per parameter, to create a grid from
-  range<-vapply(1:length(x),function(i) quantile(x[,1],c(qmin,qmax),T,F), numeric(2))
+  range<-vapply(1:ncol(x),function(i) quantile(x,c(qmin,qmax),T,F), numeric(2))
   # Output the grid of values!
-  vapply(1:length(x),function(i) seq(range[1,i],range[2,i],length.out=lenny),numeric(lenny))
+  vapply(1:ncol(x),function(i) seq(range[1,i],range[2,i],length.out=lenny),numeric(lenny))
 }
 
 # To adjust the ABC-threshold, we calculate the supremum of the ratio of two posteriors (at time t and t-1)
 # U. Simola, et al, 'Adaptive Approximate Bayesian Computation Tolerance Selection', Bayesian Anal. 16(2): 397-423 (June 2021). DOI: 10.1214/20-BA1211 
-Supremum<-function(c_old,xNew,xPrev){
+Supremum<-function(q_old,xNew,xPrev,xN=T,meth="KLIEP",warny=T){
   # Calculate the density ratio using Kullback-Leibler Importance Estimation Procedure (KLIEP) - https://github.com/hoxo-m/densratio
-  densratio_obj <- densratio(xNew,xPrev, method="KLIEP")
-  # Values to predict on, based on quartiles of both the old & new parameters
-  x_quants<-multiQuants(rbind(xNew,xPrev))
+  densratio_obj <- densratio(xNew,xPrev,method = meth,verbose = warny)
+  # Which parameter space values should have quantiles?
+  if(xN) xxx<-xNew else xxx<-rbind(xNew,xPrev)
+  # Values to predict on, based on quartiles of only the new parameters
+  x_quants<-multiQuants(xxx)
   # Compute the ratio for the range of prediction values
   w_hat <- densratio_obj$compute_density_ratio(x_quants)
   # Return the updated supremum*, as a vector that includes the older values
-  return(c(((max(w_hat)+sum(c_old))/sum(c_old)),c_old))
+  return(c(1/max(w_hat),q_old))
 }
 
 # Generate Np accepted particles (sets of model-parameters)
 # given the ABC-threshold (delta), target & resample functions and initial values
 GenAccSamples<-function(delta, initSIR, lTarg, lTargPars, ResampleSIR){
   # How many particles do we want?
-  Complete<-rep(F,initSIR$Np); particles<-initSIR$Np; tmp<-array(dim = c(0,length(initSIR$x0)))
+  particles<-initSIR$Np; Complete<-0
   # Output skeleton
-  output<-list(delta=delta,distance=c(),theta=tmp,weightings=c(),shat=tmp)
+  output<-list(delta=delta,distance=c(),theta=array(dim = c(0,length(initSIR$x0))),
+               weightings=c(),shat=array(dim = c(0,length(lTargPars$SumStats))))
   # Sample from parameter space until we have Np accepted particles
   while (particles>0){
     # Sample the particles (note that the weightings are dynamically defined along with the function)
-    SIR<-ResampleSIR(sum(!Complete))
+    SIR<-ResampleSIR(max(particles,lTargPars$cores))
     # Sample from the target distribution
-    lTargNew <- mclapply(X = 1:particles,
+    lTargNew <- mclapply(X = 1:max(particles,lTargPars$cores),
                          FUN = function(c) lTarg(SIR$theta[c,], lTargPars),
                          mc.cores = lTargPars$cores) %>% CombLogTargs()
     # Modify which particles are sampled from at next iteration
-    Complete[!Complete]<-lTargNew$d>delta
+    Complete<-sum(lTargNew$d>delta)+Complete
     # Save both accepted & rejected values
     output$distance%<>%c(lTargNew$d)
     output$theta%<>%rbind(SIR$theta)
     output$weightings%<>%c(SIR$weightings)
     output$shat%<>%rbind(lTargNew$shat)
     # Adjust the number of particles required for the next iteration
-    particles<-sum(!Complete)
+    particles<-initSIR$Np-Complete
     # print out
     print(paste0(particles," out of ",initSIR$Np," left to simulate"))
   }
@@ -887,6 +883,8 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
   Ninit<-initSIR$Np*initSIR$k
   # Generate the particles
   xNew<-multvarNormProp(xt=initSIR$x0, propPars=initSIR$propCOV, n=Ninit)
+  # Calculate the priors for the weights, and normalise them
+  wtwt<-exp(apply(xNew,1,function(tt) lTargPars$priorF(tt))); wtwt<-wtwt/sum(wtwt)
   # Sample from the target distribution
   lTargNew <- mclapply(X = 1:Ninit,
                        FUN = function(c) lTarg(xNew[c,], lTargPars),
@@ -896,7 +894,7 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
   # Output both accepted & rejected values
   outy<-list(distance=lTargNew$d,
              theta=xNew,
-             modWeights=rep(1,length(lTargNew$d)),
+             weightings=wtwt,
              shat=lTargNew$shat,
              delta=delta0)
   
@@ -906,140 +904,77 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
 # Define the function that will be used to resample the SIR-particles
 defFsamp<-match.fun(perturber)
 
+CalcQuantile<-function(q_thresh,output,xPrev){
+  # BLOODY DENSITY RATIO ALGORITHM IS A PAIN IN MY ARSE!
+  q_update<-tryCatch(Supremum(q_thresh,output$theta[output$distance>output$delta,],xPrev),error=function(e) NA)
+  if(is.na(q_update)) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],F),error=function(e) NA); print("Trying xNew & xPrev quantiles only")}
+  if(is.na(q_update)) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF")}
+  if(is.na(q_update)) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF and xNew & xPrev quantiles only")}
+  if(is.na(q_update)) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,]),error=function(e) NA); print("Reversing KLIEP num/denom")}
+  if(is.na(q_update)) {
+    q_update<-c(q_thresh[length(q_thresh)],q_thresh)
+    print("warning: issues with the quantile threshold calculation")
+  } 
+  return(q_update)
+}
+
+CalcThresh<-function(output,it,minESS,qmax=0.95){
+  # Decrease by the threshold previously calculated
+  delta<-output$delta/output$q_thresh[it]
+  # Calculate the Effective Sample Size (ESS)
+  ESS<-1/sum(output$weightings^2); print(paste0("Effective Sample Size = ",ESS))
+  # If the ESS lies below a given value, 
+  # increase delta until either ESS>minESS or q_thresh = qmax
+  
+  return(delta)
+}
+
 # The ABCSIR (also referred to as ABCSMC) algorithm 
-ABCSIR<-function(initSIR, lTarg, lTargPars,
-                 Params=list(psi=5, # percentile to decrease delta by
-                             deltaN=NULL, # final delta value to quit simulation
-                             defperc=0.95) # if percentile delta > previous_delta, use defperc*previous_delta
-                 ){
+ABCSIR<-function(initSIR, lTarg, lTargPars){
   # Initialisations of storage variables and algorithm parameters
-  xPrev<-initSIR$x0; indy<-1:length(xPrev); it<-1; c_thresh<-0.95; weights<-rep(1/initSIR$Np,initSIR$Np)
+  xPrev<-initSIR$x0; indy<-1:length(xPrev); cycles<-initSIR$Np*initSIR$k
   # Find theta*(t=1) delta(t=1) -> the ABC-rejection value
-  Inits<-InitABCSIR(lTarg, lTargPars, initSIR)
+  output<-InitABCSIR(lTarg, lTargPars, initSIR); output$iteration<-it<-1; output$q_thresh<-q_thresh<-c(0.95);
   # Setup shop for the full algorithm
-  output<-Inits
-  # Make a simpler function out of the priors
-  priorF<-function(thth) lTargPars$priorFunc(thth, lTargPars$priors, lTargPars$priorPars)
+  saveRDS(list(output),paste0("output_",namer))
   # Run the algorithm!
-  while(!(1/c_thresh[it] > 0.99 & it>3) | nrow(output)>initSIR$itermax){
-    # Save previous parameter space samples
-    xPrev<-output$theta[output$distance>output$delta,]
+  while(!(output$q_thresh[it] > 0.99 & it>3) | cycles > initSIR$itermax){
+    # Set the ABC-step number
+    it<-it+1
     # Dynamically define the resample & perturb function of new parameter sets
-    ResampleSIR<-defFsamp(output,c(lTargPars$SumStats),priorF,weights)
+    ResampleSIR<-defFsamp(outin = output,SumStats = c(lTargPars$SumStats),priorF = lTargPars$priorF)
     # SIR routine
     output<-GenAccSamples(output$delta, initSIR, lTarg, lTargPars, ResampleSIR)
-    
-    
-    
-    
-    
-    
-    stop("Save current output object into a file in Results folder and save to it at every iteration")
-    stop("But make sure that the while loop will still work despite this")
-    
-    
-    
-    
-    
     # Modify the ABC-threshold adaptively
-    c_thresh%<>%Supremum(output$theta[output$distance>output$delta,],xPrev)
+    q_thresh<-output$q_thresh<-CalcQuantile(q_thresh,output,xPrev)
     # Decrease the current ABC-threshold
-    output$delta<-output$delta/c_thresh[it]
-    it<-it+1
+    
+    
+    
+    
+    
+    output$delta<-CalcThresh(output,it); output$iteration<-it
+    
+    
+    
+    
+    
+    
+    # Save previous parameter space samples
+    xPrev<-output$theta[output$distance>output$delta,]
+    # Save the output!
+    prev<-readRDS(paste0("output_",namer)); saveRDS(c(prev,list(output)),paste0("output_",namer)); rm(prev)
+    # How many samples have we taken sum_t(D_t)?
+    cycles<-cycles+nrow(output$theta)
     # Tell me what's good... please, please, please
-    print(paste0("Simulation block number = ",it,", ABC-threshold = ",delta, " with 1/c = ",c_thresh[it]))
+    print(paste0("Step = ",it,", total samples = ",cycles,", ABC-threshold = ",signif(output$delta,3), " with 1/c = ",output$q_thresh[it]))
+    print("")
   }
   return(output)
 }
 
-# PLAN OF TO-DO
-# 1) modify logTarget function to output objective function, per particle
-# 2) develop the perturbation function (fullcond algorithm)
-# 3) particle weight recalculation based on the objective function summary stats
-#   DONE!!!!
 
-
-# Issues to resolve:
-# - Initial acceptance threshold (DONE)
-# - Adaptive threshold method (DONE)
-# - Distance metric (DONE)
-# - Resampling & perturbation method (NEEDS IMPLEMENTING)
-# - Stopping criteria (DONE)
-
-# Code up a new particle_filter, including providing outputting the summary statistics of each particle at each time step
-# Finish the ABCSMC algorithm!
-
-
-
-
-
-
-
-
-
-
-
-
-
-# NOTES on ABCSMC
-# MAX:
-# Initialisation
-#   setup empty vectors, ABC thresholds, particle weights
-#   sample particles from initial prior distributions
-#   calculate distances for initial particles
-# Enter step-loop
-#   calculate new ABC tolerance based on the old one,
-#   (using alpha proportion target of particles that should make it through based on desired value ~0.9) 
-#   recalculate particle weights based on meeting the ABC threshold
-#   weighted resample of particles (if necessary... see line 818 Method.R of ODDRIN)
-#   note that Np/Ess = Np/sum(weights_i^2)
-#   add the perturbation to resampled particles
-#     update propCOV of perturbation function
-#     (using weights of the previous-step particles that would also meet current threshold)
-#   calculate distances for each perturbed particle
-#   calculate MCMC acceptance probability 
-#   (remembering to adjust acceptance ratios based on link functions - modifyAcc function)
-#   if passes acceptance test, perturbed particle is accepted, otherwise keep original particle
-
-
-# Initialisation
-#   setup empty vectors, ABC thresholds, particle weights
-#   sample particles from initial prior distributions
-#   calculate distances for initial particles
-# Enter step-loop
-
-
-# Differences with Clement/Zhixiao work
-#   we define an adaptive ABC-threshold, based on culling a certain number of particles
-#     this is slow and requires many steps
-#   they pre-define the number of particles to make it through and reduce the threshold accordingly
-#     this leads to restricting parameter space to only leave the particles with smallest distances
-#   do they still add a perturbation component?
-#   does Max keep going until Np particles are simulated?
-
-
-# Make sure I am not confusing the quartile-reduction method (using alpha - see Max)
-# with something else - should I be continuously running until all Np particles are accepted?
-# 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# Sheepies<-ABCSIR(initSIR, lTarg = logTargetIPM, lTargPars = IPMLTP)
 
 
 

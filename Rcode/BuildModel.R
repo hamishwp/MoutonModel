@@ -261,4 +261,26 @@ IPMLTP %<>% c(list(
   b = SMC_parts
 ))
 
+IPMLTP$priorF<-function(thth) IPMLTP$priorFunc(thth, IPMLTP$priors, IPMLTP$priorPars)
+
+print("Checking that number of samples per ABC-step is more than the minimum for the adaptive ABC threshold algorithm")
+simil<-data.frame()
+for(partsy in c(30,50,100,300,500,1000)){
+  sss<-c()
+  for(i in 1:150){
+    xNew<-multvarNormProp(xt=initSIR$x0, propPars=initSIR$propCOV, n=partsy)
+    xPrev<-multvarNormProp(xt=initSIR$x0, propPars=initSIR$propCOV, n=partsy)
+    sss%<>%c(Supremum(0.95,xPrev,xNew,warny = F)[1])
+  }
+  simil%<>%rbind(data.frame(Np=partsy,similarity=sss))
+}
+p<-ggplot(simil,aes(factor(Np),similarity,group=factor(Np)))+
+  geom_violin(aes(fill=factor(Np)),scale = "width")+
+  labs(fill="ABC Samples")+xlab("Number of ABC Samples") + ylab("KLIEP Ratio (True Value = 1)")
+ggsave("./Np-Supremum_similarity.png",p)
+saveRDS(simil,"Np-Supremum_similarity.RData")
+
+
+
+
 

@@ -16,6 +16,23 @@ library(tidyverse)
 library(Hmisc)
 library(corrplot)
 
+
+
+
+
+
+
+
+prev<-readRDS(paste0("output_",namer))
+GGally::ggpairs(data.frame(matrix(cbind(log10(-prev[[3]]$distance),prev[[3]]$theta),ncol = 13)))
+
+
+
+
+
+
+
+
 # Is the observation probability a fixed or random effects model?
 # fixedObsProb<-F
 # Load the IPM object skeleton

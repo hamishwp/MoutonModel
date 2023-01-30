@@ -6,7 +6,7 @@ new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"
 print(new.packages)
 if(length(new.packages)>0) install.packages(new.packages)
 
-# if(length(list.of.packages[!("mvtnorm" %in% installed.packages()[,"Package"])])){devtools::install_github("rCarto/osrm")}
+if(length(list.of.packages[!("densratio" %in% installed.packages()[,"Package"])])){devtools::install_github("hoxo-m/densratio")}
 
 source(paste0(directory,'Rcode/AdaptivePMCMC.R'))
 source(paste0(directory,'Rcode/SimulateData.R'))
@@ -20,5 +20,6 @@ library(xtable)
 library(tidyverse)
 library(magrittr)
 library(Rfast)
+library(densratio)
 
 dir.create("./Results",showWarnings = F)

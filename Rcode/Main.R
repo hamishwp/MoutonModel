@@ -25,11 +25,10 @@ print("Initial Values Log-Likelihood=")
 print(logTargetIPM(x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F))
 # Setup the initial values for the ABSSIR algorithm:
 initSIR<-list(x0=x0, propCOV=propCOV, itermax=itermax,
-              Np=3000L, # this is the number of particles to pass the ABC threshold
+              Np=30L, # this is the number of particles to pass the ABC threshold
               k=2L) # this sets the number of particles to trial in ABC as N_trial=k*N (see table 2, U. Simola, et al, Bayesian Analysis (2021) 16, Number 2, Adaptive Approximate Bayesian Computation
 # Save everything we need to replicate this run:
-earlytag<-paste0(namer,"_",priorName,"_its",itermax,"_",
-                 gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = ""),"_rand",round(runif(1,max = 1000)))
+earlytag<-paste0(namer,"_",priorName,"_its",itermax,"_",gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = ""),"_rand",round(runif(1,max = 1000)))
 saveRDS(list(
   x0=x0,
   propCOV=propCOV,
@@ -58,10 +57,14 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 ###################################################################################
 
 # Short-term to do
-# - sort out and check GenAccSamples function
-# - sort out and check ABCSIR function 
+# - What is the problem with using the covariance from the GLM for the initial proposal distribution? 
+#   check the state space projection routine with the different parameterisations that dont work
+# - Sort out sampling from the priors
+# - Modify simulation data to match real data (SumStats?)can think 
+# - Add different resample & perturbation functions
+# - Calculate the ESS to check it's not too low?
 
-# - deal with weightings being passed out of ResampleSIR function
+
 # - parallelise properly obsFun when funcys is only one function
 # - make it possible to choose between Minkowski or distribution-based obsFun
 # - what is NoParts doing in all the old obsProb models?
@@ -74,7 +77,6 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 #   this ESS threshold comes from Moral, et al, 2011 -  10.1007/s11222-011-9271-y
 # - Implement Euclidean distance function which is scaled in parameter space (by the range of values or variance?)
 #   that will be used to find the M nearest neighbours
-# - Check that the ABC threshold tolerance is constantly decreasing
 
 
 # A tutorial introduction to Bayesian inference for stochastic epidemic

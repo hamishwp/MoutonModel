@@ -43,7 +43,7 @@ evalPriors <-  function(vals, funcs, listOfPars, Log=T, checks=F){
 
 # For multiple logTarget functions, we need to combine them from a list into one value
 CombLogTargs<-function(lTarg)  list(d=vapply(seq_along(lTarg),function(i) lTarg[[i]]$d,1),
-       shat=sapply(seq_along(lTarg),function(i) lTarg[[i]]$shat))
+       shat=t(sapply(seq_along(lTarg),function(i) lTarg[[i]]$shat)))
   
 logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F, 
                          returnW = F, printProp = F, returnLL = F){
