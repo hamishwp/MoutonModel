@@ -34,6 +34,8 @@ algorithm<-"ABCSIR"
 perturber<-"pert_GlobCov"
 # If using a nearest neighbour perturbation, how many neighbours are required?
 pNNs<-50
+# Check the minimum number of ABCSMC particles for the adaptive epsilon threshold function
+NpCheck<-F
 # Use these parameters to create a name for the output file from the simjulation
 namer<-paste0(ifelse(simulation,paste0("SIM_pop",poptot,"_yr",yearing),"REAL"),
               "_",algorithm,"_",perturber,"_",ifelse(fixedObsProb,"fixed","beta"),"_",muModel,"Mu_",obsModel,

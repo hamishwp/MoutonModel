@@ -871,6 +871,8 @@ GenAccSamples<-function(delta, initSIR, lTarg, lTargPars, ResampleSIR){
     # print out
     print(paste0(particles," out of ",initSIR$Np," left to simulate"))
   }
+  # Set the weights of rejected particles to zero
+  output$weightings[output$distance<output$delta]<-0
   # Normalise the weights
   output$weightings<-output$weightings/sum(output$weightings)
   
@@ -904,8 +906,9 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
 # Define the function that will be used to resample the SIR-particles
 defFsamp<-match.fun(perturber)
 
-CalcQuantile<-function(q_thresh,output,xPrev){
+CalcQuantile<-function(output,xPrev){
   # BLOODY DENSITY RATIO ALGORITHM IS A PAIN IN MY ARSE!
+  q_thresh<-output$q_thresh[output$iteration]
   q_update<-tryCatch(Supremum(q_thresh,output$theta[output$distance>output$delta,],xPrev),error=function(e) NA)
   if(is.na(q_update)) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],F),error=function(e) NA); print("Trying xNew & xPrev quantiles only")}
   if(is.na(q_update)) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF")}
@@ -918,15 +921,18 @@ CalcQuantile<-function(q_thresh,output,xPrev){
   return(q_update)
 }
 
-CalcThresh<-function(output,it,minESS,qmax=0.95){
-  # Decrease by the threshold previously calculated
-  delta<-output$delta/output$q_thresh[it]
-  # Calculate the Effective Sample Size (ESS)
-  ESS<-1/sum(output$weightings^2); print(paste0("Effective Sample Size = ",ESS))
-  # If the ESS lies below a given value, 
-  # increase delta until either ESS>minESS or q_thresh = qmax
+ModThresh<-function(output,xPrev){
+  # Calculate the quantile function
+  output$q_thresh<-CalcQuantile(output,xPrev)
+  # Decrease the current ABC-threshold
+  output$delta<-output$delta/output$q_thresh[output$iteration+1]
   
-  return(delta)
+  return(output)
+}
+
+CalcESS<-function(output){
+  # Note that in GenAccSamples we set all rejected weights to zero and normalise the rest
+  1/sum(output$weightings^2)
 }
 
 # The ABCSIR (also referred to as ABCSMC) algorithm 
@@ -946,35 +952,25 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
     # SIR routine
     output<-GenAccSamples(output$delta, initSIR, lTarg, lTargPars, ResampleSIR)
     # Modify the ABC-threshold adaptively
-    q_thresh<-output$q_thresh<-CalcQuantile(q_thresh,output,xPrev)
-    # Decrease the current ABC-threshold
-    
-    
-    
-    
-    
-    output$delta<-CalcThresh(output,it); output$iteration<-it
-    
-    
-    
-    
-    
-    
+    output<-ModThresh(output,xPrev)
+    # Calculate the Effective Sample Size (ESS), noting that it is already normalised
+    output$ESS<-CalcESS(output)
+    # How many samples have we taken sum_t(D_t)?
+    cycles<-cycles+nrow(output$theta); output$iteration<-it
     # Save previous parameter space samples
-    xPrev<-output$theta[output$distance>output$delta,]
+    xPrev<-output$theta[output$distance>=output$delta,]
     # Save the output!
     prev<-readRDS(paste0("output_",namer)); saveRDS(c(prev,list(output)),paste0("output_",namer)); rm(prev)
-    # How many samples have we taken sum_t(D_t)?
-    cycles<-cycles+nrow(output$theta)
     # Tell me what's good... please, please, please
-    print(paste0("Step = ",it,", total samples = ",cycles,", ABC-threshold = ",signif(output$delta,3), " with 1/c = ",output$q_thresh[it]))
+    print(paste0("Step = ",it,", No. samples = ",cycles,", eps = ",signif(output$delta,3),
+                 " with 1/c = ",output$q_thresh[it]," and ESS = ",output$ESS))
     print("")
   }
   return(output)
 }
 
-
-# Sheepies<-ABCSIR(initSIR, lTarg = logTargetIPM, lTargPars = IPMLTP)
+# Maybe try out this algorithm as well?
+# https://link.springer.com/article/10.1007/s00180-021-01093-4
 
 
 

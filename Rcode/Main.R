@@ -59,12 +59,11 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 # Short-term to do
 # - What is the problem with using the covariance from the GLM for the initial proposal distribution? 
 #   check the state space projection routine with the different parameterisations that dont work
-# - Sort out sampling from the priors
-# - Modify simulation data to match real data (SumStats?)can think 
+# - Modify simulation data to match real data (SumStats?)
+
+
+# - Sort out sampling from the priors?
 # - Add different resample & perturbation functions
-# - Calculate the ESS to check it's not too low?
-
-
 # - parallelise properly obsFun when funcys is only one function
 # - make it possible to choose between Minkowski or distribution-based obsFun
 # - what is NoParts doing in all the old obsProb models?

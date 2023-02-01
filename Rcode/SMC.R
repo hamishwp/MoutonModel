@@ -517,11 +517,11 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
   # Note that this data.frame has D rows (number of bins/breaks)
   # stop("Change reprFunc and weightedSelection in sampleSpaceIPM_red")
   # stop("Does this explain why simulated data comparisons never worked when true parameters were provided?")
-  return(array(c(vectorToCounts(c(newSizesI),breaks),
-                 vectorToCounts(c(offSizes, newSizes), breaks),
-                 reprCounts,
-                 newCounts,
-                 vectorToCounts(c(offSizes),breaks)),
+  return(array(c(vectorToCounts(c(newSizesI),breaks), # survived population based on previous census size
+                 vectorToCounts(c(offSizes, newSizes), breaks), # growth-updated size
+                 reprCounts, # number that reproduced
+                 newCounts, # number of newly-borns
+                 vectorToCounts(c(offSizes),breaks)), # 
                dim = c(length(sizes),5),
                dimnames = list(round(sizes,digits = 2),
                                c("NoSurv","NoAlive","NoParents","avSurvOff","NoOff"))))
