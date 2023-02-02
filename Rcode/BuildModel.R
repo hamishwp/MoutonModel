@@ -280,7 +280,7 @@ if(NpCheck | !file.exists("Np-Supremum_similarity.RData")){
     labs(fill="ABC Samples")+xlab("Number of ABC Samples") + ylab("KLIEP Ratio (True Value = 1)");p
   ggsave("./Np-Supremum_similarity.png",p)
   saveRDS(simil,"Np-Supremum_similarity.RData")
-}
+} 
 
 
 
