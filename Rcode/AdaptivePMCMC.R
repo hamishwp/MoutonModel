@@ -910,11 +910,11 @@ CalcQuantile<-function(output,xPrev){
   # BLOODY DENSITY RATIO ALGORITHM IS A PAIN IN MY ARSE!
   q_thresh<-output$q_thresh[output$iteration]
   q_update<-tryCatch(Supremum(q_thresh,output$theta[output$distance>output$delta,],xPrev),error=function(e) NA)
-  if(is.na(q_update)) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],F),error=function(e) NA); print("Trying xNew & xPrev quantiles only")}
-  if(is.na(q_update)) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF")}
-  if(is.na(q_update)) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF and xNew & xPrev quantiles only")}
-  if(is.na(q_update)) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,]),error=function(e) NA); print("Reversing KLIEP num/denom")}
-  if(is.na(q_update)) {
+  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],F),error=function(e) NA); print("Trying xNew & xPrev quantiles only")}
+  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF")}
+  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF and xNew & xPrev quantiles only")}
+  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,]),error=function(e) NA); print("Reversing KLIEP num/denom")}
+  if(any(is.na(q_update))) {
     q_update<-c(q_thresh[length(q_thresh)],q_thresh)
     print("warning: issues with the quantile threshold calculation")
   } 
@@ -938,9 +938,9 @@ CalcESS<-function(output){
 # The ABCSIR (also referred to as ABCSMC) algorithm 
 ABCSIR<-function(initSIR, lTarg, lTargPars){
   # Initialisations of storage variables and algorithm parameters
-  xPrev<-initSIR$x0; indy<-1:length(xPrev); cycles<-initSIR$Np*initSIR$k
+  indy<-1:length(lTargPars$x0); cycles<-initSIR$Np*initSIR$k
   # Find theta*(t=1) delta(t=1) -> the ABC-rejection value
-  output<-InitABCSIR(lTarg, lTargPars, initSIR); output$iteration<-it<-1; output$q_thresh<-q_thresh<-c(0.95);
+  output<-InitABCSIR(lTarg, lTargPars, initSIR); output$iteration<-it<-1; output$q_thresh<-c(0.95); xPrev<-output$theta
   # Setup shop for the full algorithm
   saveRDS(list(output),paste0("output_",namer))
   # Run the algorithm!
