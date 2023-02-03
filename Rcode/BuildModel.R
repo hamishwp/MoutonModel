@@ -263,14 +263,14 @@ IPMLTP %<>% c(list(
 
 IPMLTP$priorF<-function(thth) IPMLTP$priorFunc(thth, IPMLTP$priors, IPMLTP$priorPars)
 
-if(NpCheck | !file.exists("Np-Supremum_similarity.RData")){
+if(NpCheck){
   print("Checking that number of samples per ABC-step is more than the minimum for the adaptive ABC threshold algorithm")
   simil<-data.frame()
   for(partsy in c(30,50,100,300,500,1000)){
     sss<-c()
     for(i in 1:150){
-      xNew<-multvarNormProp(xt=initSIR$x0, propPars=initSIR$propCOV, n=partsy)
-      xPrev<-multvarNormProp(xt=initSIR$x0, propPars=initSIR$propCOV, n=partsy)
+      xNew<-multvarNormProp(xt=x0, propPars=propCOV, n=partsy)
+      xPrev<-multvarNormProp(xt=x0, propPars=propCOV, n=partsy)
       sss%<>%c(Supremum(0.95,xPrev,xNew,warny = F)[1])
     }
     simil%<>%rbind(data.frame(Np=partsy,similarity=sss))

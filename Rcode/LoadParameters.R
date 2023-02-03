@@ -11,11 +11,11 @@ oneSex<-T
 # Is the observation probability an empirically-based fixed value or sampled as a R.V.?
 fixedObsProb<-T
 # Number of MCMC simulations
-itermax <- 30000
+itermax <- 60000
 # Do we need to calculate the number of particles required for the 
 calcParts<-F
 # Number of in-chain parallelised cores
-ncores<-14
+ncores<-64
 # Define the number of size class bins
 nbks<-10
 # Bins method:

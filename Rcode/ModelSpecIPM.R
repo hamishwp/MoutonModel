@@ -145,9 +145,8 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
                        sampleStatePar = stateSpaceSampArgs,
                        obsProbPar = obsProbPar, 
                        fixedObsProb=logTargetPars$fixedObsProb,
-                       NoParts = logTargetPars$b)#, error= function(e) -Inf)
-  # if(is.infinite(ll)) warning("failure to calc LL for current parameter choice, adapt covariance matrix")
-  
+                       NoParts = logTargetPars$b)
+
   if (returnW) return(ll)
   
   else{

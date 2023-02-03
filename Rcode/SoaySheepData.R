@@ -76,18 +76,16 @@ GetSoaySheep_binned <-function(SHEEP,shift=0.5,oneSex=T,nbks=10,regbinspace=F){
     solveDF<-SHEEP$solveDF[SHEEP$solveDF$census.number==censy,]
     D<-length(SHEEP$breaks)
     # Initialise output array - dimension are c(size bins, validation variables)
-    output<-array(NA,dim = c(D-1,5))
-    # Sheep that survived from last census, based on previous size bin
-    output[,1]<-vectorToCounts(c(solveDF$prev.size[solveDF$survived==1]), SHEEP$breaks)
+    output<-array(NA,dim = c(D-1,4))
+    # Sheep that survived from last census, based on current size bin
+    output[,1]<-vectorToCounts(c(solveDF$size[solveDF$survived==1]), 
+                               SHEEP$breaks) #- output[,1]
     # All sheep (including newborns)
     output[,2]<-vectorToCounts(c(solveDF$size), SHEEP$breaks)
-    # Sheep that were also parents in this censuss
+    # Sheep that were also parents in this census
     output[,3]<-vectorToCounts(c(solveDF$size[solveDF$reproduced==1]), SHEEP$breaks)
-    # Growth of survived individuals - to infer change from one size bin to another
-    output[,4]<-vectorToCounts(c(solveDF$size[solveDF$survived==1]), 
-                               SHEEP$breaks) #- output[,1]
     # Number of offspring per size bin
-    output[,5]<-vectorToCounts(c(solveDF$rec1.wt,solveDF$rec2.wt), SHEEP$breaks)
+    output[,4]<-vectorToCounts(c(solveDF$rec1.wt,solveDF$rec2.wt), SHEEP$breaks)
 
     return(output)
   }
@@ -97,7 +95,7 @@ GetSoaySheep_binned <-function(SHEEP,shift=0.5,oneSex=T,nbks=10,regbinspace=F){
   SHEEP$SumStats<-sapply(2:length(cen),
                          FUN = function(i) formData(SHEEP,cen[i]),
                          simplify = F) %>% unlist() %>%
-                         array(dim=c(nbks-1,5,length(cen)))
+                         array(dim=c(nbks-1,4,length(cen)))
 
   return(SHEEP)
   
@@ -113,7 +111,7 @@ x0<-do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedOb
 # Number of parameters
 Np<-length(unlist(x0))
 # Provide initial estimate of covariance matrix using the confidence intervals from the GLM:
-propCOV<-diag(unlist((do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,CI=T))))$sd))/Np
+propCOV<-diag(unlist((do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,CI=T))))$sd))
 # propCOV<-diag(Np)*(2.38)^2/Np
 lSHEEP$breaks<-calcBreaks(lSHEEP,nbks,regbinspace = regbinspace)
 # for truncated normal distributions

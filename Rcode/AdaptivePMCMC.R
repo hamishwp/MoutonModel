@@ -840,16 +840,17 @@ Supremum<-function(q_old,xNew,xPrev,xN=T,meth="KLIEP",warny=T){
   # Compute the ratio for the range of prediction values
   w_hat <- densratio_obj$compute_density_ratio(x_quants)
   # Return the updated supremum*, as a vector that includes the older values
-  return(c(1/max(w_hat),q_old))
+  return(c(q_old,1/max(w_hat)))
 }
 
 # Generate Np accepted particles (sets of model-parameters)
 # given the ABC-threshold (delta), target & resample functions and initial values
-GenAccSamples<-function(delta, initSIR, lTarg, lTargPars, ResampleSIR){
+GenAccSamples<-function(output, initSIR, lTarg, lTargPars, ResampleSIR){
   # How many particles do we want?
   particles<-initSIR$Np; Complete<-0
   # Output skeleton
-  output<-list(delta=delta,distance=c(),theta=array(dim = c(0,length(initSIR$x0))),
+  output<-list(delta=output$delta,iteration=output$iteration,q_thresh=output$q_thresh,
+               distance=c(),theta=array(dim = c(0,length(initSIR$x0))),
                weightings=c(),shat=array(dim = c(0,length(lTargPars$SumStats))))
   # Sample from parameter space until we have Np accepted particles
   while (particles>0){
@@ -860,7 +861,7 @@ GenAccSamples<-function(delta, initSIR, lTarg, lTargPars, ResampleSIR){
                          FUN = function(c) lTarg(SIR$theta[c,], lTargPars),
                          mc.cores = lTargPars$cores) %>% CombLogTargs()
     # Modify which particles are sampled from at next iteration
-    Complete<-sum(lTargNew$d>delta)+Complete
+    Complete<-sum(lTargNew$d>output$delta)+Complete
     # Save both accepted & rejected values
     output$distance%<>%c(lTargNew$d)
     output$theta%<>%rbind(SIR$theta)
@@ -908,14 +909,14 @@ defFsamp<-match.fun(perturber)
 
 CalcQuantile<-function(output,xPrev){
   # BLOODY DENSITY RATIO ALGORITHM IS A PAIN IN MY ARSE!
-  q_thresh<-output$q_thresh[output$iteration]
+  q_thresh<-output$q_thresh
   q_update<-tryCatch(Supremum(q_thresh,output$theta[output$distance>output$delta,],xPrev),error=function(e) NA)
   if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],F),error=function(e) NA); print("Trying xNew & xPrev quantiles only")}
   if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF")}
   if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF and xNew & xPrev quantiles only")}
   if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,]),error=function(e) NA); print("Reversing KLIEP num/denom")}
   if(any(is.na(q_update))) {
-    q_update<-c(q_thresh[length(q_thresh)],q_thresh)
+    q_update<-c(q_thresh,q_thresh[length(q_thresh)])
     print("warning: issues with the quantile threshold calculation")
   } 
   return(q_update)
@@ -925,7 +926,7 @@ ModThresh<-function(output,xPrev){
   # Calculate the quantile function
   output$q_thresh<-CalcQuantile(output,xPrev)
   # Decrease the current ABC-threshold
-  output$delta<-output$delta/output$q_thresh[output$iteration+1]
+  output$delta<-output$delta/output$q_thresh[output$iteration]
   
   return(output)
 }
@@ -950,7 +951,7 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
     # Dynamically define the resample & perturb function of new parameter sets
     ResampleSIR<-defFsamp(outin = output,SumStats = c(lTargPars$SumStats),priorF = lTargPars$priorF)
     # SIR routine
-    output<-GenAccSamples(output$delta, initSIR, lTarg, lTargPars, ResampleSIR)
+    output<-GenAccSamples(output, initSIR, lTarg, lTargPars, ResampleSIR)
     # Modify the ABC-threshold adaptively
     output<-ModThresh(output,xPrev)
     # Calculate the Effective Sample Size (ESS), noting that it is already normalised
@@ -963,7 +964,7 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
     prev<-readRDS(paste0("output_",namer)); saveRDS(c(prev,list(output)),paste0("output_",namer)); rm(prev)
     # Tell me what's good... please, please, please
     print(paste0("Step = ",it,", No. samples = ",cycles,", eps = ",signif(output$delta,3),
-                 " with 1/c = ",output$q_thresh[it]," and ESS = ",output$ESS))
+                 " with 1/c = ",signif(output$q_thresh[it],2)," and ESS = ",signif(output$ESS,3)))
     print("")
   }
   return(output)
