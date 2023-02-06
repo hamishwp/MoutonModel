@@ -665,7 +665,7 @@ Minkowski<-function(sest,sobs,dimmie,p=1){
   # output total distance
   return(list(shat=meds,
               d=-abs(pracma::nthroot(mean(d_i[!is.infinite(d_i)]^p,na.rm = T),p)*infies),
-              sw=sw))
+              sw=sw+1e-300)) # add a small cap to make sure not all probabilities are negative
 }
 # IPM Particle Filter function
 particleFilter <- function(Sd, mu, muPar, sampleState, sampleStatePar, obsProb,

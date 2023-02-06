@@ -843,6 +843,14 @@ Supremum<-function(q_old,xNew,xPrev,xN=T,meth="KLIEP",warny=T){
   return(c(q_old,1/max(w_hat)))
 }
 
+RemNA<-function(lTargNew,SIR){
+  ids<-!is.na(lTargNew$d)
+  lTargNew$d<-lTargNew$d[ids]; lTargNew$shat<-lTargNew$shat[ids,]
+  SIR$theta<-SIR$theta[ids,]; SIR$weightings<-SIR$weightings[ids]
+  
+  return(list(lTargNew=lTargNew,SIR=SIR))
+}
+
 # Generate Np accepted particles (sets of model-parameters)
 # given the ABC-threshold (delta), target & resample functions and initial values
 GenAccSamples<-function(output, initSIR, lTarg, lTargPars, ResampleSIR){
@@ -859,9 +867,13 @@ GenAccSamples<-function(output, initSIR, lTarg, lTargPars, ResampleSIR){
     # Sample from the target distribution
     lTargNew <- mclapply(X = 1:max(particles,lTargPars$cores),
                          FUN = function(c) lTarg(SIR$theta[c,], lTargPars),
-                         mc.cores = lTargPars$cores) %>% CombLogTargs()
+                         mc.cores = lTargPars$cores)
+    saveRDS(list(lTargNew=lTargNew,xNew=SIR$theta,output=output),"./lTargNew_tmp.RData")
+    lTargNew %<>% CombLogTargs()
+    # Remove any NA values
+    tmp<-RemNA(lTargNew,SIR); lTargNew<-tmp$lTargNew; SIR<-tmp$SIR; rm(tmp)
     # Modify which particles are sampled from at next iteration
-    Complete<-sum(lTargNew$d>output$delta)+Complete
+    Complete<-sum(lTargNew$d>output$delta[output$iteration])+Complete
     # Save both accepted & rejected values
     output$distance%<>%c(lTargNew$d)
     output$theta%<>%rbind(SIR$theta)
@@ -873,7 +885,7 @@ GenAccSamples<-function(output, initSIR, lTarg, lTargPars, ResampleSIR){
     print(paste0(particles," out of ",initSIR$Np," left to simulate"))
   }
   # Set the weights of rejected particles to zero
-  output$weightings[output$distance<output$delta]<-0
+  output$weightings[output$distance<output$delta[output$iteration]]<-0
   # Normalise the weights
   output$weightings<-output$weightings/sum(output$weightings)
   
@@ -899,7 +911,9 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
              theta=xNew,
              weightings=wtwt,
              shat=lTargNew$shat,
-             delta=delta0)
+             delta=c(delta0),
+             q_thresh=c(0.95),
+             iteration=1)
   
   return(outy)
 }
@@ -910,11 +924,11 @@ defFsamp<-match.fun(perturber)
 CalcQuantile<-function(output,xPrev){
   # BLOODY DENSITY RATIO ALGORITHM IS A PAIN IN MY ARSE!
   q_thresh<-output$q_thresh
-  q_update<-tryCatch(Supremum(q_thresh,output$theta[output$distance>output$delta,],xPrev),error=function(e) NA)
-  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],F),error=function(e) NA); print("Trying xNew & xPrev quantiles only")}
-  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF")}
-  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,],T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF and xNew & xPrev quantiles only")}
-  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta,]),error=function(e) NA); print("Reversing KLIEP num/denom")}
+  q_update<-tryCatch(Supremum(q_thresh,output$theta[output$distance>output$delta[output$iteration],],xPrev),error=function(e) NA)
+  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta[output$iteration],],F),error=function(e) NA); print("Trying xNew & xPrev quantiles only")}
+  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta[output$iteration],],T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF")}
+  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta[output$iteration],],T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF and xNew & xPrev quantiles only")}
+  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,output$theta[output$distance>output$delta[output$iteration],]),error=function(e) NA); print("Reversing KLIEP num/denom")}
   if(any(is.na(q_update))) {
     q_update<-c(q_thresh,q_thresh[length(q_thresh)])
     print("warning: issues with the quantile threshold calculation")
@@ -926,9 +940,19 @@ ModThresh<-function(output,xPrev){
   # Calculate the quantile function
   output$q_thresh<-CalcQuantile(output,xPrev)
   # Decrease the current ABC-threshold
-  output$delta<-output$delta/output$q_thresh[output$iteration]
+  output$delta[output$iteration+1L]<-output$delta[output$iteration]/output$q_thresh[output$iteration]
   
   return(output)
+}
+
+CalcAltW<-function(output){
+  output$weightings<-rep(0,length(output$weightings))
+  # Weights are the number of particles that made it through current thresholds over the previous iteration
+  output$weightings[output$distance>output$delta[output$iteration]]<-
+    sum(output$distance>=output$delta[output$iteration])/
+    sum(output$distance>=output$delta[output$iteration-1])
+  # Return the normalised weights
+  return(output$weightings/sum(output$weightings))
 }
 
 CalcESS<-function(output){
@@ -941,9 +965,9 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
   # Initialisations of storage variables and algorithm parameters
   indy<-1:length(lTargPars$x0); cycles<-initSIR$Np*initSIR$k
   # Find theta*(t=1) delta(t=1) -> the ABC-rejection value
-  output<-InitABCSIR(lTarg, lTargPars, initSIR); output$iteration<-it<-1; output$q_thresh<-c(0.95); xPrev<-output$theta
+  if(is.null(initSIR$output)) {output<-InitABCSIR(lTarg, lTargPars, initSIR); it<-1} else {output<-initSIR$output; it<-output$iteration}
   # Setup shop for the full algorithm
-  saveRDS(list(output),paste0("output_",namer))
+  saveRDS(list(output),paste0("output_",namer));xPrev<-output$theta
   # Run the algorithm!
   while(!(output$q_thresh[it] > 0.99 & it>3) | cycles > initSIR$itermax){
     # Set the ABC-step number
@@ -954,16 +978,18 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
     output<-GenAccSamples(output, initSIR, lTarg, lTargPars, ResampleSIR)
     # Modify the ABC-threshold adaptively
     output<-ModThresh(output,xPrev)
-    # Calculate the Effective Sample Size (ESS), noting that it is already normalised
-    output$ESS<-CalcESS(output)
     # How many samples have we taken sum_t(D_t)?
     cycles<-cycles+nrow(output$theta); output$iteration<-it
+    # Calculate weights by no. rejected particles using the current and previous ABC-threshold
+    if(altWeights) output$weightings<-CalcAltW(output)
+    # Calculate the Effective Sample Size (ESS), noting that it is already normalised
+    output$ESS<-CalcESS(output)
     # Save previous parameter space samples
-    xPrev<-output$theta[output$distance>=output$delta,]
+    xPrev<-output$theta[output$distance>=output$delta[output$iteration-1],]
     # Save the output!
     prev<-readRDS(paste0("output_",namer)); saveRDS(c(prev,list(output)),paste0("output_",namer)); rm(prev)
     # Tell me what's good... please, please, please
-    print(paste0("Step = ",it,", No. samples = ",cycles,", eps = ",signif(output$delta,3),
+    print(paste0("Step = ",it,", No. samples = ",cycles,", eps = ",signif(output$delta[output$iteration],3),
                  " with 1/c = ",signif(output$q_thresh[it],2)," and ESS = ",signif(output$ESS,3)))
     print("")
   }

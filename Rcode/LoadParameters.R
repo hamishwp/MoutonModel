@@ -15,7 +15,7 @@ itermax <- 60000
 # Do we need to calculate the number of particles required for the 
 calcParts<-F
 # Number of in-chain parallelised cores
-ncores<-14
+ncores<-64
 # Define the number of size class bins
 nbks<-10
 # Bins method:
@@ -30,6 +30,8 @@ manshift<-F
 normsampler<-"sampleDTN"
 # What algorithm to use to parameterise the model?
 algorithm<-"ABCSIR"
+# For the ABCSMC particle weights, do we want the standard or the alternative (Filipi 2012) method?
+altWeights<-T
 # Which perturbation function to the aSMC resampler?
 perturber<-"pert_GlobCov"
 # If using a nearest neighbour perturbation, how many neighbours are required?

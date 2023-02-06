@@ -21,12 +21,24 @@ if(simulation) {source(paste0(directory,'Rcode/SimulateSheepData.R'))
 # Build up the model based on the parameters and sheep data
 source(paste0(directory,'Rcode/BuildModel.R'))
 # Check that the log-likelihood values make sense before running the full parallelised code
-print("Initial Values Log-Likelihood=")
-print(logTargetIPM(x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F))
+# print("Initial Values Log-Likelihood=")
+# print(logTargetIPM(x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F))
 # Setup the initial values for the ABSSIR algorithm:
 initSIR<-list(x0=x0, propCOV=propCOV, itermax=itermax,
               Np=1500L, # this is the number of particles to pass the ABC threshold
               k=2L) # this sets the number of particles to trial in ABC as N_trial=k*N (see table 2, U. Simola, et al, Bayesian Analysis (2021) 16, Number 2, Adaptive Approximate Bayesian Computation
+
+
+
+
+
+output<-readRDS("./output_REAL_ABCSIR_pert_GlobCov_fixed_poissonMu_poissonObs_GLMx0_60000_10brks_regbinspaceFALSE_sampleDTN_autoshift")[[1]]
+initSIR$output<-output
+
+
+
+
+
 # Save everything we need to replicate this run:
 earlytag<-paste0(namer,"_",priorName,"_its",itermax,"_",gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = ""),"_rand",round(runif(1,max = 1000)))
 saveRDS(list(
