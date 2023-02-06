@@ -472,10 +472,10 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
   newSizesI <- rep(rbinom(n=D, size=previousState, prob = survFunc(sizes, survPars)),x=sizes)  
   # If none survive, return empty set
   if (length(newSizesI)==0) return(
-    array(c(reppie,reppie,reppie,reppie),
-          dim = c(length(sizes),4),
+    array(c(reppie,reppie,reppie),
+          dim = c(length(sizes),3),
           dimnames = list(round(sizes,digits = 2),
-                          c("NoSurv","TotalAlive","NoParents","NoOff"))))
+                          c("NoSurv","NoParents","NoOff"))))
   # What would the growth of such a population be in one year?
   newSizes <- growthSamp(newSizesI, growthPars)
   # Bin these by breaks
@@ -488,14 +488,12 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
   reprCounts <- rbinom(D, newCounts, reprProbs)
   # Check if any births occurred
   if (sum(reprCounts)==0) {
-    return(array(c(vectorToCounts(c(newSizesI),breaks),
-                   newCounts,
+    return(array(c(newCounts,
                    reprCounts,
-                   newCounts,
                    reppie),
-          dim = c(length(sizes),4),
+          dim = c(length(sizes),3),
           dimnames = list(round(sizes,digits = 2),
-                          c("NoSurv","TotalAlive","NoParents","NoOff"))))
+                          c("NoSurv","NoParents","NoOff"))))
   } else {
     # Modify the number of reproducing sheep to retain females only
     if(oneSex) {
@@ -518,12 +516,11 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
   # stop("Change reprFunc and weightedSelection in sampleSpaceIPM_red")
   # stop("Does this explain why simulated data comparisons never worked when true parameters were provided?")
   return(array(c(vectorToCounts(c(newSizes),breaks), # survived population based on previous census size
-                 vectorToCounts(c(offSizes, newSizes), breaks), # total population
                  reprCounts, # parents
                  vectorToCounts(c(offSizes),breaks)), # offspring counts
-               dim = c(length(sizes),4),
+               dim = c(length(sizes),3),
                dimnames = list(round(sizes,digits = 2),
-                               c("NoSurv","TotalAlive","NoParents","NoOff"))))
+                               c("NoSurv","NoParents","NoOff"))))
 }
 
 ################################# UTILS ########################################
@@ -542,7 +539,7 @@ vectorisedSamplerIPM_ABCSIR <- function(initialStates, SamplerArgs){
   helper <- function(vec) do.call(sampleStateIPM_ABCSIR, c(list(vec), SamplerArgs))
   
   array(apply(initialStates,2, helper,simplify = T),
-        dim=c(length(SamplerArgs$sizes),4,ncol(initialStates)))
+        dim=c(length(SamplerArgs$sizes),3,ncol(initialStates)))
   
 }
 
@@ -645,6 +642,9 @@ eminmaxScale<-function(sw) exp((sw-min(sw,na.rm = T))/(max(sw,na.rm = T)-min(sw,
 # Distances were taken from https://www.biorxiv.org/content/10.1101/2021.07.29.454327v1.full.pdf
 # Note that if p=1 we are using the L1 distances - our default
 Minkowski<-function(sest,sobs,dimmie,p=1){
+  # Remove all summary statistics that are the same across the observed and simulated values
+  sds<-apply(cbind(sest,array(sobs,dim=c(length(sobs),1))),1,sd,na.rm=T)
+  sest<-sest[sds!=0,]; sobs<-sobs[sds!=0]
   # Median of columns
   meds<-apply(sest,1,median,na.rm=T)
   # Median Absolute Deviation (MAD) to the sample
@@ -704,7 +704,7 @@ particleFilter <- function(Sd, mu, muPar, sampleState, sampleStatePar, obsProb,
   prevStates <- do.call(mu, muPar)
   # Setup weight matrix and standardised weight matrix:
   output <- list(d=1, sw=rep(1,NoParts),
-                 shat=array(NA, dim=c(nrow(Sd),4,t)))
+                 shat=array(NA, dim=c(nrow(Sd),3,t)))
   # Update weights for first time step:
   wArgs <- list(Sd=Sd, pobs=obsProbPar, NoParts=NoParts)
   

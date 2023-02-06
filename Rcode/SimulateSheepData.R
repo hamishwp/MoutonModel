@@ -23,7 +23,7 @@ if(fixedObsProb) {
   lSHEEP$obsProbTime <- rep(obsMean,yearing+1)
 } else lSHEEP$obsProbTime <- rbeta(yearing+1,vals$obsProbPar[1],vals$obsProbPar[2])
 # Create a fairly uninformative covariance matrix for the proposal distribution
-propCOV<-diag(Np)*(2.38)^2/Np/Np
+propCOV<-diag(Np)*(2.38)^2
 
 # Convert to physical coordinates
 vals%<>%Sample2Physical(IPMLTP)
@@ -39,58 +39,74 @@ popmod<-kernelOneVar(m = 500, growthFunc = IPMLTP$growthFunc,
 
 popinc<-Re(popmod$values[1])
 eigvec<-data.frame(size=seq(lSHEEP$L,lSHEEP$U,length.out=500),prob=-Re(popmod$vectors[,1]))
-cumy<-cumsum(abs(eigvec$prob)); cumy<-cumy/max(cumy)
+# cumy<-cumsum(abs(eigvec$prob)); cumy<-cumy/max(cumy)
+
+# # Setup the size classes based upon the eigenvector
+# if(regbinspace){
+#   # Let's make sure that the smallest bin contains 1/nbrks of the population
+#   minbin<-eigvec$size[which.min(abs(cumy-1/nbks))]
+#   lSHEEP$breaks<-seq(minbin,lSHEEP$U-1e-5,length.out=nbks)
+# } else {
+#   lSHEEP$breaks<-sapply(0:(nbks-1)/(nbks-1),function(quant) eigvec$size[which.min(abs(quant-cumy))])
+# }
+# # Calculate the ideal shift in the size classes for the state space projection
+# if(!manshift) {shift<-CalcShift_Kernel(x0 = vals, IPMLTP = IPMLTP,nbks = nbks,
+#                                        breaks = lSHEEP$breaks,
+#                                        halfpop = oneSex,L = lSHEEP$L,U = lSHEEP$U)
+# } else shift<-0.5
+# # Now setup the ideal class sizes
+# lSHEEP$sizes <- lSHEEP$breaks[-(nbks)] + shift*diff(lSHEEP$breaks)
+# 
+# lSHEEP$COUNTS<-sapply(1:yearing, function(t) vectorToCounts(sample(eigvec$size,
+#                                                                    poptot+round(poptot*(popinc-1))*(t-1),
+#                                                                    prob = abs(eigvec$prob),replace = T),lSHEEP$breaks))
+# lSHEEP$cNames<-c(vapply(paste0("yr_",as.character(1:yearing),"__"), 
+#                      function(yname) paste0(yname,paste0("sz_",as.character(signif(lSHEEP$sizes,4)))),
+#                      character(length(lSHEEP$sizes))))
+# 
+# lSHEEP$priorProbs<-rowSums(lSHEEP$COUNTS)/sum(lSHEEP$COUNTS)
+# saveRDS(list(vals=vals,lSHEEP=lSHEEP),paste0("Results/SimulatedData_",namer,".Rdata"))
+
+###################### SIMULATE THE INDIVIDUAL BASED MODEL ######################
 
 Starties<-sample(eigvec$size,poptot,prob = abs(eigvec$prob),replace = T)
 
-# Setup the size classes based upon the eigenvector
-if(regbinspace){
-  # Let's make sure that the smallest bin contains 1/nbrks of the population
-  minbin<-eigvec$size[which.min(abs(cumy-1/nbks))]
-  lSHEEP$breaks<-seq(minbin,lSHEEP$U-1e-5,length.out=nbks)
-} else {
-  lSHEEP$breaks<-sapply(0:(nbks-1)/(nbks-1),function(quant) eigvec$size[which.min(abs(quant-cumy))])
+simPars <- list(n=100, t=11,
+                # set survival details:
+                survFunc = IPMLTP$survFunc, survPars = vals$survPars,
+                # set growth details:
+                growthSamp = IPMLTP$growthSamp,
+                growthPars = vals$growthPars,
+                # set reproduction details:
+                reprFunc = IPMLTP$reprFunc, reprPars = vals$reprPars,
+                # set offspring number and size distribution details:
+                offNumSamp=IPMLTP$offNumSamp, offNumPars=vals$offNumPars,
+                offSizeSamp = IPMLTP$offSizeSamp,
+                offSizePars = vals$offSizePars,
+                # Child survival probability:
+                Schild=vals$Schild,
+                # set other miscelaneous parameters:
+                Start = Starties, thresh=10000, OneGend = TRUE,
+                popPrint = F, verbose=F)
+
+# Let's simulate some sheeepieeeesss!
+lSHEEP <- do.call(simulateIBM, simPars)
+
+lSHEEP$breaks<-calcBreaks(lSHEEP,nbks,regbinspace = regbinspace)
+
+# for truncated normal distributions
+if(normsampler=="sampleDTN") {
+  IPMLTP$DTN<-data.frame(L=lSHEEP$L,U=lSHEEP$U)
 }
-# Calculate the ideal shift in the size classes for the state space projection
-if(!manshift) {shift<-CalcShift_Kernel(x0 = vals, IPMLTP = IPMLTP,nbks = nbks,
+# Calculate the shift factor that offsets the size class mid-point
+if(!manshift) {shift<-CalcShift_Kernel(x0 = Sample2Physical(x0,IPMLTP),IPMLTP = IPMLTP,nbks = nbks,
                                        breaks = lSHEEP$breaks,
                                        halfpop = oneSex,L = lSHEEP$L,U = lSHEEP$U)
 } else shift<-0.5
-# Now setup the ideal class sizes
-lSHEEP$sizes <- lSHEEP$breaks[-(nbks)] + shift*diff(lSHEEP$breaks)
+print(paste0("Grid shift = ",shift, " for ",nbks," number of breaks." ))
+# Get the sheep counts and sizes from the actual data (required even if simulated data is used)
+lSHEEP<-GetSoaySheep_binned(lSHEEP,shift=shift,oneSex=T,nbks=nbks,regbinspace=regbinspace)  
 
-lSHEEP$COUNTS<-sapply(1:yearing, function(t) vectorToCounts(sample(eigvec$size,
-                                                                   poptot+round(poptot*(popinc-1))*(t-1),
-                                                                   prob = abs(eigvec$prob),replace = T),lSHEEP$breaks))
-lSHEEP$cNames<-c(vapply(paste0("yr_",as.character(1:yearing),"__"), 
-                     function(yname) paste0(yname,paste0("sz_",as.character(signif(lSHEEP$sizes,4)))),
-                     character(length(lSHEEP$sizes))))
-
-lSHEEP$priorProbs<-rowSums(lSHEEP$COUNTS)/sum(lSHEEP$COUNTS)
-saveRDS(list(vals=vals,lSHEEP=lSHEEP),paste0("Results/SimulatedData_",namer,".Rdata"))
-
-###################### SIMULATE THE INDIVIDUAL BASED MODEL ######################
-# 
-# simPars <- list(n=100, t=300,
-#                 # set survival details:
-#                 survFunc = IPMLTP$survFunc, survPars = vals$survPars,
-#                 # set growth details:
-#                 growthSamp = IPMLTP$growthSamp,
-#                 growthPars = vals$growthPars,
-#                 # set reproduction details:
-#                 reprFunc = IPMLTP$reprFunc, reprPars = vals$reprPars,
-#                 # set offspring number and size distribution details:
-#                 offNumSamp=IPMLTP$offNumSamp, offNumPars=vals$offNumPars,
-#                 offSizeSamp = IPMLTP$offSizeSamp,
-#                 offSizePars = vals$offSizePars,
-#                 # Child survival probability:
-#                 Schild=vals$Schild,
-#                 # set other miscelaneous parameters:
-#                 Start = Starties, thresh=10000, OneGend = TRUE,
-#                 popPrint = F, verbose=F)
-# 
-# # Let's simulate some sheeepieeeesss!
-# simmedData <- do.call(simulateIBM, simPars)
 #################################################################################
 
 ###################### SIMULATE THE STATE SPACE MODEL ######################

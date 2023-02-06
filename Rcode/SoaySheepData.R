@@ -38,69 +38,6 @@ GetSoaySheep <-function(directory="/home/patten/Documents/Coding/Oxford/MoutonMo
   
 }
 
-calcBreaks<-function(SHEEP,nbks,regbinspace=T){
-  # Get breakpoints (histogram bin intervals), count data, and growth rate per census:
-  if(regbinspace){
-    breaks<-ggplot_build(ggplot()+geom_histogram(data=SHEEP$solveDF,mapping=aes(size),bins = nbks))$data[[1]]$x
-    # Merge all bins that are in the lowest 5th percentile
-    minnie<-quantile(SHEEP$solveDF$size,1/nbks,na.rm = T)%>%unname()
-    breaks<-seq(from=minnie,to=max(breaks),length.out=nbks)
-    # others<-seq(from=minnie,to=max(breaks),length.out=(nbks-1))
-    # breaks<-c(min(breaks),others)
-    if(breaks[nbks]>SHEEP$U) breaks[nbks]<-max(c(SHEEP$solveDF$size,SHEEP$solveDF$prev.size),na.rm = T)-1e-5
-    if(breaks[1]>SHEEP$L) breaks[1]<-min(c(SHEEP$solveDF$size,SHEEP$solveDF$prev.size),na.rm = T)+1e-5
-  } else {
-    breaks<-quantile(c(SHEEP$solveDF$prev.size,SHEEP$solveDF$size),probs = 0:(nbks-1)/(nbks-1),na.rm = T)%>%unname
-  }
-  return(breaks)
-}
-
-GetSoaySheep_binned <-function(SHEEP,shift=0.5,oneSex=T,nbks=10,regbinspace=F){
-  
-  SHEEP$breaks<-calcBreaks(SHEEP,nbks,regbinspace)
-  
-  SHEEP$sizes <- SHEEP$breaks[-(nbks)] + shift*diff(SHEEP$breaks)
-  breaks<-SHEEP$breaks; breaks[c(1,nbks)]<-c(-Inf,Inf)
-  SHEEP$COUNTS <- getSizeDistns(SHEEP$solveDF, SHEEP$breaks)
-  SHEEP$cNames<-c(vapply(paste0("yr_",as.character(SHEEP$solveDF$sheep.yr),"__"), 
-                        function(yname) paste0(yname,paste0("sz_",as.character(signif(SHEEP$sizes,4)))),
-                        character(length(SHEEP$sizes))))
-  
-  SHEEP$priorProbs<-rowSums(SHEEP$COUNTS)/sum(SHEEP$COUNTS)
-  SHEEP$obsProbTime <- apply(SHEEP$COUNTS, 2, sum)/SHEEP$detectedNum
-  
-  # What form? array? We have size bins, variable and year, so 3D matrix?
-  
-  formData<-function(SHEEP, censy){
-    # Filter by census first
-    solveDF<-SHEEP$solveDF[SHEEP$solveDF$census.number==censy,]
-    D<-length(SHEEP$breaks)
-    # Initialise output array - dimension are c(size bins, validation variables)
-    output<-array(NA,dim = c(D-1,4))
-    # Sheep that survived from last census, based on current size bin
-    output[,1]<-vectorToCounts(c(solveDF$size[solveDF$survived==1]), 
-                               SHEEP$breaks) #- output[,1]
-    # All sheep (including newborns)
-    output[,2]<-vectorToCounts(c(solveDF$size), SHEEP$breaks)
-    # Sheep that were also parents in this census
-    output[,3]<-vectorToCounts(c(solveDF$size[solveDF$reproduced==1]), SHEEP$breaks)
-    # Number of offspring per size bin
-    output[,4]<-vectorToCounts(c(solveDF$rec1.wt,solveDF$rec2.wt), SHEEP$breaks)
-
-    return(output)
-  }
-  
-  cen<-unique(SHEEP$solveDF$census.number)
-  
-  SHEEP$SumStats<-sapply(2:length(cen),
-                         FUN = function(i) formData(SHEEP,cen[i]),
-                         simplify = F) %>% unlist() %>%
-                         array(dim=c(nbks-1,4,length(cen)))
-
-  return(SHEEP)
-  
-}
-
 ###################################################################################
 ####################### Load data and the initial values ##########################
 ###################################################################################

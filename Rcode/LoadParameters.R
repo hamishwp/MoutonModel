@@ -15,7 +15,7 @@ itermax <- 60000
 # Do we need to calculate the number of particles required for the 
 calcParts<-F
 # Number of in-chain parallelised cores
-ncores<-64
+ncores<-14
 # Define the number of size class bins
 nbks<-10
 # Bins method:

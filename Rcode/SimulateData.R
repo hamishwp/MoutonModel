@@ -127,6 +127,63 @@ sampleExp <- function(z, pars){
   return(samples)
 }
 
+calcBreaks<-function(SHEEP,nbks,regbinspace=T){
+  # Get breakpoints (histogram bin intervals), count data, and growth rate per census:
+  if(regbinspace){
+    breaks<-ggplot_build(ggplot()+geom_histogram(data=SHEEP$solveDF,mapping=aes(size),bins = nbks))$data[[1]]$x
+    # Merge all bins that are in the lowest 5th percentile
+    minnie<-quantile(SHEEP$solveDF$size,1/nbks,na.rm = T)%>%unname()
+    breaks<-seq(from=minnie,to=max(breaks),length.out=nbks)
+    # others<-seq(from=minnie,to=max(breaks),length.out=(nbks-1))
+    # breaks<-c(min(breaks),others)
+    if(breaks[nbks]>SHEEP$U) breaks[nbks]<-max(c(SHEEP$solveDF$size,SHEEP$solveDF$prev.size),na.rm = T)-1e-5
+    if(breaks[1]>SHEEP$L) breaks[1]<-min(c(SHEEP$solveDF$size,SHEEP$solveDF$prev.size),na.rm = T)+1e-5
+  } else {
+    breaks<-quantile(c(SHEEP$solveDF$prev.size,SHEEP$solveDF$size),probs = 0:(nbks-1)/(nbks-1),na.rm = T)%>%unname
+  }
+  return(breaks)
+}
+
+GetSoaySheep_binned <-function(SHEEP,shift=0.5,oneSex=T,nbks=10,regbinspace=F){
+  
+  SHEEP$breaks<-calcBreaks(SHEEP,nbks,regbinspace)
+  
+  SHEEP$sizes <- SHEEP$breaks[-(nbks)] + shift*diff(SHEEP$breaks)
+  breaks<-SHEEP$breaks; breaks[c(1,nbks)]<-c(-Inf,Inf)
+  SHEEP$COUNTS <- getSizeDistns(SHEEP$solveDF, SHEEP$breaks)
+  
+  SHEEP$priorProbs<-rowSums(SHEEP$COUNTS)/sum(SHEEP$COUNTS)
+  SHEEP$obsProbTime <- apply(SHEEP$COUNTS, 2, sum)/SHEEP$detectedNum
+  
+  # What form? array? We have size bins, variable and year, so 3D matrix?
+  
+  formData<-function(SHEEP, censy){
+    # Filter by census first
+    solveDF<-SHEEP$solveDF[SHEEP$solveDF$census.number==censy,]
+    D<-length(SHEEP$breaks)
+    # Initialise output array - dimension are c(size bins, validation variables)
+    output<-array(NA,dim = c(D-1,3))
+    # Sheep that survived from last census, based on current size bin
+    output[,1]<-vectorToCounts(c(solveDF$size[solveDF$survived==1]), 
+                               SHEEP$breaks) #- output[,1]
+    # Sheep that were also parents in this census
+    output[,2]<-vectorToCounts(c(solveDF$size[solveDF$reproduced==1]), SHEEP$breaks)
+    # Number of offspring per size bin
+    output[,3]<-vectorToCounts(c(solveDF$rec1.wt,solveDF$rec2.wt), SHEEP$breaks)
+    
+    return(output)
+  }
+  
+  cen<-unique(SHEEP$solveDF$census.number)
+  
+  SHEEP$SumStats<-sapply(2:length(cen),
+                         FUN = function(i) formData(SHEEP,cen[i]),
+                         simplify = F) %>% unlist() %>%
+    array(dim=c(nbks-1,3,length(cen)))
+  
+  return(SHEEP)
+  
+}
 
 simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
                         reprFunc, reprPars, offNum=NULL, offNumSamp=NULL,
@@ -213,12 +270,13 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     
     DF <- data.frame(id=1:n, size=initial.sizes, survived=1, 
                      census.number=1, parent.size=Start, reproduced=NA, 
+                     rec1.wt=NA, rec2.wt=NA,
                      prev.size=NA, off.survived=NA, off.born=NA)  
     
   } else DF <- data.frame(id=1:n, size=Start, survived=rep(1,length(Start)), 
                           census.number=rep(1,length(Start)), 
                           parent.size=sample(Start,length(Start),replace = T), 
-                          reproduced=NA, 
+                          reproduced=NA, rec1.wt=NA, rec2.wt=NA,
                           prev.size=NA, off.survived=NA, off.born=NA)
   
   # create a data.frame which contains only the individuals from the previous
@@ -255,7 +313,7 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     parentsDF <- survivorsDF[iids,]
     
     # Determine the number of offspring for each parent:
-    if (!is.null(offNumPars)) {censusOffNum <-(rpois(reproducers[iids],offNumPars-1L)+1L)
+    if (!is.null(offNumPars)) {censusOffNum <-offNumSamp(reproducers[iids], offNumPars)
     }else if(!is.null(offNum)) {censusOffNum <- rep(reproducers[iids],offNum)
     }else stop("No offspring parameters provided, check offNum or offNumPars")
     # parentSizes <- offNumSamp(reproducers, offNumPars)
@@ -305,14 +363,30 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
              sum(x==parentIDs))
     }#helper2
 
+    helper3<-function(x){
+      
+      if(x %in% parentIDs){
+        # Which parents had offspring?
+        tmp<-offspringSizes[parentIDs==x]
+        if(length(tmp)>=2) {
+          return(c(rec1.wt=tmp[1],rec2.wt=tmp[2]))
+        } else if(length(tmp)==1){
+          return(c(rec1.wt=tmp,rec2.wt=NA))
+        } else stop("Something wrong with number of offspring in simulated data")
+          
+      } else return(c(rec1.wt=NA,rec2.wt=NA))
+      
+    }
     # Only use the helper if the user wants us to. Otherwise make a vector of
     # NAs for speed of calculation:
     if (isTRUE(CalcOffSurv)){
       off.survived <- sapply(survivorsDF$id, helper)
       off.born <- sapply(survivorsDF$id, helper2)
+      rec.wt<- t(sapply(survivorsDF$id,helper3))
     } else{
       off.survived <- rep(NA, current.pop.size)
       off.born <- rep(NA, current.pop.size)
+      rec.wt <- matrix(NA, nrow = current.pop.size, ncol = 2)
     }
     
     # Create the DF for the parents:
@@ -322,6 +396,8 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
                             census.number=time,
                             parent.size=NA,
                             reproduced=reproducers,
+                            rec1.wt=rec.wt[,1],
+                            rec2.wt=rec.wt[,2],
                             prev.size=survivorsDF$size,
                             off.survived=off.survived,
                             off.born=off.born)
@@ -335,7 +411,7 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
                                 size = offspringSizes[censusedChildren],
                                 survived = 1, census.number = time,
                                 parent.size = parentSizes[censusedChildren],
-                                reproduced = NA, prev.size = NA,
+                                reproduced = NA, rec1.wt=NA, rec2.wt=NA, prev.size = NA,
                                 off.survived = NA, off.born = NA)
       
       # Update the previous.census data.frame:
@@ -352,10 +428,15 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     if(popPrint) print(nrow(previous.census))
   }
   
+  detectedLiveFemales <- DF%>%filter(survived==1)%>%group_by(census.number)%>%
+    summarise(detectedNum=length(size),.groups = 'drop_last')%>%pull(detectedNum)%>%unname()
   
   if(!is.null(obsProb)) DF[sample(1:nrow(DF),size = round((1-obsProb)*nrow(DF)),replace = F),-c(1,4)]<-NA
   
-  return(DF)
+  return(list(solveDF=DF,
+              detectedNum=detectedLiveFemales,
+              L=min(c(DF$size,DF$prev.size),na.rm = T),U=max(c(DF$size,DF$prev.size),na.rm = T)))
+
 }
 
 
