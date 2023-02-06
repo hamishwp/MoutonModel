@@ -38,7 +38,7 @@ if(is.null(funcys)){
                          sobs = c(wArgs$Sd[,,wArgs$time]),
                          dimmie=dim(wArgs$Sstar)[3])
       # Merge into a single output object
-      output$d<-disties$d*output$d; output$sw<-disties$sw
+      output$d<--abs(disties$d*output$d); output$sw<-disties$sw
       # Census-dependent dataframe
       output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
       return(output)
@@ -55,7 +55,7 @@ if(is.null(funcys)){
                          sobs = c(wArgs$Sd[,,wArgs$time]),
                          dimmie=dim(wArgs$Sstar)[3])
       # Merge into a single output object
-      output$d<-disties$d*output$d; output$sw<-disties$sw
+      output$d<--abs(disties$d*output$d); output$sw<-disties$sw
       # Census-dependent dataframe
       output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
       return(output)
@@ -72,7 +72,7 @@ if(is.null(funcys)){
                          sobs = c(wArgs$Sd[,,wArgs$time]),
                          dimmie=dim(wArgs$Sstar)[3])
       # Merge into a single output object
-      output$d<-disties$d*output$d; output$sw<-disties$sw
+      output$d<--abs(disties$d*output$d); output$sw<-disties$sw
       # Census-dependent dataframe
       output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
       return(output)
@@ -89,7 +89,7 @@ if(is.null(funcys)){
                          sobs = c(wArgs$Sd[,,wArgs$time]),
                          dimmie=dim(wArgs$Sstar)[3])
       # Merge into a single output object
-      output$d<-disties$d*output$d; output$sw<-disties$sw
+      output$d<--abs(disties$d*output$d); output$sw<-disties$sw
       # Census-dependent dataframe
       output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
       return(output)
