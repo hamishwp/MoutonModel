@@ -541,7 +541,9 @@ getInitialValues_R <- function(solveDF,printPars=T,plotty=F,detectedNum=NULL,brk
   survivalSol <- glm(survived ~ prev.size, family = binomial, data = solveDF)
   offspringSizeSol <- lm(rec1.wt ~ size, data = solveDF)
   reproductionSol <- glm(reproduced ~ size, family = binomial, data=solveDF)
-  offspringSurvSol<-mean(numNewID[-1]/numBorn.prev[-length(numBorn.prev)])
+  offSratio<-numNewID[-1]/numBorn.prev[-length(numBorn.prev)]
+  offSratio<-offSratio[!is.infinite(offSratio)]
+  offspringSurvSol<-mean(offSratio)
   
   if(is.null(detectedNum)) {
     detectedNum<- solveDF%>%filter(survived==1)%>%group_by(census.number)%>%
@@ -549,7 +551,18 @@ getInitialValues_R <- function(solveDF,printPars=T,plotty=F,detectedNum=NULL,brk
   }
   
   popsizer<-solveDF%>%filter(survived==1 & !is.na(size))%>%group_by(census.number)%>%summarise(total=length(id))
-  obsProbSol <- MASS::fitdistr(popsizer$total/detectedNum,dbeta,start=list(shape1=1,shape2=1)) 
+  
+  meany<-mean(popsizer$total/detectedNum)
+  medy<-median(popsizer$total/detectedNum)
+  
+  beta1<-abs(((1-2*medy)/3) / (1-medy+(medy/meany)*(meany-1)))
+  beta2<-beta1*(1-meany)/meany
+  
+  obsProbSol <- tryCatch(MASS::fitdistr(popsizer$total/detectedNum,dbeta,start=list(shape1=beta1,shape2=beta2)),
+                         error=function(e) NA)
+  if(any(is.na(obsProbSol))) obsProbSol<-list(estimate=c(beta1,beta2),
+                                              n=length(detectedNum),
+                                              sd=min(c(c(beta1-1,beta2-1)/3,1)))
   
   # Estimation with truncation:
   # growthSolStart <- c(coef(growthSol), summary(growthSol)$sigma)
@@ -599,8 +612,8 @@ getInitialValues_R <- function(solveDF,printPars=T,plotty=F,detectedNum=NULL,brk
     offSizeParsCI <- rbind(confint(offspringSizeSol),osigCI)
     rownames(offSizeParsCI)[3]<-"sigma"
     # Child survival probability
-    SchildCI <- c(offspringSurvSol-tstar(lenC-1)*sd(numNewID[-1]/numBorn.prev[-length(numBorn.prev)])/sqrt(lenC-1),
-                  offspringSurvSol+tstar(lenC-1)*sd(numNewID[-1]/numBorn.prev[-length(numBorn.prev)])/sqrt(lenC-1))
+    SchildCI <- c(offspringSurvSol-tstar(lenC-1)*sd(offSratio)/sqrt(lenC-1),
+                  offspringSurvSol+tstar(lenC-1)*sd(offSratio)/sqrt(lenC-1))
     names(SchildCI)<-c("2.5 %","97.5 %")
     # SchildCI%<>%qlogis
     # Observation probability

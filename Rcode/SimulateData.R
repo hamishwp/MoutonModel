@@ -426,16 +426,28 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     
     # Let the user know the size of the population:
     if(popPrint) print(nrow(previous.census))
+    
   }
+  
+  # If we need to remove some of the observations
+  if(!is.null(obsProb)){
+    if (length(obsProb)>1){
+      for(yryr in unique(DF$census.number)){
+        yrID<-which(DF$census.number==yryr)
+        DF[sample(yrID,size = round((1-obsProb[yryr])*length(yrID)),replace = F),-c(1,3,4)]<-NA      
+      }
+    } else {
+      DF[sample(1:nrow(DF),size = round((1-obsProb)*nrow(DF)),replace = F),-c(1,3,4)]<-NA
+    }
+  } 
   
   detectedLiveFemales <- DF%>%filter(survived==1)%>%group_by(census.number)%>%
     summarise(detectedNum=length(size),.groups = 'drop_last')%>%pull(detectedNum)%>%unname()
   
-  if(!is.null(obsProb)) DF[sample(1:nrow(DF),size = round((1-obsProb)*nrow(DF)),replace = F),-c(1,4)]<-NA
-  
   return(list(solveDF=DF,
               detectedNum=detectedLiveFemales,
-              L=min(c(DF$size,DF$prev.size),na.rm = T),U=max(c(DF$size,DF$prev.size),na.rm = T)))
+              L=min(c(DF$size,DF$prev.size),na.rm = T),
+              U=max(c(DF$size,DF$prev.size),na.rm = T)))
 
 }
 

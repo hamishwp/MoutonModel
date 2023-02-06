@@ -42,7 +42,7 @@ eigvec<-data.frame(size=seq(lSHEEP$L,lSHEEP$U,length.out=500),prob=-Re(popmod$ve
 
 Starties<-sample(eigvec$size,poptot,prob = abs(eigvec$prob),replace = T)
 
-simPars <- list(n=100, t=11,
+simPars <- list(n=poptot, t=yearing,
                 # set survival details:
                 survFunc = IPMLTP$survFunc, survPars = vals$survPars,
                 # set growth details:
@@ -55,7 +55,7 @@ simPars <- list(n=100, t=11,
                 offSizeSamp = IPMLTP$offSizeSamp,
                 offSizePars = vals$offSizePars,
                 # Child survival probability:
-                Schild=vals$Schild,
+                Schild=vals$Schild, obsProb=lSHEEP$obsProbTime,
                 # set other miscelaneous parameters:
                 Start = Starties, thresh=10000, OneGend = TRUE,
                 popPrint = F, verbose=F)
@@ -80,7 +80,7 @@ lSHEEP<-GetSoaySheep_binned(lSHEEP,shift=shift,oneSex=T,nbks=nbks,regbinspace=re
 
 # Create a fairly uninformative covariance matrix for the proposal distribution
 # propCOV<-diag(Np)*(2.38)^2
-propCOV<-diag(unlist((do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,CI=T))))$sd))
+propCOV<-2*diag(unlist((do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,CI=T))))$sd))
 
 x0<-x0+runif(length(x0),-3,3)
 
