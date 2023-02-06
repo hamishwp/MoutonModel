@@ -164,7 +164,7 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   else{
     if (returnLL) return(ll)
     else # Get the evaluation of the priors:
-      ll$d <- multiplier*(ll$d + logTargetPars$priorFunc(vectorPars, logTargetPars$priors, logTargetPars$priorPars))
+      ll$d <- multiplier*(-abs(ll$d) - abs(logTargetPars$priorFunc(vectorPars, logTargetPars$priors, logTargetPars$priorPars)))
       return(ll)
   }
 }
