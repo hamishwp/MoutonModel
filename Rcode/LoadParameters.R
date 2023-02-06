@@ -2,7 +2,7 @@
 ################# Load the parameters required for the simulation #################
 ###################################################################################
 # Are we using the real Soay sheep data or are we simulating it?
-simulation<-F
+simulation<-T
 # SIMULATION PARAMETERS - UNUSED IF simulation = F
 poptot<-100 # The number of years for the simulation (IF SIMULATED)
 yearing<-10 # The total population (IF SIMULATED)
@@ -15,7 +15,7 @@ itermax <- 60000
 # Do we need to calculate the number of particles required for the 
 calcParts<-F
 # Number of in-chain parallelised cores
-ncores<-64
+ncores<-60
 # Define the number of size class bins
 nbks<-10
 # Bins method:

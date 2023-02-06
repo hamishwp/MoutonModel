@@ -2,7 +2,7 @@
 # MVN based on resampled theta with a global covariance matrix
 pert_GlobCov<-function(outin,SumStats,priorF){
   # Make sure only successful samples contribute to the perturbation
-  inds<-outin$distance>=outin$delta[outin$iteration]
+  inds<-!is.na(outin$distance) & outin$distance>=outin$delta[outin$iteration]
   # Reduce ewights and previous parameter samples for computation
   outin$weightings<-outin$weightings[inds]; outin$theta<-outin$theta[inds,]
   # Calculate the global weighted mean and covariance matrix

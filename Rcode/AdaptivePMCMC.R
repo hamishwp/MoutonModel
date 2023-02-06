@@ -866,8 +866,12 @@ GenAccSamples<-function(output, initSIR, lTarg, lTargPars, ResampleSIR){
     SIR<-ResampleSIR(max(particles,lTargPars$cores))
     # Sample from the target distribution
     lTargNew <- mclapply(X = 1:max(particles,lTargPars$cores),
-                         FUN = function(c) lTarg(SIR$theta[c,], lTargPars),
+                         FUN = function(c) {
+                           tryCatch (R.utils::withTimeout(lTarg(SIR$theta[c,], lTargPars), timeout = 300),
+                                     TimeoutException = function(ex) "TimedOut")
+                         },
                          mc.cores = lTargPars$cores)
+    # Save me out, just in case
     saveRDS(list(lTargNew=lTargNew,xNew=SIR$theta,output=output),"./lTargNew_tmp.RData")
     lTargNew %<>% CombLogTargs()
     # Remove any NA values

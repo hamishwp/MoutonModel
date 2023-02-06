@@ -22,8 +22,6 @@ if(fixedObsProb) {
   # Temporal observation probability must be kept fixed
   lSHEEP$obsProbTime <- rep(obsMean,yearing+1)
 } else lSHEEP$obsProbTime <- rbeta(yearing+1,vals$obsProbPar[1],vals$obsProbPar[2])
-# Create a fairly uninformative covariance matrix for the proposal distribution
-propCOV<-diag(Np)*(2.38)^2
 
 # Convert to physical coordinates
 vals%<>%Sample2Physical(IPMLTP)
@@ -39,33 +37,6 @@ popmod<-kernelOneVar(m = 500, growthFunc = IPMLTP$growthFunc,
 
 popinc<-Re(popmod$values[1])
 eigvec<-data.frame(size=seq(lSHEEP$L,lSHEEP$U,length.out=500),prob=-Re(popmod$vectors[,1]))
-# cumy<-cumsum(abs(eigvec$prob)); cumy<-cumy/max(cumy)
-
-# # Setup the size classes based upon the eigenvector
-# if(regbinspace){
-#   # Let's make sure that the smallest bin contains 1/nbrks of the population
-#   minbin<-eigvec$size[which.min(abs(cumy-1/nbks))]
-#   lSHEEP$breaks<-seq(minbin,lSHEEP$U-1e-5,length.out=nbks)
-# } else {
-#   lSHEEP$breaks<-sapply(0:(nbks-1)/(nbks-1),function(quant) eigvec$size[which.min(abs(quant-cumy))])
-# }
-# # Calculate the ideal shift in the size classes for the state space projection
-# if(!manshift) {shift<-CalcShift_Kernel(x0 = vals, IPMLTP = IPMLTP,nbks = nbks,
-#                                        breaks = lSHEEP$breaks,
-#                                        halfpop = oneSex,L = lSHEEP$L,U = lSHEEP$U)
-# } else shift<-0.5
-# # Now setup the ideal class sizes
-# lSHEEP$sizes <- lSHEEP$breaks[-(nbks)] + shift*diff(lSHEEP$breaks)
-# 
-# lSHEEP$COUNTS<-sapply(1:yearing, function(t) vectorToCounts(sample(eigvec$size,
-#                                                                    poptot+round(poptot*(popinc-1))*(t-1),
-#                                                                    prob = abs(eigvec$prob),replace = T),lSHEEP$breaks))
-# lSHEEP$cNames<-c(vapply(paste0("yr_",as.character(1:yearing),"__"), 
-#                      function(yname) paste0(yname,paste0("sz_",as.character(signif(lSHEEP$sizes,4)))),
-#                      character(length(lSHEEP$sizes))))
-# 
-# lSHEEP$priorProbs<-rowSums(lSHEEP$COUNTS)/sum(lSHEEP$COUNTS)
-# saveRDS(list(vals=vals,lSHEEP=lSHEEP),paste0("Results/SimulatedData_",namer,".Rdata"))
 
 ###################### SIMULATE THE INDIVIDUAL BASED MODEL ######################
 
@@ -106,6 +77,12 @@ if(!manshift) {shift<-CalcShift_Kernel(x0 = Sample2Physical(x0,IPMLTP),IPMLTP = 
 print(paste0("Grid shift = ",shift, " for ",nbks," number of breaks." ))
 # Get the sheep counts and sizes from the actual data (required even if simulated data is used)
 lSHEEP<-GetSoaySheep_binned(lSHEEP,shift=shift,oneSex=T,nbks=nbks,regbinspace=regbinspace)  
+
+# Create a fairly uninformative covariance matrix for the proposal distribution
+# propCOV<-diag(Np)*(2.38)^2
+propCOV<-diag(unlist((do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,CI=T))))$sd))
+
+x0<-x0+runif(length(x0),-3,3)
 
 #################################################################################
 
@@ -155,7 +132,33 @@ lSHEEP<-GetSoaySheep_binned(lSHEEP,shift=shift,oneSex=T,nbks=nbks,regbinspace=re
 
 
 
+# cumy<-cumsum(abs(eigvec$prob)); cumy<-cumy/max(cumy)
 
+# # Setup the size classes based upon the eigenvector
+# if(regbinspace){
+#   # Let's make sure that the smallest bin contains 1/nbrks of the population
+#   minbin<-eigvec$size[which.min(abs(cumy-1/nbks))]
+#   lSHEEP$breaks<-seq(minbin,lSHEEP$U-1e-5,length.out=nbks)
+# } else {
+#   lSHEEP$breaks<-sapply(0:(nbks-1)/(nbks-1),function(quant) eigvec$size[which.min(abs(quant-cumy))])
+# }
+# # Calculate the ideal shift in the size classes for the state space projection
+# if(!manshift) {shift<-CalcShift_Kernel(x0 = vals, IPMLTP = IPMLTP,nbks = nbks,
+#                                        breaks = lSHEEP$breaks,
+#                                        halfpop = oneSex,L = lSHEEP$L,U = lSHEEP$U)
+# } else shift<-0.5
+# # Now setup the ideal class sizes
+# lSHEEP$sizes <- lSHEEP$breaks[-(nbks)] + shift*diff(lSHEEP$breaks)
+# 
+# lSHEEP$COUNTS<-sapply(1:yearing, function(t) vectorToCounts(sample(eigvec$size,
+#                                                                    poptot+round(poptot*(popinc-1))*(t-1),
+#                                                                    prob = abs(eigvec$prob),replace = T),lSHEEP$breaks))
+# lSHEEP$cNames<-c(vapply(paste0("yr_",as.character(1:yearing),"__"), 
+#                      function(yname) paste0(yname,paste0("sz_",as.character(signif(lSHEEP$sizes,4)))),
+#                      character(length(lSHEEP$sizes))))
+# 
+# lSHEEP$priorProbs<-rowSums(lSHEEP$COUNTS)/sum(lSHEEP$COUNTS)
+# saveRDS(list(vals=vals,lSHEEP=lSHEEP),paste0("Results/SimulatedData_",namer,".Rdata"))
 
 
 
