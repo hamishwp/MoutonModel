@@ -24,10 +24,10 @@ source(paste0(directory,'Rcode/BuildModel.R'))
 print("Initial Values Log-Likelihood=")
 ptm <- proc.time()[3]
 print(logTargetIPM(x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F))
-ptm_fin<-(proc.time()[3] - ptm); print(paste0("Timeout = ",ptm_fin*5))
+ptm_fin<-(proc.time()[3] - ptm); timerouter<-ptm_fin*8; print(paste0("Timeout = ",timeouter))
 # Setup the initial values for the ABSSIR algorithm:
 initSIR<-list(x0=x0, propCOV=propCOV, itermax=itermax, stepmax=stepmax,
-              timeouter=ptm_fin*5, # limits the amount of time a parameter space simulation can take to prevent crashing
+              timeouter=timeouter, # limits the amount of time a parameter space simulation can take to prevent crashing
               Np=1500L, # this is the number of particles to pass the ABC threshold
               k=2L) # this sets the number of particles to trial in ABC as N_trial=k*N (see table 2, U. Simola, et al, Bayesian Analysis (2021) 16, Number 2, Adaptive Approximate Bayesian Computation
 # initSIR$output<-readRDS("./output_SIM_pop100_yr10_ABCSIR_pert_GlobCov_fixed_poissonMu_poissonObs_GLMx0_60000_10brks_regbinspaceFALSE_sampleDTN_autoshift")[[1]]
