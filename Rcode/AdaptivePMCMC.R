@@ -867,7 +867,7 @@ GenAccSamples<-function(output, initSIR, lTarg, lTargPars, ResampleSIR){
     # Sample from the target distribution
     lTargNew <- mclapply(X = 1:max(particles,lTargPars$cores),
                          FUN = function(c) {
-                           tryCatch (R.utils::withTimeout(lTarg(SIR$theta[c,], lTargPars), timeout = 300),
+                           tryCatch (R.utils::withTimeout(lTarg(SIR$theta[c,], lTargPars), timeout = initSIR$timeouter),
                                      TimeoutException = function(ex) "TimedOut")
                          },
                          mc.cores = lTargPars$cores)
@@ -906,7 +906,10 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
   wtwt<-exp(apply(xNew,1,function(tt) lTargPars$priorF(tt))); wtwt<-wtwt/sum(wtwt)
   # Sample from the target distribution
   lTargNew <- mclapply(X = 1:Ninit,
-                       FUN = function(c) lTarg(xNew[c,], lTargPars),
+                       FUN = function(c) {
+                         tryCatch (R.utils::withTimeout(lTarg(xNew[c,], lTargPars), timeout = initSIR$timeouter),
+                                   TimeoutException = function(ex) "TimedOut")
+                       },
                        mc.cores = lTargPars$cores) %>% CombLogTargs()
   # Calculate the initial ABC-threshold required for the ABCSIR algorithm
   delta0<-lTargNew$d[order(lTargNew$d,decreasing = T)[initSIR$Np]]
@@ -973,7 +976,7 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
   # Setup shop for the full algorithm
   saveRDS(list(output),paste0("output_",namer));xPrev<-output$theta
   # Run the algorithm!
-  while(!(output$q_thresh[it] > 0.99 & it>3) | cycles > initSIR$itermax){
+  while((output$q_thresh[it] < 0.98 & it>3) | cycles <= initSIR$itermax | stepmax<=it){
     # Set the ABC-step number
     it<-it+1
     # Dynamically define the resample & perturb function of new parameter sets
