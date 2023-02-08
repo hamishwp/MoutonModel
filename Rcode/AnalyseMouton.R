@@ -25,11 +25,16 @@ library(corrplot)
 
 output<-readRDS("./output_SIM_pop500_yr30_ABCSIR_pert_GlobCov_fixed_poissonMu_poissonObs_GLMx0_60000_15brks_regbinspaceFALSE_sampleNorm_autoshift")
 
-output[[length(output)]]$q_thresh
+# istep<-length(output)
+istep<-6
 
-inds<-output[[length(output)]]$distance>output[[length(output)]]$delta[length(output)]
+output[[istep]]$q_thresh
+output[[istep]]$delta
 
-sheepies<-as.data.frame(cbind(log(-output[[length(output)]]$distance[inds]),output[[length(output)]]$theta[inds,]))
+inds<-output[[istep]]$distance>output[[istep]]$delta[istep]
+sheepies<-as.data.frame(cbind(log(-output[[istep]]$distance[inds]),output[[istep]]$theta[inds,]))
+
+
 names(sheepies)<-c("distance",names(x0))
 sheepies<-sheepies[!is.na(sheepies$distance) & !is.infinite(sheepies$distance),]
 
@@ -57,20 +62,22 @@ medy<-apply(sheepies[,-1],2,median)%>%Sample2Physical(IPMLTP)
 UL<-(cov.wt(sheepies[,-1],sheepies[,1])$center+apply(sheepies[,-1],2,sd))%>%Sample2Physical(IPMLTP)
 LL<-(cov.wt(sheepies[,-1],sheepies[,1])$center-apply(sheepies[,-1],2,sd))%>%Sample2Physical(IPMLTP)
 
+
+
 sheepies%>%ggplot(aes(survPars1,survPars2))+
   geom_density2d_filled(aes(colour=distance))+
-  geom_hline(yintercept = vals$survPars[1],colour="red")+
-  geom_vline(xintercept = vals$survPars[2],colour="red")
+  geom_hline(yintercept = vals$survPars[2],colour="red")+
+  geom_vline(xintercept = vals$survPars[1],colour="red")
 
 sheepies%>%ggplot(aes(reprPars1,reprPars2))+
   geom_density2d_filled(aes(colour=distance))+
-  geom_hline(yintercept = vals$reprPars[1],colour="red")+
-  geom_vline(xintercept = vals$reprPars[2],colour="red")
+  geom_hline(yintercept = vals$reprPars[2],colour="red")+
+  geom_vline(xintercept = vals$reprPars[1],colour="red")
 
 sheepies%>%ggplot(aes(growthPars1,growthPars2))+
   geom_density2d_filled(aes(colour=distance))+
-  geom_hline(yintercept = vals$growthPars[1],colour="red")+
-  geom_vline(xintercept = vals$growthPars[2],colour="red")
+  geom_hline(yintercept = vals$growthPars[2],colour="red")+
+  geom_vline(xintercept = vals$growthPars[1],colour="red")
 
 
 x0true<-c(-7.25, 3.77,
@@ -86,24 +93,24 @@ if(fixedObsProb) x0true<-x0true[1:12]
 initDist<-logTargetIPM(x0true, logTargetPars = IPMLTP, returnNeg = F, printProp = F)
 
 hist(log(abs(initDist$shat-IPMLTP$SumStats)))
-hist(log(abs(output[[length(output)]]$shat[which.max(sheepies$distance),]-IPMLTP$SumStats)))
+hist(log(abs(output[[istep]]$shat[which.max(sheepies$distance),]-IPMLTP$SumStats)))
 
 sum(abs(initDist$shat-IPMLTP$SumStats))
-sum(abs(output[[length(output)]]$shat[which.max(sheepies$distance),]-IPMLTP$SumStats))
+sum(abs(output[[istep]]$shat[which.max(sheepies$distance),]-IPMLTP$SumStats))
 
-hist(log(apply(output[[length(output)]]$shat,1,function(x) sum(abs(x-IPMLTP$SumStats)))))
+hist(log(apply(output[[istep]]$shat,1,function(x) sum(abs(x-IPMLTP$SumStats)))))
 log(sum(abs(initDist$shat-IPMLTP$SumStats)))
 
 
 medSS<-apply(output[[1]]$shat,2,median)
-plot(log(apply(output[[length(output)]]$shat,1,function(x) sum(abs(x-IPMLTP$SumStats)))),log(-output[[length(output)]]$distance))
-apply(output[[length(output)]]$shat,2,median)
+plot(log(apply(output[[istep]]$shat,1,function(x) sum(abs(x-IPMLTP$SumStats)))),log(-output[[istep]]$distance))
+apply(output[[istep]]$shat,2,median)
 apply(output[[1]]$shat,2,median)
 
 length(medSS)
-hist(vapply(1:ncol(output[[length(output)]]$shat),function(i) abs(output[[length(output)]]$shat[,i]-IPMLTP$SumStats[i])/medSS[i],FUN.VALUE = numeric(1)))
+hist(vapply(1:ncol(output[[istep]]$shat),function(i) abs(output[[istep]]$shat[,i]-IPMLTP$SumStats[i])/medSS[i],FUN.VALUE = numeric(1)))
 
-sum(abs(output[[length(output)]]$shat[which.max(sheepies$distance),]-IPMLTP$SumStats)/SSsd)
+sum(abs(output[[istep]]$shat[which.max(sheepies$distance),]-IPMLTP$SumStats)/SSsd)
 sum(abs(initDist$shat-IPMLTP$SumStats)/SSsd)
 
 

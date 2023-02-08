@@ -24,17 +24,17 @@ source(paste0(directory,'Rcode/BuildModel.R'))
 print("Initial Values Log-Likelihood=")
 ptm <- proc.time()[3]
 print(logTargetIPM(x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F))
-ptm_fin<-(proc.time()[3] - ptm); timeouter<-ptm_fin*8; print(paste0("Timeout = ",timeouter))
+ptm_fin<-(proc.time()[3] - ptm); timeouter<-ptm_fin*4; print(paste0("Timeout = ",timeouter))
 # Setup the initial values for the ABSSIR algorithm:
 initSIR<-list(x0=x0, propCOV=propCOV, itermax=itermax, stepmax=stepmax,
               timeouter=timeouter, # limits the amount of time a parameter space simulation can take to prevent crashing
-              Np=1500L, # this is the number of particles to pass the ABC threshold
+              Np=2500L, # this is the number of particles to pass the ABC threshold
               k=2L) # this sets the number of particles to trial in ABC as N_trial=k*N (see table 2, U. Simola, et al, Bayesian Analysis (2021) 16, Number 2, Adaptive Approximate Bayesian Computation
 # if(file.exists(paste0("output_",namer))) {
 #   initSIR$output<-readRDS(paste0("output_",namer)); initSIR$output<-initSIR$output[[length(initSIR$output)]]
 # }
 # Save everything we need to replicate this run:
-earlytag<-paste0(namer,"_",priorName,"_its",itermax,"_",gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = ""),"_rand",round(runif(1,max = 1000)))
+earlytag<-paste0(namer,"_",priorName,"_its",itermax,"_",gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = ""))
 saveRDS(list(
   x0=x0,
   propCOV=propCOV,
