@@ -4,7 +4,7 @@
 # Are we using the real Soay sheep data or are we simulating it?
 simulation<-T
 # SIMULATION PARAMETERS - UNUSED IF simulation = F
-poptot<-300 # The number of years for the simulation (IF SIMULATED)
+poptot<-500 # The number of years for the simulation (IF SIMULATED)
 yearing<-30 # The total population (IF SIMULATED)
 # Is the population counted one sex or two?
 oneSex<-T
@@ -16,7 +16,7 @@ stepmax <- 10
 # Do we need to calculate the number of particles required for the 
 calcParts<-F
 # Number of in-chain parallelised cores
-ncores<-32
+ncores<-64
 # Define the number of size class bins
 nbks<-15
 # Bins method:

@@ -24,7 +24,7 @@ source(paste0(directory,'Rcode/BuildModel.R'))
 print("Initial Values Log-Likelihood=")
 ptm <- proc.time()[3]
 print(logTargetIPM(x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F))
-ptm_fin<-(proc.time()[3] - ptm); timerouter<-ptm_fin*8; print(paste0("Timeout = ",timeouter))
+ptm_fin<-(proc.time()[3] - ptm); timeouter<-ptm_fin*8; print(paste0("Timeout = ",timeouter))
 # Setup the initial values for the ABSSIR algorithm:
 initSIR<-list(x0=x0, propCOV=propCOV, itermax=itermax, stepmax=stepmax,
               timeouter=timeouter, # limits the amount of time a parameter space simulation can take to prevent crashing
