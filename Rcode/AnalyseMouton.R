@@ -23,8 +23,43 @@ library(corrplot)
 
 
 
-prev<-readRDS(paste0("output_",namer))
-GGally::ggpairs(data.frame(matrix(cbind(log10(-prev[[3]]$distance),prev[[3]]$theta),ncol = 13)))
+output<-readRDS("~/Downloads/output_SIM_pop500_yr30_ABCSIR_pert_GlobCov_fixed_poissonMu_poissonObs_GLMx0_60000_15brks_regbinspaceFALSE_sampleNorm_autoshift(3)")
+
+output[[length(output)]]$q_thresh
+
+inds<-output[[length(output)]]$distance>output[[length(output)]]$delta[length(output)]
+
+sheepies<-as.data.frame(cbind(log(-output[[length(output)]]$distance[inds]),output[[length(output)]]$theta[inds,]))
+names(sheepies)<-c("distance",names(x0))
+sheepies<-sheepies[!is.na(sheepies$distance) & !is.infinite(sheepies$distance),]
+
+my_fn <- function(data, mapping, ...){
+  p <- ggplot(data = data, mapping = mapping) + 
+    stat_density2d(aes(colour=..density..), geom="tile", contour = FALSE) +
+    scale_fill_gradientn(colours=rainbow(100))
+  p
+}
+
+GGally::ggpairs(sheepies, lower=list(continuous=my_fn))
+
+sorters<-sort(sheepies$distance,index.return=T)
+redSheep<-sheepies[sorters$ix[sorters$x<45],]
+GGally::ggpairs(redSheep, lower=list(continuous=my_fn))
+
+sheepies[which.max(sheepies$distance),]
+
+cov.wt(sheepies[,-1],sheepies[,1])$center
+diag(cov.wt(sheepies[,-1],sheepies[,1])$cov)
+
+meany<-colMeans(redSheep[,-1])%>%Sample2Physical(IPMLTP)
+medy<-apply(redSheep[,-1],2,median)%>%Sample2Physical(IPMLTP)
+UL<-(cov.wt(redSheep[,-1],redSheep[,1])$center+apply(redSheep[,-1],2,sd))%>%Sample2Physical(IPMLTP)
+LL<-(cov.wt(redSheep[,-1],redSheep[,1])$center-apply(redSheep[,-1],2,sd))%>%Sample2Physical(IPMLTP)
+
+
+
+
+
 
 
 
