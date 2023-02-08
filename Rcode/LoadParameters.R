@@ -4,8 +4,8 @@
 # Are we using the real Soay sheep data or are we simulating it?
 simulation<-T
 # SIMULATION PARAMETERS - UNUSED IF simulation = F
-poptot<-500 # The number of years for the simulation (IF SIMULATED)
-yearing<-30 # The total population (IF SIMULATED)
+poptot<-100 # The number of years for the simulation (IF SIMULATED)
+yearing<-10 # The total population (IF SIMULATED)
 # Is the population counted one sex or two?
 oneSex<-T
 # Is the observation probability an empirically-based fixed value or sampled as a R.V.?
@@ -16,9 +16,9 @@ stepmax <- 10
 # Do we need to calculate the number of particles required for the 
 calcParts<-F
 # Number of in-chain parallelised cores
-ncores<-64
+ncores<-58
 # Define the number of size class bins
-nbks<-15
+nbks<-10
 # Bins method:
 regbinspace<-F
 # Particle filter initialisation function

@@ -30,7 +30,9 @@ initSIR<-list(x0=x0, propCOV=propCOV, itermax=itermax, stepmax=stepmax,
               timeouter=timeouter, # limits the amount of time a parameter space simulation can take to prevent crashing
               Np=1500L, # this is the number of particles to pass the ABC threshold
               k=2L) # this sets the number of particles to trial in ABC as N_trial=k*N (see table 2, U. Simola, et al, Bayesian Analysis (2021) 16, Number 2, Adaptive Approximate Bayesian Computation
-# initSIR$output<-readRDS("./output_SIM_pop100_yr10_ABCSIR_pert_GlobCov_fixed_poissonMu_poissonObs_GLMx0_60000_10brks_regbinspaceFALSE_sampleDTN_autoshift")[[1]]
+# if(file.exists(paste0("output_",namer))) {
+#   initSIR$output<-readRDS(paste0("output_",namer)); initSIR$output<-initSIR$output[[length(initSIR$output)]]
+# }
 # Save everything we need to replicate this run:
 earlytag<-paste0(namer,"_",priorName,"_its",itermax,"_",gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = ""),"_rand",round(runif(1,max = 1000)))
 saveRDS(list(

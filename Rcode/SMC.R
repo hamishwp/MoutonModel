@@ -641,32 +641,48 @@ eminmaxScale<-function(sw) exp((sw-min(sw,na.rm = T))/(max(sw,na.rm = T)-min(sw,
 # Minkowski distance function
 # Distances were taken from https://www.biorxiv.org/content/10.1101/2021.07.29.454327v1.full.pdf
 # Note that if p=1 we are using the L1 distances - our default
+# Minkowski<-function(sest,sobs,dimmie,p=1){
+#   # Remove all summary statistics that are the same across the observed and simulated values
+#   sds<-apply(cbind(sest,array(sobs,dim=c(length(sobs),1))),1,sd,na.rm=T)
+#   sest<-sest[sds!=0,]; sobs<-sobs[sds!=0]
+#   # Median of columns
+#   meds<-apply(sest,1,median,na.rm=T)
+#   # Median Absolute Deviation (MAD) to the sample
+#   MAD<-abs(sest-meds)
+#   # Median Absolute Deviation to the Observation (MADO)
+#   MADO<-abs(sest-sobs)
+#   # Don't punish the summary statistics that deviate more from obs data initially than others:
+#   if(sum(MADO>2*MAD,na.rm = T)/length(sobs)<1/3) PCMAD<-MAD+MADO else PCMAD<-MAD
+#   # Calculate the Minkowski distance per summary statistic
+#   d_i<--MADO/PCMAD
+#   # Find number of infinite and NaN values to artificially add to the LL:  
+#   infies<-length(d_i[is.infinite(d_i) | is.na(d_i)])/dimmie
+#   infiesSW<-apply(d_i,2,function(dd) length(dd[is.infinite(dd) | is.na(dd)]))/dimmie
+#   # Particle weight calculation
+#   sw<-eminmaxScale(apply(d_i,2,function(dd) pracma::nthroot(mean(dd[!is.infinite(dd)]^p,na.rm = T),p))*infiesSW)
+#   # Make sure to account for full-zero simulated summary stats
+#   sw[is.na(sw)]<-0
+#   # output total distance
+#   return(list(shat=meds,
+#               d=-abs(pracma::nthroot(mean(d_i[!is.infinite(d_i)]^p,na.rm = T),p)*infies),
+#               sw=sw+1e-300)) # add a small cap to make sure not all probabilities are negative
+# }
+
 Minkowski<-function(sest,sobs,dimmie,p=1){
-  # Remove all summary statistics that are the same across the observed and simulated values
-  sds<-apply(cbind(sest,array(sobs,dim=c(length(sobs),1))),1,sd,na.rm=T)
-  sest<-sest[sds!=0,]; sobs<-sobs[sds!=0]
   # Median of columns
   meds<-apply(sest,1,median,na.rm=T)
-  # Median Absolute Deviation (MAD) to the sample
-  MAD<-abs(sest-meds)
-  # Median Absolute Deviation to the Observation (MADO)
-  MADO<-abs(sest-sobs)
-  # Don't punish the summary statistics that deviate more from obs data initially than others:
-  if(sum(MADO>2*MAD,na.rm = T)/length(sobs)<1/3) PCMAD<-MAD+MADO else PCMAD<-MAD
-  # Calculate the Minkowski distance per summary statistic
-  d_i<--MADO/PCMAD
-  # Find number of infinite and NaN values to artificially add to the LL:  
-  infies<-length(d_i[is.infinite(d_i) | is.na(d_i)])/dimmie
-  infiesSW<-apply(d_i,2,function(dd) length(dd[is.infinite(dd) | is.na(dd)]))/dimmie
+  # Calculate the Minkowski distance per summary statistic - Median Absolute Deviation to the Observation (MADO)
+  d_i<--abs(sest-sobs)
   # Particle weight calculation
-  sw<-eminmaxScale(apply(d_i,2,function(dd) pracma::nthroot(mean(dd[!is.infinite(dd)]^p,na.rm = T),p))*infiesSW)
+  sw<-eminmaxScale(apply(d_i,2,function(dd) pracma::nthroot(mean(dd[!is.infinite(dd)]^p,na.rm = T),p)))
   # Make sure to account for full-zero simulated summary stats
   sw[is.na(sw)]<-0
   # output total distance
   return(list(shat=meds,
-              d=-abs(pracma::nthroot(mean(d_i[!is.infinite(d_i)]^p,na.rm = T),p)*infies),
+              d=-abs(pracma::nthroot(mean(d_i[!is.infinite(d_i)]^p,na.rm = T),p)),
               sw=sw+1e-300)) # add a small cap to make sure not all probabilities are negative
 }
+
 # IPM Particle Filter function
 particleFilter <- function(Sd, mu, muPar, sampleState, sampleStatePar, obsProb,
                            obsProbPar, NoParts, fixedObsProb=F){

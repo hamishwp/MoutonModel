@@ -976,7 +976,7 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
   # Setup shop for the full algorithm
   saveRDS(list(output),paste0("output_",namer));xPrev<-output$theta
   # Run the algorithm!
-  while((output$q_thresh[it] < 0.98 & it>3) | cycles <= initSIR$itermax | stepmax<=it){
+  while(!(output$q_thresh[it] > 0.98 & it > 3)){ # & cycles <= initSIR$itermax & stepmax<=it){
     # Set the ABC-step number
     it<-it+1
     # Dynamically define the resample & perturb function of new parameter sets
