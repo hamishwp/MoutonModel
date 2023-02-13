@@ -901,7 +901,7 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
   # Total number of parameter-space particles to run through particle filter
   Ninit<-initSIR$Np*initSIR$k
   # Generate the particles
-  xNew<-multvarNormProp(xt=initSIR$x0, propPars=initSIR$propCOV, n=Ninit)
+  xNew<-initSIR$ProposalDist(initSIR)
   # Calculate the priors for the weights, and normalise them
   wtwt<-exp(apply(xNew,1,function(tt) lTargPars$priorF(tt))); wtwt<-wtwt/sum(wtwt)
   # Sample from the target distribution
@@ -980,7 +980,7 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
     # Set the ABC-step number
     it<-it+1
     # Dynamically define the resample & perturb function of new parameter sets
-    ResampleSIR<-defFsamp(outin = output,SumStats = c(lTargPars$SumStats),priorF = lTargPars$priorF)
+    ResampleSIR<-defFsamp(outin = output,lTargPars = lTargPars)
     # SIR routine
     output<-GenAccSamples(output, initSIR, lTarg, lTargPars, ResampleSIR)
     # Modify the ABC-threshold adaptively

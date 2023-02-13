@@ -1,10 +1,13 @@
 # warning("Please run 'sudo apt-get install libgsl-dev' in terminal (Linux, Mac only)")
 
 list.of.packages <- c("xtable","magrittr","doParallel","Rfast", "tidyverse",
-                      "abind","R.utils")
+                      "abind","R.utils","sn")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
-print(new.packages)
-if(length(new.packages)>0) install.packages(new.packages)
+
+if(length(new.packages)>0) {
+  print(new.packages)
+  install.packages(new.packages)
+}
 
 if(length(list.of.packages[!("densratio" %in% installed.packages()[,"Package"])])){devtools::install_github("hoxo-m/densratio")}
 

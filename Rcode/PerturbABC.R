@@ -1,6 +1,6 @@
 ################# Perturbation functions for the ABCSMC algorithm?
 # MVN based on resampled theta with a global covariance matrix
-pert_GlobCov<-function(outin,SumStats,priorF){
+pert_GlobCov<-function(outin,lTargPars){
   # Make sure only successful samples contribute to the perturbation
   inds<-!is.na(outin$distance) & outin$distance>=outin$delta[outin$iteration]
   # Reduce ewights and previous parameter samples for computation
@@ -17,7 +17,7 @@ pert_GlobCov<-function(outin,SumStats,priorF){
     # NOTE WE RELY ON SYMMETRY OF MVN(theta1, theta2, COV) = MVN(theta2, theta1, COV)
     ptrans<-apply(thth,1,function(tt) Rfast::dmvnorm(outin$theta, tt, COVhat$cov)%*%outin$weightings)
     # Priors
-    prpr<-exp(apply(thth,1,function(tt) priorF(tt)))
+    prpr<-exp(apply(thth,1,function(tt) lTargPars$priorF(tt)))
     # Associated weights NOTE THAT NORMALISATION IS DONE LATER
     newW<-prpr/ptrans
     
@@ -26,6 +26,42 @@ pert_GlobCov<-function(outin,SumStats,priorF){
   # Return the function as output
   return(ResampleSIR)
 }
+
+# MV skew-norm based on resampled theta with a global skew-covariance matrix
+pert_GlobSkewCov<-function(outin,lTargPars){
+  # Make sure only successful samples contribute to the perturbation
+  inds<-!is.na(outin$distance) & outin$distance>=outin$delta[outin$iteration]
+  # Reduce ewights and previous parameter samples for computation
+  outin$weightings<-outin$weightings[inds]; outin$theta<-outin$theta[inds,]
+  # Calculate the global mean, skew and covariance matrix
+  disty<-sn::msn.mle(y = outin$theta)$dp
+  # Adjust such that normally distributed values remain un-skewed
+  for (i in 1:ncol(outin$theta)) if(!lTargPars$skew[i]) disty$alpha[i]<-0
+  # Then sample from the MV-SN distribution
+  ResampleSIR<-function(NN) {
+    # First sample particles based on the distance function
+    thth<-outin$theta[sample(1:sum(inds),NN,T,prob = outin$weightings),]
+    # Perturb the sample
+    thth<-t(apply(thth,1,function(tt) sn::rmsn(1, xi = tt, Omega = disty$Omega, alpha = disty$alpha)))
+    # Transition kernel K(theta_i | theta_j) for j = 1,..,N of old particles
+    # NOTE WE RELY ON SYMMETRY OF MVN(theta1, theta2, COV) = MVN(theta2, theta1, COV)
+    ptrans<-apply(thth,1,function(tt) sn::dmsn(outin$theta, xi = tt, Omega = disty$Omega, alpha=disty$alpha)%*%outin$weightings)
+    # Priors
+    prpr<-exp(apply(thth,1,function(tt) lTargPars$priorF(tt)))
+    # Associated weights NOTE THAT NORMALISATION IS DONE LATER
+    newW<-prpr/ptrans
+    
+    return(list(theta=thth,weightings=newW))
+  }
+  # Return the function as output
+  return(ResampleSIR)
+}
+
+
+
+
+
+
 
 
 

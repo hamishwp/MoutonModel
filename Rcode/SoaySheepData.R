@@ -47,8 +47,6 @@ lSHEEP<-GetSoaySheep(directory,oneSex=oneSex)
 x0<-do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb)))%>%relist(skeleton = skeleton)
 # Number of parameters
 Np<-length(unlist(x0))
-# Provide initial estimate of covariance matrix using the confidence intervals from the GLM:
-propCOV<-diag(unlist((do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,CI=T))))$sd))
 # propCOV<-diag(Np)*(2.38)^2/Np
 lSHEEP$breaks<-calcBreaks(lSHEEP,nbks,regbinspace = regbinspace)
 # for truncated normal distributions

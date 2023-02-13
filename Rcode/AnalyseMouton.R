@@ -8,7 +8,7 @@ source(paste0(directory,'Rcode/piecemealFunctions.R'))
 source(paste0(directory,'Rcode/SMC.R'))
 library(dissPackage3,lib.loc=directory)
 library(xtable)
-library(mcmcse)
+# library(mcmcse)
 library(magrittr)
 library(tidyverse)
 # install.packages(c("rcorr","corrplot"))
@@ -23,7 +23,12 @@ library(corrplot)
 
 
 
-output<-readRDS("./output_SIM_pop100_yr10_ABCSIR_pert_GlobCov_fixed_poissonMu_poissonObs_GLMInitX0_60000_10brks_regbinspaceFALSE_sampleDTN_autoshift_rand611")
+output<-readRDS("./output_SIM_pop500_yr30_ABCSIR_pert_GlobCov_fixed_poissonMu_poissonObs_randInitX0_60000_15brks_regbinspaceFALSE_sampleDTN_autoshift_rand439")
+inpy<-readRDS("./Results/INPUT_SIM_pop500_yr30_ABCSIR_pert_GlobCov_fixed_poissonMu_poissonObs_randInitX0_60000_15brks_regbinspaceFALSE_sampleDTN_autoshift_rand439_uniform_its60000_2023-02-10_140934")
+x0<-inpy$x0
+IPMLTP<-inpy$IPMLTP
+vals<-x0%>%Sample2Physical(IPMLTP)
+
 
 disties<-data.frame()
 for(i in 1:length(output)){
@@ -35,7 +40,7 @@ for(i in 1:length(output)){
   disties%<>%rbind(cbind(reshape2::melt(sheepies,id.vars=c("distance")),data.frame(iteration=rep(i,nrow(sheepies)*(ncol(sheepies)-1)))))
 } 
 
-disties%>%ggplot(aes(distance,value,group=variable))+(aes(colour=variable,y=..ndensity..))+facet_grid(rows=vars(iteration))
+disties%>%filter(distance<log(-output[[length(output)]]$delta[length(output)]))%>%ggplot(aes(distance,value,group=variable))+geom_density(aes(colour=variable,y=..density..))+facet_grid(rows=vars(iteration))
 disties%>%ggplot(aes(distance,group=iteration))+geom_histogram()+facet_wrap(~iteration,scales="free")
 
 # istep<-length(output)
@@ -64,15 +69,25 @@ wmean <- apply(tmp[,-1],2,weighted.mean,w=exp(tmp[,1]),na.rm = T)
 ind <- tmp[,1] %>% which.max
 MAP <-  tmp[ind, -1]
 
-summaries <- data.frame(GLM=x0, MAP = MAP, mean = means,
-                        lower = lower, upper = upper, weighted_mean=wmean) #, MLE=MLE)
-# summaries <- data.frame(true = simulated, MAP = MAP, mean = means, GLM=GLM,
-#                         median = medis, lower = lower, upper = upper, weighted_mean=wmean) #, MLE=MLE)
+# summaries <- data.frame(GLM=x0, MAP = MAP, mean = means,
+#                         lower = lower, upper = upper, weighted_mean=wmean) #, MLE=MLE)
+summaries <- data.frame(true = x0, median = medis, mean = means, #GLM=GLM,
+                        lower = lower, upper = upper) #, MLE=MLE)
 # summaries <- data.frame(simulated = simulated, MAP = MAP, mean = means,MLE=MLE)  
 summaries%<>%cbind(data.frame(inCI=summaries$GLM<summaries$upper & summaries$GLM>summaries$lower))
 
 print(summaries)
 xtable(summaries)
+
+abliny<-data.frame(variable=colnames(tmp)[-1],Z=x0true)
+
+q<-sheepies%>%reshape2::melt(id.vars=c("Distance"))%>%filter(variable!="Distance")%>%ggplot(aes(value))+geom_histogram(aes(colour=variable,fill=variable),alpha=0.5)+
+  geom_vline(data = abliny, aes(xintercept = Z),colour="red")
+q<-q+facet_wrap(. ~ variable,scales = "free") + theme(strip.text.x = element_text(size = 12))+
+  xlab("Value")+ylab("Density")+
+  theme(plot.title = element_text(hjust = 0.5)) ;q
+ggsave("VariableDensities_SampleSpace.png", plot=q,path = paste0(directory,'Plots/Hamish/'),width = 12,height = 8)
+
 
 shdens<-t(apply(sheepies[,-1],1,function(x) unname(unlist(Sample2Physical(x,IPMLTP)))[-c(6,7,14,15)]))
 shdens<-cbind(sheepies$Distance,shdens)%>%as.data.frame()

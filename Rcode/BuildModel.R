@@ -1,5 +1,5 @@
 # Housekeeping
-IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- NULL; x0%<>%unlist(); lSHEEP$solveDF<-NULL; funcys<-NULL
+IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- NULL; x0%<>%unlist(); funcys<-NULL
 # Functions that map from estimated 'true' simulated values into the observed sim vals
 # if(obsModel=='poisson'){
 #   funcys<-list(
@@ -247,6 +247,33 @@ if(!fixedObsProb) flatPriors%<>%
     obsProbSh2=listy
   ))
 
+# Proposal Distribution
+if(PropDist=="MVSN"){
+  
+  PropN<-do.call(getInitialValDists,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,invlinks=IPMLTP$invlinks,MultiSD=3)))
+  ProposalDist<-function(initSIR) PropN(ABCNP*ABCk)
+  
+  # Setup the initial values for the ABSSIR algorithm:
+  initSIR<-list(ProposalDist=ProposalDist, 
+                itermax=itermax, stepmax=stepmax,
+                Np=ABCNP,
+                k=ABCk) 
+  
+} else {
+  x0<-do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb)))%>%relist(skeleton = skeleton)
+  # Provide initial estimate of covariance matrix using the confidence intervals from the GLM:
+  propCOV<-Np*diag(unlist((do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,CI=T))))$sd)) 
+  # MVN distribution sampler
+  ProposalDist<-function(initSIR) multvarNormProp(xt=initSIR$x0, propPars=initSIR$propCOV, n=ABCNP*ABCk)
+  # Setup the initial values for the ABSSIR algorithm:
+  initSIR<-list(ProposalDist=ProposalDist,
+                itermax=itermax, stepmax=stepmax,
+                Np=ABCNP,
+                k=ABCk) 
+  
+}
+
+lSHEEP$solveDF<-NULL;
 #################### CREATE THE LOGTARGETPARAMETERS OBJECT #####################
 # Storage object for the ABC-SIR algorithm
 # stop("Sort this out!")
@@ -255,7 +282,7 @@ IPMLTP %<>% c(list(
   priorFunc = match.fun('evalPriors'),
   priors = priorsIPM,
   priorPars = flatPriors,
-  cores=ncores,
+  cores = ncores,
   DTN = data.frame(L=lSHEEP$L,U=lSHEEP$U),
   muPar = muPar, 
   b = SMC_parts

@@ -4,7 +4,6 @@
 # Are we using the real Soay sheep data or are we simulating it?
 simulation<-T
 if(simulation){
-  glmXs<-F # Do we use the GLM estimate of parameter space values to initialise the simulations?
   poptot<-500 # The number of years for the simulation (IF SIMULATED)
   yearing<-30 # The total population (IF SIMULATED)
 }
@@ -15,6 +14,8 @@ fixedObsProb<-T
 # Number of MCMC simulations
 itermax <- 60000
 stepmax <- 10
+ABCNP<-2500L  # this is the number of particles to pass the ABC threshold
+ABCk<-2L # this sets the number of particles to trial in ABC as N_trial=k*N (see table 2, U. Simola, et al, Bayesian Analysis (2021) 16, Number 2, Adaptive Approximate Bayesian Computation
 # Do we need to calculate the minimum number of particles required for the adaptive-epsilon algorithm?
 calcParts<-F
 # Number of in-chain parallelised cores
@@ -31,12 +32,14 @@ obsModel<-'poisson' #'multinomial' #'binomial'
 manshift<-F
 # For the individual and offspring growth function - normal or truncated normal, or otherwise?
 normsampler<-"sampleDTN"
+# Proposal distribution
+PropDist<-"MVSN"
 # What algorithm to use to parameterise the model?
 algorithm<-"ABCSIR"
 # For the ABCSMC particle weights, do we want the standard or the alternative (Filipi 2012) method?
-altWeights<-T
+altWeights<-F
 # Which perturbation function to the aSMC resampler?
-perturber<-"pert_GlobCov"
+perturber<-"pert_GlobSkewCov"
 # If using a nearest neighbour perturbation, how many neighbours are required?
 pNNs<-50
 # Check the minimum number of ABCSMC particles for the adaptive epsilon threshold function
@@ -44,7 +47,7 @@ NpCheck<-F
 # Use these parameters to create a name for the output file from the simjulation
 namer<-paste0(ifelse(simulation,paste0("SIM_pop",poptot,"_yr",yearing),"REAL"),
               "_",algorithm,"_",perturber,"_",ifelse(fixedObsProb,"fixed","beta"),"_",muModel,"Mu_",obsModel,
-              "Obs_",ifelse(glmXs,"GLMInitX0_","randInitX0_"),itermax,"_",nbks,"brks_","regbinspace",regbinspace,"_",normsampler,"_",ifelse(manshift,"manshift","autoshift"),"_rand",round(runif(1,max = 1000)))
+              "Obs_",itermax,"_",nbks,"brks_","regbinspace",regbinspace,"_",normsampler,"_",ifelse(manshift,"manshift","autoshift"),"_rand",round(runif(1,max = 1000)))
 
 ###################################################################################
 ###################################################################################

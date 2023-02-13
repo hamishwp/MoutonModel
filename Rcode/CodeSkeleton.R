@@ -52,13 +52,15 @@ if(oneSex) {Schilder <- function(x) 0.5*plogis(x)
 } else {Schilder <- function(x) plogis(x)}
 
 # Generate the appropriate functions to be passed into the MCMC algorithm
-links<-invlinks<-acceptTrans<-c()
+links<-invlinks<-acceptTrans<-skew<-initPrior<-c()
 for (i in 1:nrow(supports)){
   # Real numbers
   if(is.infinite(supports$lower[i]) & is.infinite(supports$upper[i])){
     links%<>%c(returnSelf)
     invlinks%<>%c(returnSelf)
     acceptTrans%<>%c(function(xold,xnew){return(1)})
+    skew%<>%c(F)
+    initPrior%<>%c(function(n,a,b) {rnorm(n,a,b)})
     
   # WARNING: R USES GLOBAL ENV FOR VARIABLES DEFINED IN FUNCTION
   # TO AVOID PROBLEMS, WE DEFINE supports$lower[i] & supports$upper[i] IN LOCAL ENV
@@ -67,13 +69,13 @@ for (i in 1:nrow(supports)){
     links%<>%c(function(x){exp(x)+0})
     invlinks%<>%c(function(x){log(x-0)})
     acceptTrans%<>%c(function(xold,xnew){return((xnew-0)/(xold-0))})
-  
+    skew%<>%c(T)
   # x>1
   } else if(supports$lower[i]==1 & is.infinite(supports$upper[i])){
     links%<>%c(function(x){exp(x)+1})
     invlinks%<>%c(function(x){log(x-1)})
     acceptTrans%<>%c(function(xold,xnew){return((xnew-1)/(xold-1))})
-    
+    skew%<>%c(T)
   # x<b
   # } else if(is.infinite(supports$lower[i]) & !is.infinite(supports$upper[i])){
   #   links%<>%c(function(x){supports$upper[i]-exp(x)})
@@ -85,12 +87,14 @@ for (i in 1:nrow(supports)){
     links%<>%c(function(x){(1*exp(x)+0)/(exp(x)+1)})
     invlinks%<>%c(function(x){log(x-0) - log(1-x)})
     acceptTrans%<>%c(function(xold,xnew){return((1-xnew)/(1-xold)*(xnew-0)/(xold-0))})
+    skew%<>%c(T)
     
   # 0<x<0.5
   } else if(supports$lower[i]==0 & supports$upper[i]==0.5){
     links%<>%c(function(x){(0.5*exp(x)+0)/(exp(x)+1)})
     invlinks%<>%c(function(x){log(x-0) - log(0.5-x)})
     acceptTrans%<>%c(function(xold,xnew){return((0.5-xnew)/(0.5-xold)*(xnew-0)/(xold-0))})
+    skew%<>%c(T)
     
   } else stop("Check your model parameter support ranges: link function not defined (CodeSkeleton.R)")
   
@@ -104,6 +108,8 @@ IPMLTP <- list(
   skeleton = skeleton,
   links = links,
   invlinks = invlinks,
+  skew = skew,
+  initPrior = initPrior,
   survFunc = match.fun('linLogit'),
   growthSamp = match.fun(normsampler),
   reprFunc = match.fun('linLogit'),

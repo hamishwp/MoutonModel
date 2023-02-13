@@ -78,14 +78,6 @@ print(paste0("Grid shift = ",shift, " for ",nbks," number of breaks." ))
 # Get the sheep counts and sizes from the actual data (required even if simulated data is used)
 lSHEEP<-GetSoaySheep_binned(lSHEEP,shift=shift,oneSex=T,nbks=nbks,regbinspace=regbinspace)  
 
-if(glmXs) {
-  x0<-do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb)))%>%relist(skeleton = skeleton)
-  propCOV<-Np*diag(unlist((do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,CI=T))))$sd))
-} else {
-  x0<-x0+runif(length(x0),-3,3)
-  propCOV<-diag(Np)*(2.38)^2
-}
-
 #################################################################################
 
 ###################### SIMULATE THE STATE SPACE MODEL ######################
