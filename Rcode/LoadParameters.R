@@ -4,9 +4,9 @@
 # Are we using the real Soay sheep data or are we simulating it?
 simulation<-T
 if(simulation){
-  glmXs<-T # Do we use the GLM estimate of parameter space values to initialise the simulations?
-  poptot<-100 # The number of years for the simulation (IF SIMULATED)
-  yearing<-10 # The total population (IF SIMULATED)
+  glmXs<-F # Do we use the GLM estimate of parameter space values to initialise the simulations?
+  poptot<-500 # The number of years for the simulation (IF SIMULATED)
+  yearing<-30 # The total population (IF SIMULATED)
 }
 # Is the population counted one sex or two?
 oneSex<-T
@@ -18,9 +18,9 @@ stepmax <- 10
 # Do we need to calculate the minimum number of particles required for the adaptive-epsilon algorithm?
 calcParts<-F
 # Number of in-chain parallelised cores
-ncores<-60
+ncores<-58
 # Define the number of size class bins
-nbks<-10
+nbks<-15
 # Bins method:
 regbinspace<-F
 # Particle filter initialisation function

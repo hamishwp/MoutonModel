@@ -679,7 +679,8 @@ Minkowski<-function(sest,sobs,dimmie,p=1){
   sw[is.na(sw)]<-0
   # output total distance
   return(list(shat=meds,
-              d=-abs(pracma::nthroot(mean(d_i[!is.infinite(d_i)]^p,na.rm = T),p)),
+              #d=-abs(pracma::nthroot(mean(d_i[!is.infinite(d_i)]^p,na.rm = T),p)),
+	      d=-sum(abs(meds-sobs)),
               sw=sw+1e-300)) # add a small cap to make sure not all probabilities are negative
 }
 

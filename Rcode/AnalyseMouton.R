@@ -23,20 +23,96 @@ library(corrplot)
 
 
 
-output<-readRDS("./output_SIM_pop500_yr30_ABCSIR_pert_GlobCov_fixed_poissonMu_poissonObs_GLMx0_60000_15brks_regbinspaceFALSE_sampleNorm_autoshift")
+output<-readRDS("./output_SIM_pop100_yr10_ABCSIR_pert_GlobCov_fixed_poissonMu_poissonObs_GLMInitX0_60000_10brks_regbinspaceFALSE_sampleDTN_autoshift_rand611")
+
+disties<-data.frame()
+for(i in 1:length(output)){
+  # inds<-output[[i]]$distance>output[[i]]$delta[i]
+  inds<-rep(T,length(output[[i]]$distance))
+  sheepies<-as.data.frame(cbind(log(-output[[i]]$distance[inds]),output[[i]]$theta[inds,]))
+  names(sheepies)<-c("distance",names(x0))
+  sheepies<-sheepies[!is.na(sheepies$distance) & !is.infinite(sheepies$distance),]  
+  disties%<>%rbind(cbind(reshape2::melt(sheepies,id.vars=c("distance")),data.frame(iteration=rep(i,nrow(sheepies)*(ncol(sheepies)-1)))))
+} 
+
+disties%>%ggplot(aes(distance,value,group=variable))+(aes(colour=variable,y=..ndensity..))+facet_grid(rows=vars(iteration))
+disties%>%ggplot(aes(distance,group=iteration))+geom_histogram()+facet_wrap(~iteration,scales="free")
 
 # istep<-length(output)
-istep<-6
+istep<-4
 
 output[[istep]]$q_thresh
 output[[istep]]$delta
 
 inds<-output[[istep]]$distance>output[[istep]]$delta[istep]
+# inds<-rep(T,length(output[[istep]]$distance))
 sheepies<-as.data.frame(cbind(log(-output[[istep]]$distance[inds]),output[[istep]]$theta[inds,]))
+names(sheepies)<-c("Distance",names(x0))
+sheepies<-sheepies[!is.na(sheepies$Distance) & !is.infinite(sheepies$Distance),]
 
 
-names(sheepies)<-c("distance",names(x0))
-sheepies<-sheepies[!is.na(sheepies$distance) & !is.infinite(sheepies$distance),]
+
+
+tmp<-as.matrix(sheepies)
+colnames(tmp)<-c("Distance",names(x0))
+means <- apply(tmp[,-1], 2, mean,na.rm=T)
+medis <- apply(tmp[,-1], 2, median,na.rm=T)
+lower <- apply(tmp[,-1], 2, quantile, probs = 0.025,na.rm=T)
+upper <- apply(tmp[,-1], 2, quantile, probs = 0.975,na.rm=T)
+wmean <- apply(tmp[,-1],2,weighted.mean,w=exp(tmp[,1]),na.rm = T)
+# get the MAP parameters:
+ind <- tmp[,1] %>% which.max
+MAP <-  tmp[ind, -1]
+
+summaries <- data.frame(GLM=x0, MAP = MAP, mean = means,
+                        lower = lower, upper = upper, weighted_mean=wmean) #, MLE=MLE)
+# summaries <- data.frame(true = simulated, MAP = MAP, mean = means, GLM=GLM,
+#                         median = medis, lower = lower, upper = upper, weighted_mean=wmean) #, MLE=MLE)
+# summaries <- data.frame(simulated = simulated, MAP = MAP, mean = means,MLE=MLE)  
+summaries%<>%cbind(data.frame(inCI=summaries$GLM<summaries$upper & summaries$GLM>summaries$lower))
+
+print(summaries)
+xtable(summaries)
+
+shdens<-t(apply(sheepies[,-1],1,function(x) unname(unlist(Sample2Physical(x,IPMLTP)))[-c(6,7,14,15)]))
+shdens<-cbind(sheepies$Distance,shdens)%>%as.data.frame()
+colnames(shdens)<-colnames(sheepies)
+shdens%<>%reshape2::melt(id.vars=c("Distance"))
+abliny<-data.frame(variable=colnames(tmp)[-1],Z=unname(unlist(Sample2Physical(x0true,IPMLTP)))[-c(6,7,14,15)])
+
+q<-shdens%>%filter(variable!="Distance")%>%ggplot(aes(value))+geom_histogram(aes(colour=variable,fill=variable),alpha=0.5)+
+  geom_vline(data = abliny, aes(xintercept = Z),colour="red")
+q<-q+facet_wrap(. ~ variable,scales = "free") + theme(strip.text.x = element_text(size = 12))+
+  xlab("Value")+ylab("Density")+
+  theme(plot.title = element_text(hjust = 0.5)) ;q
+ggsave("VariableDensities.png", plot=q,path = paste0(directory,'Plots/Hamish/'),width = 12,height = 8)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+sheepies%>%ggplot()+geom_density(aes(Distance))
+
+qq<-list()
+for(i in 2:ncol(sheepies)){
+  shtmp<-sheepies[,c(1,i)]; varname<-names(shtmp)[2]; names(shtmp)[2]<-"Value"
+  p<-shtmp%>%ggplot(aes(x=Value,y=Distance))+
+    geom_density_2d_filled()+ggtitle(varname)+ylab("log(-Distance)")
+    # geom_vline(xintercept = x0[i],colour="red")
+  qq<-c(qq,list(p))
+}
+gridExtra::grid.arrange(qq[[1]],qq[[2]],qq[[3]],qq[[4]],qq[[5]],qq[[6]],
+                        qq[[7]],qq[[8]],qq[[9]],qq[[10]],qq[[11]],qq[[12]])
 
 my_fn <- function(data, mapping, ...){
   p <- ggplot(data = data, mapping = mapping) + 
@@ -47,11 +123,11 @@ my_fn <- function(data, mapping, ...){
 
 GGally::ggpairs(sheepies, lower=list(continuous=my_fn))
 
-# sorters<-sort(sheepies$distance,index.return=T)
+# sorters<-sort(sheepies$Distance,index.return=T)
 # redSheep<-sheepies[sorters$ix[sorters$x<45],]
 # GGally::ggpairs(redSheep, lower=list(continuous=my_fn))
 
-sheepies[which.max(sheepies$distance),]%>%Sample2Physical(IPMLTP)
+sheepies[which.max(sheepies$Distance),]%>%Sample2Physical(IPMLTP)
 
 
 cov.wt(sheepies[,-1],sheepies[,1])$center%>%Sample2Physical(IPMLTP)
@@ -64,21 +140,42 @@ LL<-(cov.wt(sheepies[,-1],sheepies[,1])$center-apply(sheepies[,-1],2,sd))%>%Samp
 
 
 
-sheepies%>%ggplot(aes(survPars1,survPars2))+
-  geom_density2d_filled(aes(colour=distance))+
+sheepies%>%ggplot(aes(x=survPars1,y=survPars2))+
+  stat_summary_2d(aes(z=Distance),bins = 40)+stat_density_2d(aes(colour=..level..))+
   geom_hline(yintercept = vals$survPars[2],colour="red")+
-  geom_vline(xintercept = vals$survPars[1],colour="red")
+  geom_vline(xintercept = vals$survPars[1],colour="red")+
+  scale_color_gradient2(mid="red",high="yellow")
 
-sheepies%>%ggplot(aes(reprPars1,reprPars2))+
-  geom_density2d_filled(aes(colour=distance))+
+sheepies%>%ggplot(aes(x=reprPars1,reprPars2,z=Distance))+
+  stat_summary_2d(aes(z=Distance),bins = 40)+stat_density_2d(aes(colour=..level..))+
   geom_hline(yintercept = vals$reprPars[2],colour="red")+
-  geom_vline(xintercept = vals$reprPars[1],colour="red")
+  geom_vline(xintercept = vals$reprPars[1],colour="red")+
+  scale_color_gradient2(mid="red",high="yellow")
 
-sheepies%>%ggplot(aes(growthPars1,growthPars2))+
-  geom_density2d_filled(aes(colour=distance))+
+
+sheepies%>%ggplot(aes(x=growthPars1,growthPars2,z=Distance))+
+  stat_summary_2d(aes(z=Distance),bins = 40)+stat_density_2d(aes(colour=..level..))+
   geom_hline(yintercept = vals$growthPars[2],colour="red")+
-  geom_vline(xintercept = vals$growthPars[1],colour="red")
+  geom_vline(xintercept = vals$growthPars[1],colour="red")+
+  scale_color_gradient2(mid="red",high="yellow")
 
+sheepies%>%ggplot(aes(x=growthPars1,growthPars3,z=Distance))+
+  stat_summary_2d(aes(z=Distance),bins = 40)+stat_density_2d(aes(colour=..level..))+
+  geom_hline(yintercept = log(vals$growthPars[3]),colour="red")+
+  geom_vline(xintercept = vals$growthPars[1],colour="red")+
+  scale_color_gradient2(mid="red",high="yellow")
+
+sheepies%>%ggplot(aes(x=growthPars2,growthPars3,z=Distance))+
+  stat_summary_2d(aes(z=Distance),bins = 40)+stat_density_2d(aes(colour=..level..))+
+  geom_hline(yintercept = log(vals$growthPars[3]),colour="red")+
+  geom_vline(xintercept = vals$growthPars[2],colour="red")+
+  scale_color_gradient2(mid="red",high="yellow")
+
+sheepies%>%ggplot(aes(x=offSizePars1,offSizePars2,z=Distance))+
+  stat_summary_2d(aes(z=Distance),bins = 40)+stat_density_2d(aes(colour=..level..))+
+  geom_hline(yintercept = vals$offSizePars[2],colour="red")+
+  geom_vline(xintercept = vals$offSizePars[1],colour="red")+
+  scale_color_gradient2(mid="red",high="yellow")
 
 x0true<-c(-7.25, 3.77,
             1.49111883, 0.53069364, log(0.08806918),
@@ -93,24 +190,24 @@ if(fixedObsProb) x0true<-x0true[1:12]
 initDist<-logTargetIPM(x0true, logTargetPars = IPMLTP, returnNeg = F, printProp = F)
 
 hist(log(abs(initDist$shat-IPMLTP$SumStats)))
-hist(log(abs(output[[istep]]$shat[which.max(sheepies$distance),]-IPMLTP$SumStats)))
+hist(log(abs(output[[istep]]$shat[which.max(sheepies$Distance),]-IPMLTP$SumStats)))
 
 sum(abs(initDist$shat-IPMLTP$SumStats))
-sum(abs(output[[istep]]$shat[which.max(sheepies$distance),]-IPMLTP$SumStats))
+sum(abs(output[[istep]]$shat[which.max(sheepies$Distance),]-IPMLTP$SumStats))
 
 hist(log(apply(output[[istep]]$shat,1,function(x) sum(abs(x-IPMLTP$SumStats)))))
 log(sum(abs(initDist$shat-IPMLTP$SumStats)))
 
 
 medSS<-apply(output[[1]]$shat,2,median)
-plot(log(apply(output[[istep]]$shat,1,function(x) sum(abs(x-IPMLTP$SumStats)))),log(-output[[istep]]$distance))
+plot(log(apply(output[[istep]]$shat,1,function(x) sum(abs(x-IPMLTP$SumStats)))),log(-output[[istep]]$Distance))
 apply(output[[istep]]$shat,2,median)
 apply(output[[1]]$shat,2,median)
 
 length(medSS)
 hist(vapply(1:ncol(output[[istep]]$shat),function(i) abs(output[[istep]]$shat[,i]-IPMLTP$SumStats[i])/medSS[i],FUN.VALUE = numeric(1)))
 
-sum(abs(output[[istep]]$shat[which.max(sheepies$distance),]-IPMLTP$SumStats)/SSsd)
+sum(abs(output[[istep]]$shat[which.max(sheepies$Distance),]-IPMLTP$SumStats)/SSsd)
 sum(abs(initDist$shat-IPMLTP$SumStats)/SSsd)
 
 
