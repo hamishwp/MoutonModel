@@ -779,7 +779,7 @@ getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,
   offSratio[offSratio>(1-1e-6)]<-1-1e-6
   offspringSurvSol<-mean(offSratio)
   
-  beatsOS<-betavals(offSratio)
+  beatsOS<-betavals(offSratio*2)
   offSFunc<-function(n) rbeta(n,beatsOS$estimate[1],beatsOS$estimate[2])*0.5
 
   # Observation probability of sheep

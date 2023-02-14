@@ -250,7 +250,7 @@ if(!fixedObsProb) flatPriors%<>%
 # Proposal Distribution
 if(PropDist=="MVSN"){
   
-  PropN<-do.call(getInitialValDists,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,invlinks=IPMLTP$invlinks,MultiSD=3)))
+  PropN<-do.call(getInitialValDists,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,invlinks=IPMLTP$invlinks,MultiSD=2)))
   ProposalDist<-function(initSIR) PropN(ABCNP*ABCk)
   
   # Setup the initial values for the ABSSIR algorithm:

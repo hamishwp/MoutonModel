@@ -858,7 +858,7 @@ GenAccSamples<-function(output, initSIR, lTarg, lTargPars, ResampleSIR){
   particles<-initSIR$Np; Complete<-0
   # Output skeleton
   output<-list(delta=output$delta,iteration=output$iteration,q_thresh=output$q_thresh,
-               distance=c(),theta=array(dim = c(0,length(initSIR$x0))),
+               distance=c(),theta=array(dim = c(0,length(unlist(lTargPars$skeleton)))),
                weightings=c(),shat=array(dim = c(0,length(lTargPars$SumStats))))
   # Sample from parameter space until we have Np accepted particles
   while (particles>0){

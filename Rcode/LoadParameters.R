@@ -4,8 +4,8 @@
 # Are we using the real Soay sheep data or are we simulating it?
 simulation<-T
 if(simulation){
-  poptot<-500 # The number of years for the simulation (IF SIMULATED)
-  yearing<-30 # The total population (IF SIMULATED)
+  poptot<-100 # The number of years for the simulation (IF SIMULATED)
+  yearing<-10 # The total population (IF SIMULATED)
 }
 # Is the population counted one sex or two?
 oneSex<-T
@@ -19,9 +19,9 @@ ABCk<-2L # this sets the number of particles to trial in ABC as N_trial=k*N (see
 # Do we need to calculate the minimum number of particles required for the adaptive-epsilon algorithm?
 calcParts<-F
 # Number of in-chain parallelised cores
-ncores<-58
+ncores<-55
 # Define the number of size class bins
-nbks<-15
+nbks<-10
 # Bins method:
 regbinspace<-F
 # Particle filter initialisation function

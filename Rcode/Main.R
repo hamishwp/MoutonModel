@@ -32,8 +32,6 @@ initSIR$timeouter<-timeouter
 # Save everything we need to replicate this run:
 earlytag<-paste0(namer,"_",priorName,"_its",itermax,"_",gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = ""))
 saveRDS(list(
-  x0=x0,
-  propCOV=propCOV,
   initSIR=initSIR,
   IPMLTP=IPMLTP
 ), paste0(directory,"Results/INPUT_",earlytag))
