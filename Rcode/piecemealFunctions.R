@@ -732,23 +732,42 @@ getInitialValues_R <- function(solveDF,printPars=T,plotty=F,detectedNum=NULL,brk
 }
 
 # Approximate estimate of the shape parameters of a beta distribution
-betavals<-function(ratios){
-  
-  meany<-mean(ratios)
-  medy<-median(ratios)
-  
-  beta1<-abs(((1-2*medy)/3) / (1-medy+(medy/meany)*(meany-1)))
-  beta2<-beta1*(1-meany)/meany
-  
-  obsProbSol <- withCallingHandlers(tryCatch(MASS::fitdistr(ratios,dbeta,start=list(shape1=beta1,shape2=beta2)),
-                         error=function(e) NA), warning = function(w) {NA})
-  
-  if(any(is.na(obsProbSol))) obsProbSol<-list(estimate=c(beta1,beta2),
-                                              n=length(ratios),
-                                              sd=min(c(c(beta1-1,beta2-1)/3,1)))
-
-  return(obsProbSol)
-  
+betavals<-function(ratios,MultiSD=1){
+  # We can't handle 0 or 1, modify them:
+  ratios[ratios<=0]<-1e-6; ratios[ratios>=1]<-1-1e-6
+  # Cost function to maximise
+  CostF<-function(beta) prod(sapply(ratios,function(r) dbeta(r,beta[1],beta[2])))
+  # Sample from uniform distribution around the initial guess from optim
+  betas<-cbind(runif(100000,0.001,100),runif(100000,0.001,100))
+  # Sample the likelihood
+  resy<-apply(betas,1,CostF)
+  # Maximum a-posteriori values:
+  MAP<-betas[which.max(resy),]
+  # Weights
+  www<-(resy-min(resy))/(max(resy)-min(resy))
+  # Calculate the initial guess of distribution
+  ibeta<-cov.wt(betas,www)
+  # Now refine this estimate
+  betas<-cbind(rgamma(10000,
+                      shape = (ibeta$center[1]/ibeta$cov[1,1])^2,
+                      scale = (ibeta$cov[1,1]^2/ibeta$center[1])),
+               rgamma(10000,
+                      shape = (ibeta$center[2]/ibeta$cov[2,2])^2,
+                      scale = (ibeta$cov[2,2]^2/ibeta$center[2])))
+  # Sample the likelihood
+  resy<-apply(betas,1,CostF)
+  # Maximum a-posteriori values:
+  MAP<-betas[which.max(resy),]
+  # Weights
+  www<-(resy-min(resy))/(max(resy)-min(resy))
+  # Calculate the initial guess of distribution
+  ibeta<-cov.wt(betas,www)
+  # Output!
+  list(estimate=ibeta$center,
+       n=length(ratios),
+       shape = c((ibeta$center[1]/(ibeta$cov[1,1]*MultiSD))^2,(ibeta$center[2]/(ibeta$cov[2,2]*MultiSD))^2),
+       scale = c((ibeta$cov[1,1]*MultiSD)^2/ibeta$center[1],(ibeta$cov[2,2]*MultiSD)^2/ibeta$center[2]),
+       sd = c(ibeta$cov[1,1]*MultiSD,ibeta$cov[2,2]*MultiSD))
 }
 
 gammavals<-function(mu,sig){
@@ -758,29 +777,34 @@ gammavals<-function(mu,sig){
 getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,MultiSD=3){
   
   # Offspring Survival Probability
-  numBorn.prev<-solveDF%>%group_by(census.number)%>%
-    summarise(born=sum(off.born,na.rm = T),.groups = 'drop_last')%>%pull(born)
-  lenC<-length(unique(solveDF$census.number))
-  numNewID<-rep(0,lenC)
-  for(i in 1:lenC){
-    c<-unique(solveDF$census.number)[i]
-    uniquers<-unique(solveDF$id[solveDF$census.number==c])
-    numNewID[i]<-length(uniquers)
-    if(i>1) {
-      c_old<-unique(solveDF$census.number)[i-1]
-      uniquers_old<-unique(solveDF$id[solveDF$census.number<=c_old])
-      
-      numNewID[i]<-length(uniquers[!uniquers%in%uniquers_old])
+  if("off.survived" %in%names(solveDF)){
+    offSratio<-solveDF%>%group_by(census.number)%>%
+      summarise(survy=mean(off.survived/off.born,na.rm = T),.groups = 'drop_last')%>%
+      pull(survy)%>%na.omit()
+  } else {
+    numBorn.prev<-solveDF%>%group_by(census.number)%>%
+      summarise(born=sum(off.born,na.rm = T),.groups = 'drop_last')%>%pull(born)
+    lenC<-length(unique(solveDF$census.number))
+    numNewID<-rep(0,lenC)
+    for(i in 1:lenC){
+      c<-unique(solveDF$census.number)[i]
+      uniquers<-unique(solveDF$id[solveDF$census.number==c])
+      numNewID[i]<-length(uniquers)
+      if(i>1) {
+        c_old<-unique(solveDF$census.number)[i-1]
+        uniquers_old<-unique(solveDF$id[solveDF$census.number<=c_old])
+        
+        numNewID[i]<-length(uniquers[!uniquers%in%uniquers_old])
+      }
     }
+    offSratio<-numNewID[-1]/numBorn.prev[-1]
+    offSratio<-offSratio[!is.infinite(offSratio)]
+    offSratio<-apply((cbind(rep(1,length(offSratio)),offSratio)),1,min)
+    offSratio[offSratio>(1-1e-6)]<-1-1e-6
   }
-  offSratio<-numNewID[-1]/numBorn.prev[-length(numBorn.prev)]
-  offSratio<-offSratio[!is.infinite(offSratio)]
-  offSratio<-apply((cbind(rep(1,length(offSratio)),offSratio)),1,min)
-  offSratio[offSratio>(1-1e-6)]<-1-1e-6
-  offspringSurvSol<-mean(offSratio)
   
-  beatsOS<-betavals(offSratio*2)
-  offSFunc<-function(n) rbeta(n,beatsOS$estimate[1],beatsOS$estimate[2])*0.5
+  beatsOS<-betavals(offSratio,MultiSD)
+  offSFunc<-function(n) rbeta(n,beatsOS$estimate[1],beatsOS$estimate[2])
 
   # Observation probability of sheep
   if(is.null(detectedNum)) {
@@ -789,9 +813,9 @@ getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,
   }
   popsizer<-solveDF%>%filter(survived==1 & !is.na(size))%>%group_by(census.number)%>%summarise(total=length(id))
   
-  beats<-betavals(popsizer$total/detectedNum)
-  obsProb1Func<-gammavals(beats$estimate[1],beats$sd[1]/5*MultiSD)
-  obsProb2Func<-gammavals(beats$estimate[2],beats$sd[2]/5*MultiSD)
+  beats<-betavals(popsizer$total/detectedNum,MultiSD)
+  obsProb1Func<-function(n) rgamma(n,shape=beats$shape[1],scale=beats$scale[1])
+  obsProb2Func<-function(n) rgamma(n,shape=beats$shape[2],scale=beats$scale[2])
  
   # Survival probability
   survivalSol <- glm(survived ~ prev.size, family = binomial, data = solveDF)
@@ -850,20 +874,25 @@ getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,
   OffSizeP3Func<-gammavals(offSizePars[3],offSizeSig[3]*MultiSD)
   
   # Offspring number probability
-  
-  offNumPars <- mean(solveDF$off.born[solveDF$off.born>0],na.rm = T)
+  offNumPars <- solveDF%>%filter(off.born>0)%>%group_by(census.number)%>%
+    summarise(meany=mean(off.born))%>%pull(meany)%>%median()
   nn<-length(solveDF$off.born[solveDF$off.born>0 & !is.na(solveDF$off.born)])
   
   offNumParsCI <- c(offNumPars-tstar(nn)*sd(solveDF$off.born[solveDF$off.born>0],na.rm = T)/sqrt(nn),
                     offNumPars+tstar(nn)*sd(solveDF$off.born[solveDF$off.born>0],na.rm = T)/sqrt(nn))
   names(offNumParsCI)<-c("2.5 %","97.5 %")
   
-  offNumSig<-sum(offNumParsCI-1)/5*MultiSD
+  offNumSig<-(offNumParsCI[2]-offNumParsCI[1])/5*MultiSD
   
   OffNumFuncPre<-gammavals((offNumPars-1),offNumSig)
   OffNumFunc<-function(n) OffNumFuncPre(n)+1
   
+  x0<-c(survPars,growthPars,reprPars,offNumPars,offSizePars,(beatsOS$estimate[1]/(beatsOS$estimate[1]+beatsOS$estimate[2])))
+  propCOV<-c(survSig,growSig,reprSig,offNumSig,offSizeSig,
+             sqrt(beatsOS$estimate[1]*beatsOS$estimate[2]/((beatsOS$estimate[1]+beatsOS$estimate[2])^2*(beatsOS$estimate[1]+beatsOS$estimate[2]+1))))
+  
   if(fixedObsProb) {
+    
     SampleEmpBayes<-function(n){
       tmp<-cbind(
         survP1Func(n),
@@ -881,7 +910,9 @@ getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,
       for (i in 1:length(invlinks))  tmp[,i] <- invlinks[[i]](tmp[,i])
       return(tmp)
     }
+    
   } else {
+    
     SampleEmpBayes<-function(n){
       tmp<-cbind(
         survP1Func(n),
@@ -902,9 +933,17 @@ getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,
       return(tmp)
     }
     
+    x0%<>%c(beats$estimate)
+    propCOV%<>%c(beats$sd)
+
   }
-  return(SampleEmpBayes)
-    
+  # Convert to sample space
+  for (i in 1:length(invlinks))  x0[i] <- invlinks[[i]](x0[i])
+  
+  propCOV%<>%diag()
+  
+  return(list(proposal=SampleEmpBayes,x0=unname(x0),propCOV=unname(propCOV)))
+  
 }
 
 x0latextable<-function(simmedData){

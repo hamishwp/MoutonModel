@@ -6,26 +6,70 @@ source(paste0(directory,'Rcode/SimulateData.R'))
 source(paste0(directory,'Rcode/ModelSpecIPM.R'))
 source(paste0(directory,'Rcode/piecemealFunctions.R'))
 source(paste0(directory,'Rcode/SMC.R'))
-library(dissPackage3,lib.loc=directory)
+# library(dissPackage3,lib.loc=directory)
 library(xtable)
-library(mcmcse)
+# library(mcmcse)
 library(magrittr)
 library(tidyverse)
 # install.packages(c("rcorr","corrplot"))
 # devtools::install_github('harrelfe/Hmisc')
-library(Hmisc)
-library(corrplot)
+# library(Hmisc)
+# library(corrplot)
+
+x0<-vals<-c(-7.25, 3.77,
+            1.49111883, 0.53069364, log(0.08806918),
+            -4.619443,  1.369697,
+            log(0.067204),
+            0.6887019, 0.5931042, log(0.2073659),
+            IPMLTP$invlinks[[12]](0.873),
+            log(50),
+            log(10))
+Np<-length(unlist(x0))
+
+# Convert to physical coordinates
+vals%<>%Sample2Physical(IPMLTP)
+
+if(fixedObsProb) {
+  # Calculate the expected observation probability
+  obsMean<-exp(x0[13])/(exp(x0[13])+exp(x0[14]))
+  # Remove the last two parameters
+  x0<-x0[1:12]; Np<-length(unlist(x0))
+  # Temporal observation probability must be kept fixed
+  lSHEEP$obsProbTime <- rep(obsMean,yearing+1)
+} else lSHEEP$obsProbTime <- rbeta(yearing+1,vals$obsProbPar[1],vals$obsProbPar[2])
+
+# Convert to physical coordinates
+names(x0)<-names(unlist(vals))[-c(6,7,14,15)]
+x0true<-x0
+
+# TO CHECK THE INITIAL SAMPLE DISTRIBUTION
+# sheepies<-cbind(data.frame(Distance=runif(1500)),as.data.frame(PropN(1500)))
+# names(sheepies)<-c("Distance",names(x0true))
+# shdens<-t(apply(sheepies[,-1],1,function(x) unname(unlist(Sample2Physical(x,IPMLTP)))[-c(6,7,14,15)]))
+# shdens<-cbind(sheepies$Distance,shdens)%>%as.data.frame()
+# colnames(shdens)<-colnames(sheepies)
+# shdens%<>%reshape2::melt(id.vars=c("Distance"))
+# abliny<-data.frame(variable=colnames(sheepies)[-1],Z=unname(unlist(Sample2Physical(x0true,IPMLTP)))[-c(6,7,14,15)])
+# q<-shdens%>%filter(variable!="Distance")%>%ggplot(aes(value))+geom_histogram(aes(colour=variable,fill=variable),alpha=0.5)+
+#   geom_vline(data = abliny, aes(xintercept = Z),colour="red")
+# q<-q+facet_wrap(. ~ variable,scales = "free") + theme(strip.text.x = element_text(size = 12))+
+#   xlab("Value")+ylab("Density")+
+#   theme(plot.title = element_text(hjust = 0.5)) ;q
+# ggsave("InitialProposalDist_VariableDensities.png", plot=q,path = paste0(directory,'Plots/Hamish/'),width = 12,height = 8)
 
 
+details = file.info(list.files("./","output_SIM"))
+details = details[with(details, order(as.POSIXct(mtime),decreasing = T)), ]
+files = rownames(details); rm(details)
+# Take the most recent, by default
+exty<-str_split(files[1],"output_")[[1]][2]
+output<-readRDS(paste0("./output_",exty))
+inexty<-grep(exty,list.files("./Results/"),value = T)
+inpy<-readRDS(paste0("./Results/",inexty))
+IPMLTP<-inpy$IPMLTP
+initSIR<-inpy$initSIR
 
-
-
-
-
-
-output<-readRDS("./outp")
-
-disties<-data.frame()
+disties<-scoring<-data.frame()
 for(i in 1:length(output)){
   # inds<-output[[i]]$distance>output[[i]]$delta[i]
   inds<-rep(T,length(output[[i]]$distance))
@@ -33,13 +77,26 @@ for(i in 1:length(output)){
   names(sheepies)<-c("distance",names(x0))
   sheepies<-sheepies[!is.na(sheepies$distance) & !is.infinite(sheepies$distance),]  
   disties%<>%rbind(cbind(reshape2::melt(sheepies,id.vars=c("distance")),data.frame(iteration=rep(i,nrow(sheepies)*(ncol(sheepies)-1)))))
+  
+  ptmp<-RMSE<-c()
+  for(j in 2:ncol(sheepies)) {
+    minnie<-min(sum(sheepies[,j]<=x0true[j-1]),sum(sheepies[,j]>=x0true[j-1]))
+    ptmp%<>%c(minnie/nrow(sheepies))
+    RMSE%<>%c(sqrt(sum((sheepies[,j]-x0true[j-1])^2)))
+  }
+  scoring%<>%rbind(data.frame(pvalue=ptmp,RMSE=RMSE,variable=names(x0),iteration=i))
 } 
 
-disties%>%ggplot(aes(distance,value,group=variable))+(aes(colour=variable,y=..ndensity..))+facet_grid(rows=vars(iteration))
-disties%>%ggplot(aes(distance,group=iteration))+geom_histogram()+facet_wrap(~iteration,scales="free")
-
+scoring%>%group_by(iteration)%>%summarise(ptotal=prod(pvalue),RMSEtot=prod(RMSE))
+istep<-scoring%>%group_by(iteration)%>%summarise(ptotal=prod(pvalue),RMSEtot=prod(RMSE))%>%pull(RMSEtot)%>%which.min()
 # istep<-length(output)
-istep<-1
+# istep<-1
+
+scoring%>%ggplot()+geom_point(aes(iteration,RMSE,colour=pvalue))
+
+dimmie<-c(min(disties$distance),log(-output[[1]]$delta[1]))
+disties%>%ggplot(aes(distance,value,group=iteration))+geom_density(aes(colour=iteration,fill=iteration,y=..density..),alpha=0.3)+
+  xlim(dimmie)+facet_grid(rows=vars(iteration))
 
 output[[istep]]$q_thresh
 output[[istep]]$delta
@@ -50,13 +107,14 @@ sheepies<-as.data.frame(cbind(log(-output[[istep]]$distance[inds]),output[[istep
 names(sheepies)<-c("Distance",names(x0))
 sheepies<-sheepies[!is.na(sheepies$Distance) & !is.infinite(sheepies$Distance),]
 
-istep<-5
-inpy<-readRDS("./INPUT_SIM_pop500_yr30_ABCSIR_pert_GlobCov_fixed_poissonMu_poissonObs_randInitX0_60000_15brks_regbinspaceFALSE_sampleDTN_autoshift_rand730_uniform_its60000_2023-02-09_084639")
-newSh<-data.frame(NewD=log(apply(output[[istep]]$shat[output[[istep]]$distance>output[[istep]]$delta[[istep]],],1,function(x) sum(abs(x-c(IPMLTP$SumStats))))),
-                  CurD=log(-output[[istep]]$distance[output[[istep]]$distance>output[[istep]]$delta[[istep]]]))
-newSh%>%ggplot()+geom_point(aes(NewD,CurD))
-newSh%>%ggplot()+geom_histogram(aes(NewD))+scale_y_log10()
-newSh%>%ggplot()+geom_histogram(aes(CurD))+scale_y_log10()
+newSh<-data.frame()
+for(i in 1:length(output)){
+  newSh%<>%rbind(data.frame(NewD=log(apply(output[[i]]$shat[output[[i]]$distance>output[[i]]$delta[[i]],],1,function(x) sum(abs(x-c(IPMLTP$SumStats))))),
+                  CurD=log(-output[[i]]$distance[output[[i]]$distance>output[[i]]$delta[[i]]]),iteration=i))
+}
+newSh%>%ggplot()+geom_point(aes(NewD,CurD))+facet_grid(rows=vars(iteration))
+newSh%>%ggplot()+geom_histogram(aes(NewD))+scale_y_log10()+facet_grid(rows=vars(iteration))
+newSh%>%ggplot()+geom_histogram(aes(CurD))+scale_y_log10()+facet_grid(rows=vars(iteration))
 
 min(newSh$NewD)
 
@@ -72,7 +130,7 @@ wmean <- apply(tmp[,-1],2,weighted.mean,w=exp(tmp[,1]),na.rm = T)
 ind <- tmp[,1] %>% which.max
 MAP <-  tmp[ind, -1]
 
-summaries <- data.frame(True=x0true,median = medis, mean = means, GLM=x0, 
+summaries <- data.frame(True=x0true,median = medis, mean = means, GLM=initSIR$x0, 
                         lower = lower, upper = upper, weighted_mean=wmean) #, MLE=MLE)
 # summaries <- data.frame(true = simulated, MAP = MAP, mean = means, GLM=GLM,
 #                         median = medis, lower = lower, upper = upper, weighted_mean=wmean) #, MLE=MLE)
@@ -81,33 +139,6 @@ summaries%<>%cbind(data.frame(inCI=summaries$GLM<summaries$upper & summaries$GLM
 
 print(summaries)
 xtable(summaries)
-
-shdens<-t(apply(sheepies[,-1],1,function(x) unname(unlist(Sample2Physical(x,IPMLTP)))[-c(6,7,14,15)]))
-shdens<-cbind(sheepies$Distance,shdens)%>%as.data.frame()
-colnames(shdens)<-colnames(sheepies)
-shdens%<>%reshape2::melt(id.vars=c("Distance"))
-abliny<-data.frame(variable=colnames(tmp)[-1],Z=unname(unlist(Sample2Physical(x0true,IPMLTP)))[-c(6,7,14,15)])
-
-q<-shdens%>%filter(variable!="Distance")%>%ggplot(aes(value))+geom_histogram(aes(colour=variable,fill=variable),alpha=0.5)+
-  geom_vline(data = abliny, aes(xintercept = Z),colour="red")
-q<-q+facet_wrap(. ~ variable,scales = "free") + theme(strip.text.x = element_text(size = 12))+
-  xlab("Value")+ylab("Density")+
-  theme(plot.title = element_text(hjust = 0.5)) ;q
-ggsave("VariableDensities_SampleSpace.png", plot=q,path = paste0(directory,'Plots/Hamish/'),width = 12,height = 8)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 sheepies%>%ggplot()+geom_density(aes(Distance))
 
@@ -186,19 +217,10 @@ sheepies%>%ggplot(aes(x=offSizePars1,offSizePars2,z=Distance))+
   geom_vline(xintercept = vals$offSizePars[1],colour="red")+
   scale_color_gradient2(mid="red",high="yellow")
 
-x0true<-c(-7.25, 3.77,
-            1.49111883, 0.53069364, log(0.08806918),
-            -4.619443,  1.369697,
-            log(0.067204),
-            0.6887019, 0.5931042, 0.2073659,
-            qlogis(0.4989097),
-            log(50),
-            log(10))
-if(fixedObsProb) x0true<-x0true[1:12]
+initDist<-logTargetIPM(x0true, logTargetPars = IPMLTP, returnNeg = F, printProp = F, returnW=T)
+initDist$d
 
-initDist<-logTargetIPM(x0true, logTargetPars = IPMLTP, returnNeg = F, printProp = F)
-
-hist(log(abs(initDist$shat-IPMLTP$SumStats)))
+hist(log(abs(c(initDist$shat)-c(IPMLTP$SumStats))))
 hist(log(abs(output[[istep]]$shat[which.max(sheepies$Distance),]-IPMLTP$SumStats)))
 
 sum(abs(initDist$shat-IPMLTP$SumStats))
@@ -209,15 +231,17 @@ log(sum(abs(initDist$shat-IPMLTP$SumStats)))
 
 
 medSS<-apply(output[[1]]$shat,2,median)
-plot(log(apply(output[[istep]]$shat,1,function(x) sum(abs(x-IPMLTP$SumStats)))),log(-output[[istep]]$Distance))
+plot(log(apply(output[[istep]]$shat,1,function(x) sum(abs(x-IPMLTP$SumStats)))),log(-output[[istep]]$distance))
 apply(output[[istep]]$shat,2,median)
 apply(output[[1]]$shat,2,median)
 
 length(medSS)
-hist(vapply(1:ncol(output[[istep]]$shat),function(i) abs(output[[istep]]$shat[,i]-IPMLTP$SumStats[i])/medSS[i],FUN.VALUE = numeric(1)))
+normMSE<-vapply(1:ncol(output[[istep]]$shat),function(i) abs(output[[istep]]$shat[,i]-IPMLTP$SumStats[i])/medSS[i],FUN.VALUE = numeric(length(output[[istep]]$distance)))
+hist(normMSE)
+normMSE<-vapply(1:ncol(output[[istep]]$shat),function(i) abs(output[[istep]]$shat[,i]-IPMLTP$SumStats[i])/medSS[i],FUN.VALUE = numeric(length(output[[istep]]$distance)))
 
-sum(abs(output[[istep]]$shat[which.max(sheepies$Distance),]-IPMLTP$SumStats)/SSsd)
-sum(abs(initDist$shat-IPMLTP$SumStats)/SSsd)
+sum(abs(output[[istep]]$shat[which.max(sheepies$Distance),]-IPMLTP$SumStats)/normMSE)
+sum(abs(initDist$shat-IPMLTP$SumStats)/normMSE)
 
 
 

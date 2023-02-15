@@ -36,9 +36,10 @@ if(is.null(funcys)){
       # Calculate the distances
       disties<-Minkowski(sest = Sstar,
                          sobs = c(wArgs$Sd[,,wArgs$time]),
-                         dimmie=dim(wArgs$Sstar)[3])
+                         dimmie=dim(output$shat)[3])
       # Merge into a single output object
-      output$d<--abs(disties$d*output$d); output$sw<-disties$sw
+      output$d<-disties$d + output$d
+      output$sw<-disties$sw
       # Census-dependent dataframe
       output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
       return(output)
@@ -53,9 +54,10 @@ if(is.null(funcys)){
       # Calculate the distances
       disties<-Minkowski(sest = Sstar, 
                          sobs = c(wArgs$Sd[,,wArgs$time]),
-                         dimmie=dim(wArgs$Sstar)[3])
+                         dimmie=dim(output$shat)[3])
       # Merge into a single output object
-      output$d<--abs(disties$d*output$d); output$sw<-disties$sw
+      output$d<-disties$d + output$d
+      output$sw<-disties$sw
       # Census-dependent dataframe
       output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
       return(output)
@@ -70,9 +72,10 @@ if(is.null(funcys)){
       # Calculate the distances
       disties<-Minkowski(sest = Sstar, 
                          sobs = c(wArgs$Sd[,,wArgs$time]),
-                         dimmie=dim(wArgs$Sstar)[3])
+                         dimmie=dim(output$shat)[3])
       # Merge into a single output object
-      output$d<--abs(disties$d*output$d); output$sw<-disties$sw
+      output$d<-disties$d + output$d
+      output$sw<-disties$sw
       # Census-dependent dataframe
       output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
       return(output)
@@ -87,9 +90,10 @@ if(is.null(funcys)){
       # Calculate the distances
       disties<-Minkowski(sest = Sstar, 
                          sobs = c(wArgs$Sd[,,wArgs$time]),
-                         dimmie=dim(wArgs$Sstar)[3])
+                         dimmie=dim(output$shat)[3])
       # Merge into a single output object
-      output$d<--abs(disties$d*output$d); output$sw<-disties$sw
+      output$d<-disties$d + output$d
+      output$sw<-disties$sw
       # Census-dependent dataframe
       output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
       return(output)
@@ -248,32 +252,17 @@ if(!fixedObsProb) flatPriors%<>%
   ))
 
 # Proposal Distribution
-if(PropDist=="MVSN"){
-  
-  PropN<-do.call(getInitialValDists,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,invlinks=IPMLTP$invlinks,MultiSD=2)))
-  ProposalDist<-function(initSIR) PropN(ABCNP*ABCk)
-  
-  # Setup the initial values for the ABSSIR algorithm:
-  initSIR<-list(ProposalDist=ProposalDist, 
-                itermax=itermax, stepmax=stepmax,
-                Np=ABCNP,
-                k=ABCk) 
-  
-} else {
-  x0<-do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb)))%>%relist(skeleton = skeleton)
-  # Provide initial estimate of covariance matrix using the confidence intervals from the GLM:
-  propCOV<-Np*diag(unlist((do.call(getInitialValues_R,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,CI=T))))$sd)) 
-  # MVN distribution sampler
-  ProposalDist<-function(initSIR) multvarNormProp(xt=initSIR$x0, propPars=initSIR$propCOV, n=ABCNP*ABCk)
-  # Setup the initial values for the ABSSIR algorithm:
-  initSIR<-list(ProposalDist=ProposalDist,
-                itermax=itermax, stepmax=stepmax,
-                Np=ABCNP,
-                k=ABCk) 
-  
-}
+PropN<-do.call(getInitialValDists,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,invlinks=IPMLTP$invlinks,MultiSD=2)))
+# Either multivariate skew normal or multivariate normal
+if(PropDist=="MVSN") {ProposalDist<-function(initSIR) PropN$proposal(ABCNP*ABCk)
+}else ProposalDist<-function(initSIR) multvarNormProp(xt=PropN$x0, propPars=PropN$propCOV, n=ABCNP*ABCk)
+# Setup the initial values for the ABSSIR algorithm:
+initSIR<-list(ProposalDist=ProposalDist, 
+              x0=PropN$x0, propCOV=PropN$propCOV,
+              itermax=itermax, stepmax=stepmax,
+              Np=ABCNP,
+              k=ABCk) 
 
-lSHEEP$solveDF<-NULL;
 #################### CREATE THE LOGTARGETPARAMETERS OBJECT #####################
 # Storage object for the ABC-SIR algorithm
 # stop("Sort this out!")
@@ -285,7 +274,8 @@ IPMLTP %<>% c(list(
   cores = ncores,
   DTN = data.frame(L=lSHEEP$L,U=lSHEEP$U),
   muPar = muPar, 
-  b = SMC_parts
+  b = SMC_parts,
+  solveDF=lSHEEP$solveDF
 ))
 
 IPMLTP$priorF<-function(thth) IPMLTP$priorFunc(thth, IPMLTP$priors, IPMLTP$priorPars)

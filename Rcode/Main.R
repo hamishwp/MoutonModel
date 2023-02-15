@@ -23,7 +23,7 @@ source(paste0(directory,'Rcode/BuildModel.R'))
 # Check that the log-likelihood values make sense before running the full parallelised code
 print("Initial Values Log-Likelihood=")
 ptm <- proc.time()[3]
-print(logTargetIPM(x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F))
+print(logTargetIPM(initSIR$x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F)$d)
 ptm_fin<-(proc.time()[3] - ptm); timeouter<-ptm_fin*4; print(paste0("Timeout = ",timeouter))
 # Make sure this timeout is integrated into the simulations
 initSIR$timeouter<-timeouter

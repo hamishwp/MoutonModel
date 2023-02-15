@@ -15,14 +15,14 @@ supports<-data.frame(
           -Inf, # Survival Logistic Regression Gradient
           -Inf, # Growth Linear Regression Intercept
           -Inf, # Growth Linear Regression Gradient
-          0,    # Growth Linear Regression Dispersion (Std. Dev.)
+          0L,    # Growth Linear Regression Dispersion (Std. Dev.)
           -Inf, # Reproduction Logistic Regression Intercept
           -Inf, # Reproduction Logistic Regression Gradient
-          1,    # Offspring Number per Birth
+          1L,    # Offspring Number per Birth
           -Inf, # Offspring Size Linear Regression Intercept
           -Inf, # Offspring Size Linear Regression Gradient
-          0,    # Offspring Size Linear Regression Dispersion (Std. Dev.)
-          0),    # Offspring Survival Probability
+          0L,    # Offspring Size Linear Regression Dispersion (Std. Dev.)
+          0L),    # Offspring Survival Probability
   upper=c(Inf, # Survival Logistic Regression Intercept
           Inf, # Survival Logistic Regression Gradient
           Inf, # Growth Linear Regression Intercept
@@ -34,22 +34,18 @@ supports<-data.frame(
           Inf, # Offspring Size Linear Regression Intercept
           Inf, # Offspring Size Linear Regression Gradient
           Inf,    # Offspring Size Linear Regression Dispersion (Std. Dev.)
-          sexprob)    # Offspring Survival Probability
+          1L)    # Offspring Survival Probability
 )
 # When using the data obervation values directly rather than assuming a distribution of observation probabilities
 if(!fixedObsProb) {
   # Make sure that the skeleton frame also includes this
   skeleton %<>% c(list(obsProbPar = rep(NA,2)))
   # Add to the supports:
-  supports%<>%rbind(data.frame(lower=c(0,0),upper=c(Inf,Inf)))
+  supports%<>%rbind(data.frame(lower=c(0L,0L),upper=c(Inf,Inf)))
 }
 
 # Some basic link functions (to be used in MCMC calculations)
 returnSelf <- function(x) x
-linkNum <- function(x) exp(x)+1
-invlinkNum <- function(x) log(x-1)
-if(oneSex) {Schilder <- function(x) 0.5*plogis(x)
-} else {Schilder <- function(x) plogis(x)}
 
 # Generate the appropriate functions to be passed into the MCMC algorithm
 links<-invlinks<-acceptTrans<-skew<-initPrior<-c()
@@ -65,13 +61,13 @@ for (i in 1:nrow(supports)){
   # WARNING: R USES GLOBAL ENV FOR VARIABLES DEFINED IN FUNCTION
   # TO AVOID PROBLEMS, WE DEFINE supports$lower[i] & supports$upper[i] IN LOCAL ENV
   # x>0
-  } else if(supports$lower[i]==0 & is.infinite(supports$upper[i])){
+  } else if(supports$lower[i]==0L & is.infinite(supports$upper[i])){
     links%<>%c(function(x){exp(x)+0})
     invlinks%<>%c(function(x){log(x-0)})
     acceptTrans%<>%c(function(xold,xnew){return((xnew-0)/(xold-0))})
     skew%<>%c(T)
   # x>1
-  } else if(supports$lower[i]==1 & is.infinite(supports$upper[i])){
+  } else if(supports$lower[i]==1L & is.infinite(supports$upper[i])){
     links%<>%c(function(x){exp(x)+1})
     invlinks%<>%c(function(x){log(x-1)})
     acceptTrans%<>%c(function(xold,xnew){return((xnew-1)/(xold-1))})
@@ -83,14 +79,14 @@ for (i in 1:nrow(supports)){
   #   acceptTrans%<>%c(function(xold,xnew){return((supports$upper[i]-xnew)/(supports$upper[i]-xold))})
 
   # 0<x<1
-  } else if(supports$lower[i]==0 & supports$upper[i]==1){
+  } else if(supports$lower[i]==0L & supports$upper[i]==1L){
     links%<>%c(function(x){(1*exp(x)+0)/(exp(x)+1)})
     invlinks%<>%c(function(x){log(x-0) - log(1-x)})
     acceptTrans%<>%c(function(xold,xnew){return((1-xnew)/(1-xold)*(xnew-0)/(xold-0))})
     skew%<>%c(T)
     
   # 0<x<0.5
-  } else if(supports$lower[i]==0 & supports$upper[i]==0.5){
+  } else if(supports$lower[i]==0L & supports$upper[i]==0.5){
     links%<>%c(function(x){(0.5*exp(x)+0)/(exp(x)+1)})
     invlinks%<>%c(function(x){log(x-0) - log(0.5-x)})
     acceptTrans%<>%c(function(xold,xnew){return((0.5-xnew)/(0.5-xold)*(xnew-0)/(xold-0))})

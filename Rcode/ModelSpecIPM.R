@@ -126,10 +126,8 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   if (returnNeg) multiplier <- -1
   else multiplier <- 1
   if (printProp) print(proposed)
-  # Get the parameters into a list:
-  skeleton <- logTargetPars$skeleton
-  vectorPars <- proposed
   
+  vals<-proposed
   proposed%<>%Sample2Physical(logTargetPars)
   
   if(logTargetPars$fixedObsProb) {
@@ -139,7 +137,7 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
     logTargetPars$muPar$pobs<-obsProbPar
   }
   
-  if(is.null(logTargetPars$sampleState)) logTargetPars$sampleState<-vectorisedSamplerIPM
+  if(is.null(logTargetPars$sampleState)) logTargetPars$sampleState<-vectorisedSamplerIPM_ABCSIR
   
   # Create the list of arguments required for the state space sampler:
   stateSpaceSampArgs <- list(survFunc = logTargetPars$survFunc, survPars = proposed$survPars,
@@ -164,7 +162,7 @@ logTargetIPM <- function(proposed, logTargetPars, returnNeg = F, check = F,
   else{
     if (returnLL) return(ll)
     else # Get the evaluation of the priors:
-      ll$d <- multiplier*(-abs(ll$d) - abs(logTargetPars$priorFunc(vectorPars, logTargetPars$priors, logTargetPars$priorPars)))
+      ll$d <- multiplier*(-abs(ll$d) - abs(logTargetPars$priorFunc(vals, logTargetPars$priors, logTargetPars$priorPars)))
       return(ll)
   }
 }

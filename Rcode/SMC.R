@@ -720,7 +720,7 @@ particleFilter <- function(Sd, mu, muPar, sampleState, sampleStatePar, obsProb,
   # Setup initial states
   prevStates <- do.call(mu, muPar)
   # Setup weight matrix and standardised weight matrix:
-  output <- list(d=1, sw=rep(1,NoParts),
+  output <- list(d=0, sw=rep(1,NoParts),
                  shat=array(NA, dim=c(nrow(Sd),3,t)))
   # Update weights for first time step:
   wArgs <- list(Sd=Sd, pobs=obsProbPar, NoParts=NoParts)

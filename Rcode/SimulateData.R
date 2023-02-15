@@ -322,34 +322,23 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     reprSizes <- survivorsDF$size[iids]
     parentSizes <- rep(reprSizes, censusOffNum)
     parentIDs <- rep(parentsDF$id, censusOffNum)
-    
     offspringSizes <- offSizeSamp(parentSizes, offSizePars)
+    
+    # Determine the sex of the offspring:
+    probGend <- ifelse(isTRUE(OneGend), 0.5, 1)
+    gender <- rbinom(length(offspringSizes), 1, probGend)
+    
+    # Reduce all the other variables correspondingly
+    parentSizes <- parentSizes[gender==1]; parentIDs <- parentIDs[gender==1]; offspringSizes <- offspringSizes[gender==1]
     
     # Determine the survival of the offspring:
     nOffspring <- length(offspringSizes)
     survivingChildren <- rbinom(nOffspring, 1, Schild)
     
-    # Determine the sex of the offspring:
-    probGend <- ifelse(isTRUE(OneGend), 0.5, 1)
-    gender <- rbinom(nOffspring, 1, probGend)
-    
     # Find out which children make it to census:
     newIDStart <- (max(DF$id)+1)
-    censusedChildren <- which(gender==1 & survivingChildren==1)
-    
-    # Print out summaries of the simulation if desired:
-    if (verbose){
-      cat("survival rate is", sum(survivors)/current.pop.size,"\n")
-      oldSizes <- survivorsDF$size[which(survivors==1)]
-      cat("average growth is", mean(na.omit(newSizes) - oldSizes), "\n")
-      # cat("reproduction rate is", nRepr/current.pop.size, "\n")
-      cat("rate of births is", nOffspring/current.pop.size, "\n")
-      cat("child censusing rate is", length(censusedChildren)/nOffspring,"\n")
-      gr <- (length(censusedChildren)+sum(survivors))/current.pop.size
-      cat("growth rate is", gr, "\n")
-      cat("\n")
-    }
-    
+    censusedChildren <- which(survivingChildren==1)
+
     # Calculate how many surviving children per parent with a helper:
     helper <- function(x){
       ifelse(!x %in% parentIDs,
@@ -380,13 +369,35 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     # Only use the helper if the user wants us to. Otherwise make a vector of
     # NAs for speed of calculation:
     if (isTRUE(CalcOffSurv)){
-      off.survived <- sapply(survivorsDF$id, helper)
-      off.born <- sapply(survivorsDF$id, helper2)
+      off.born <- rep(0,length(survivorsDF$id))
+      tably<-c(table(parentIDs))
+      off.born[survivorsDF$id%in%names(tably)]<-censusOffNum[parentsDF$id%in%names(tably)]
+      
+      off.survived <- rep(0,length(survivorsDF$id))
+      off.survived[off.born==0]<-NA
+      tably<-c(table(parentIDs[survivingChildren==1]))
+      off.survived[survivorsDF$id%in%names(tably)]<-unname(tably)
+      
       rec.wt<- t(sapply(survivorsDF$id,helper3))
     } else{
       off.survived <- rep(NA, current.pop.size)
       off.born <- rep(NA, current.pop.size)
       rec.wt <- matrix(NA, nrow = current.pop.size, ncol = 2)
+    }
+    
+    # Print out summaries of the simulation if desired:
+    if (verbose){
+      cat("survival rate is", sum(survivors)/current.pop.size,"\n")
+      oldSizes <- survivorsDF$size[which(survivors==1)]
+      cat("average growth is", mean(na.omit(newSizes) - oldSizes), "\n")
+      # cat("reproduction rate is", nRepr/current.pop.size, "\n")
+      cat("rate of births is", nOffspring/current.pop.size, "\n")
+      cat("no. offspring is", mean(off.born[off.born>0],na.rm=T), "\n")
+      cat("no. surviving offspring is", mean(off.survived,na.rm=T), "\n")
+      cat("child censusing rate is", length(censusedChildren)/nOffspring,"\n")
+      gr <- (length(censusedChildren)+sum(survivors))/current.pop.size
+      cat("growth rate is", gr, "\n")
+      cat("\n")
     }
     
     # Create the DF for the parents:
@@ -403,9 +414,9 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
                             off.born=off.born)
     
     # Update the previous.census data.frame:
-    if (length(censusedChildren)==0) previous.census <- currentDF
-    
-    else{
+    if (length(censusedChildren)==0) {
+      previous.census <- currentDF
+    } else {
       newIDs <- newIDStart:(length(censusedChildren)+newIDStart-1)
       offspringDF <- data.frame(id = newIDs,
                                 size = offspringSizes[censusedChildren],
@@ -450,10 +461,6 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
               U=max(c(DF$size,DF$prev.size),na.rm = T)))
 
 }
-
-
-
-
 
 
 
