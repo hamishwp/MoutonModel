@@ -37,7 +37,7 @@ saveRDS(list(
   IPMLTP=IPMLTP
 ), paste0(directory,"Results/INPUT_",earlytag))
 ###################################################################################
-######################## Parameterise the model using MCMC ########################
+####################### Parameterise the model using ABCSMC #######################
 ###################################################################################
 print("And so it begins...")
 ptm <- proc.time()[3]

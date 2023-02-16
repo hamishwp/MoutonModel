@@ -812,6 +812,9 @@ ExtractGLM<-function(solveDF,formular,alpha=0.025,familiar=NULL){
 }
 
 getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,MultiSD=1){
+  
+  alpha<-0.025
+  
   # Offspring Survival Probability
   if("off.survived" %in%names(solveDF)){
     offSratio<-solveDF%>%group_by(census.number)%>%

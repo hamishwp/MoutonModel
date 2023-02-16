@@ -34,7 +34,7 @@ pert_GlobSkewCov<-function(outin,lTargPars){
   # Reduce ewights and previous parameter samples for computation
   outin$weightings<-outin$weightings[inds]; outin$theta<-outin$theta[inds,]
   # Calculate the global mean, skew and covariance matrix
-  disty<-sn::msn.mle(y = outin$theta)$dp
+  disty<-sn::msn.mle(y = outin$theta, )$dp
   # Adjust such that normally distributed values remain un-skewed
   for (i in 1:ncol(outin$theta)) if(!lTargPars$skew[i]) disty$alpha[i]<-0
   # Then sample from the MV-SN distribution
@@ -50,6 +50,7 @@ pert_GlobSkewCov<-function(outin,lTargPars){
     prpr<-exp(apply(thth,1,function(tt) lTargPars$priorF(tt)))
     # Associated weights NOTE THAT NORMALISATION IS DONE LATER
     newW<-prpr/ptrans
+    newW[is.infinite(newW)]<-max(newW[!is.infinite(newW)],na.rm = T)
     
     return(list(theta=thth,weightings=newW))
   }

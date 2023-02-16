@@ -947,7 +947,7 @@ ModThresh<-function(output,xPrev){
   # Calculate the quantile function
   output$q_thresh<-CalcQuantile(output,xPrev)
   # Decrease the current ABC-threshold
-  output$delta[output$iteration+1L]<-quantile(output$delta[output$iteration],(1-output$q_thresh[output$iteration])) 
+  output$delta[output$iteration+1L]<-quantile(output$distance[output$distance>output$delta[output$iteration]],(1-output$q_thresh[output$iteration])) 
   
   return(output)
 }
@@ -995,7 +995,7 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
     # Calculate the Effective Sample Size (ESS), noting that it is already normalised
     output$ESS<-CalcESS(output)
     # Save previous parameter space samples
-    xPrev<-output$theta[output$distance>=output$delta[output$iteration-1],]
+    xPrev<-output$theta[output$distance>output$delta[output$iteration-1],]
     # Save the output!
     prev<-readRDS(paste0("output_",namer)); saveRDS(c(prev,list(output)),paste0("output_",namer)); rm(prev)
     # Tell me what's good... please, please, please
