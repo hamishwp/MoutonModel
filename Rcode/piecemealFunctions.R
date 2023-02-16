@@ -774,8 +774,44 @@ gammavals<-function(mu,sig){
   function(n) rgamma(n,shape=(mu/sig)^2,scale=(sig^2/mu))
 }
 
-getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,MultiSD=3){
+ExtractGLM<-function(solveDF,formular,alpha=0.025,familiar=NULL){
   
+  # Do we need a linear model or GLM?
+  if(!is.null(familiar)){ modeller<-function(i) solveDF%>%filter(census.number==i)%>%glm(formula = formular, family = familiar)
+  } else modeller<-function(i) solveDF%>%filter(census.number==i)%>%lm(formula = formular)
+  
+  extGLM<-function(i){
+    # Generate the model
+    mmm<-modeller(i)
+    # Output the coefficients, the CI ranges and the sigma values
+    Pars<-c(coef(mmm),sigma(mmm))
+    # Number of values
+    nn<-length(mmm$residuals)
+    # CI of the sigma term
+    sigCI<-c(sigma(mmm)-(nn-2)*sigma(mmm)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE),
+              sigma(mmm)+(nn-2)*sigma(mmm)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE))
+    # All CI values
+    ParsCI <- rbind(confint(mmm),sigCI); rownames(ParsCI)[3]<-"sigma"
+    # Output me!
+    outout<-c(Pars,ParsCI); names(outout)<-c(rownames(ParsCI),paste0(rownames(ParsCI),"_L"),paste0(rownames(ParsCI),"_U"))
+    
+    return(outout[c(1,4,7,2,5,8,3,6,9)])
+  }
+  
+  estimated<-t(sapply(unique(solveDF$census.number)[-1], extGLM))
+  # Calculate point estimates from these, based on median value, and min of lower CI and max of upper CI
+  pointest<-data.frame(intercept=c(median(estimated[,1]),median(estimated[,2]),median(estimated[,3])),
+                 gradient=c(median(estimated[,4]),median(estimated[,5]),median(estimated[,6])),
+                 sigma=c(median(estimated[,7]),median(estimated[,8]),median(estimated[,9])))
+  # Add the CI range
+  pointest%<>%rbind(pointest[3,]-pointest[2,])
+  rownames(pointest)<-c("estimate","lower","upper","range")
+  
+  return(pointest)
+  
+}
+
+getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,MultiSD=1){
   # Offspring Survival Probability
   if("off.survived" %in%names(solveDF)){
     offSratio<-solveDF%>%group_by(census.number)%>%
@@ -818,78 +854,60 @@ getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,
   obsProb2Func<-function(n) rgamma(n,shape=beats$shape[2],scale=beats$scale[2])
  
   # Survival probability
-  survivalSol <- glm(survived ~ prev.size, family = binomial, data = solveDF)
-  survPars<-coef(survivalSol)
-  survParsCI<-confint(survivalSol)
-  survSig<-abs(survParsCI[,1]-survParsCI[,2])/5
-  
-  survP1Func<-function(n) rnorm(n,survPars[1],survSig[1]*MultiSD)
-  survP2Func<-function(n) rnorm(n,survPars[2],survSig[2]*MultiSD)
+  survivalSol<-ExtractGLM(solveDF,"survived ~ prev.size",alpha=alpha,familiar="binomial")
+  survP1Func<-function(n) rnorm(n,survivalSol[1,1],survivalSol[4,1]*MultiSD)
+  survP2Func<-function(n) rnorm(n,survivalSol[1,2],survivalSol[4,2]*MultiSD)
   
   # Reproduction likelihood
-  reproductionSol <- glm(reproduced ~ size, family = binomial, data=solveDF)
-  reprPars <- coef(reproductionSol)
-  reprParsCI <- confint(reproductionSol)
-  reprSig<-abs(reprParsCI[,1]-reprParsCI[,2])/5
-  
-  reprP1Func<-function(n) rnorm(n,reprPars[1],reprSig[1]*MultiSD)
-  reprP2Func<-function(n) rnorm(n,reprPars[2],reprSig[2]*MultiSD)
+  reproductionSol <- ExtractGLM(solveDF,"reproduced ~ size",alpha=alpha,familiar="binomial")
+  reprP1Func<-function(n) rnorm(n,reproductionSol[1,1],reproductionSol[4,1]*MultiSD)
+  reprP2Func<-function(n) rnorm(n,reproductionSol[1,2],reproductionSol[4,2]*MultiSD)
   
   # Student's distribution confidence levels
   alpha<-0.025
-  tstar<-function(nn) qt(1-alpha/2,nn-1,lower.tail = T)
   
   # Growth probability
-  growthSol <- lm(size ~ prev.size, data = solveDF)
-  growthPars <- c(coef(growthSol),summary(growthSol)$sigma)
-  nn<-length(growthSol$residuals)
-  
-  gsigCI<-c(sigma(growthSol)-(nn-2)*sigma(growthSol)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE),
-            sigma(growthSol)+(nn-2)*sigma(growthSol)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE))
-  
-  growthParsCI <- rbind(confint(growthSol),gsigCI)
-  rownames(growthParsCI)[3]<-"sigma"
-  
-  growSig<-abs(growthParsCI[,1]-growthParsCI[,2])/5
-  
-  growP1Func<-function(n) rnorm(n,growthPars[1],growSig[1]*MultiSD)
-  growP2Func<-function(n) rnorm(n,growthPars[2],growSig[2]*MultiSD)
-  growP3Func<-gammavals(growthPars[3],growSig[3]*MultiSD)
+  growthSol <- ExtractGLM(solveDF,"size ~ prev.size",alpha=alpha)
+  growP1Func<-function(n) rnorm(n,growthSol[1,1],growthSol[4,1]*MultiSD)
+  growP2Func<-function(n) rnorm(n,growthSol[1,2],growthSol[4,2]*MultiSD)
+  growP3Func<-gammavals(growthSol[1,3],growthSol[4,3]*MultiSD)
   
   # Offspring-parent size probability
-  offspringSizeSol <- lm(rec1.wt ~ size, data = solveDF)
-  offSizePars <- c(coef(offspringSizeSol),summary(offspringSizeSol)$sigma)
-  nn<-length(offspringSizeSol$residuals)
-  
-  osigCI<-c(sigma(offspringSizeSol)-(nn-2)*sigma(offspringSizeSol)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE),
-            sigma(offspringSizeSol)+(nn-2)*sigma(offspringSizeSol)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE))
-  
-  offSizeParsCI <- rbind(confint(offspringSizeSol),osigCI)
-  rownames(offSizeParsCI)[3]<-"sigma"
-  
-  offSizeSig<-abs(offSizeParsCI[,1]-offSizeParsCI[,2])/5
-  
-  OffSizeP1Func<-function(n) rnorm(n,offSizePars[1],offSizeSig[1]*MultiSD)
-  OffSizeP2Func<-function(n) rnorm(n,offSizePars[2],offSizeSig[2]*MultiSD)
-  OffSizeP3Func<-gammavals(offSizePars[3],offSizeSig[3]*MultiSD)
+  offspringSizeSol <- ExtractGLM(solveDF,"rec1.wt ~ size",alpha=alpha)
+  OffSizeP1Func<-function(n) rnorm(n,offspringSizeSol[1,1],offspringSizeSol[4,1]*MultiSD)
+  OffSizeP2Func<-function(n) rnorm(n,offspringSizeSol[1,2],offspringSizeSol[4,2]*MultiSD)
+  OffSizeP3Func<-gammavals(offspringSizeSol[1,3],offspringSizeSol[4,3]*MultiSD)
   
   # Offspring number probability
   offNumPars <- solveDF%>%filter(off.born>0)%>%group_by(census.number)%>%
-    summarise(meany=mean(off.born))%>%pull(meany)%>%median()
-  nn<-length(solveDF$off.born[solveDF$off.born>0 & !is.na(solveDF$off.born)])
+    summarise(meany=mean(off.born))%>%pull(meany)
+  offNumSig<-max(offNumPars)-min(offNumPars)
+  offNumSig<-sd(offNumPars)
+  offNumPars%<>%mean()
   
-  offNumParsCI <- c(offNumPars-tstar(nn)*sd(solveDF$off.born[solveDF$off.born>0],na.rm = T)/sqrt(nn),
-                    offNumPars+tstar(nn)*sd(solveDF$off.born[solveDF$off.born>0],na.rm = T)/sqrt(nn))
-  names(offNumParsCI)<-c("2.5 %","97.5 %")
-  
-  offNumSig<-(offNumParsCI[2]-offNumParsCI[1])/5*MultiSD
+  # nn<-length(solveDF$off.born[solveDF$off.born>0 & !is.na(solveDF$off.born)])
+  # tstar<-function(nn) qt(1-alpha/2,nn-1,lower.tail = T)
+  # offNumParsCI <- c(offNumPars-tstar(nn)*sd(solveDF$off.born[solveDF$off.born>0],na.rm = T)/sqrt(nn),
+  #                   offNumPars+tstar(nn)*sd(solveDF$off.born[solveDF$off.born>0],na.rm = T)/sqrt(nn))
+  # names(offNumParsCI)<-c("2.5 %","97.5 %")
+  # offNumSig<-(offNumParsCI[2]-offNumParsCI[1])/5*MultiSD
   
   OffNumFuncPre<-gammavals((offNumPars-1),offNumSig)
   OffNumFunc<-function(n) OffNumFuncPre(n)+1
   
-  x0<-c(survPars,growthPars,reprPars,offNumPars,offSizePars,(beatsOS$estimate[1]/(beatsOS$estimate[1]+beatsOS$estimate[2])))
-  propCOV<-c(survSig,growSig,reprSig,offNumSig,offSizeSig,
-             sqrt(beatsOS$estimate[1]*beatsOS$estimate[2]/((beatsOS$estimate[1]+beatsOS$estimate[2])^2*(beatsOS$estimate[1]+beatsOS$estimate[2]+1))))
+  x0<-unname(unlist(c(survivalSol[1,1:2],
+               growthSol[1,],
+               reproductionSol[1,1:2],
+               offNumPars,
+               offspringSizeSol[1,],
+               (beatsOS$estimate[1]/(beatsOS$estimate[1]+beatsOS$estimate[2])))))
+  
+  propCOV<-unname(unlist(c(survivalSol[4,1:2],
+                    growthSol[4,],
+                    reproductionSol[4,1:2],
+                    offNumSig,
+                    offspringSizeSol[4,],
+             sqrt(beatsOS$estimate[1]*beatsOS$estimate[2]/((beatsOS$estimate[1]+beatsOS$estimate[2])^2*(beatsOS$estimate[1]+beatsOS$estimate[2]+1))))))
   
   if(fixedObsProb) {
     
@@ -939,7 +957,7 @@ getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,
   }
   # Convert to sample space
   for (i in 1:length(invlinks))  x0[i] <- invlinks[[i]](x0[i])
-  
+
   propCOV%<>%diag()
   
   return(list(proposal=SampleEmpBayes,x0=unname(x0),propCOV=unname(propCOV)))

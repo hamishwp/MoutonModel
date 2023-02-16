@@ -307,6 +307,11 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     # reproducers[iids] <- rbinom(sum(survivors,na.rm = T), 1, reprFunc(na.omit(newSizes), reprPars))
     reproducers[iids] <- rbinom(sum(survivors,na.rm = T), 1, reprFunc(survivorsDF$size[iids], reprPars))
     
+    # Determine the sex of the offspring:
+    probGend <- ifelse(isTRUE(OneGend), 0.5, 1)
+    if(sum(reproducers==1 & !is.na(reproducers))>0) reproducers[reproducers==1 & !is.na(reproducers)]<-
+      rbinom(sum(reproducers==1 & !is.na(reproducers)), 1, probGend)
+    
     iids<-reproducers==1 & !is.na(reproducers)
     
     # nRepr <- reproducers %>% na.omit %>% `==`(1) %>% sum
@@ -323,13 +328,6 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     parentSizes <- rep(reprSizes, censusOffNum)
     parentIDs <- rep(parentsDF$id, censusOffNum)
     offspringSizes <- offSizeSamp(parentSizes, offSizePars)
-    
-    # Determine the sex of the offspring:
-    probGend <- ifelse(isTRUE(OneGend), 0.5, 1)
-    gender <- rbinom(length(offspringSizes), 1, probGend)
-    
-    # Reduce all the other variables correspondingly
-    parentSizes <- parentSizes[gender==1]; parentIDs <- parentIDs[gender==1]; offspringSizes <- offspringSizes[gender==1]
     
     # Determine the survival of the offspring:
     nOffspring <- length(offspringSizes)
@@ -369,15 +367,17 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     # Only use the helper if the user wants us to. Otherwise make a vector of
     # NAs for speed of calculation:
     if (isTRUE(CalcOffSurv)){
-      off.born <- rep(0,length(survivorsDF$id))
-      tably<-c(table(parentIDs))
-      off.born[survivorsDF$id%in%names(tably)]<-censusOffNum[parentsDF$id%in%names(tably)]
-      
-      off.survived <- rep(0,length(survivorsDF$id))
-      off.survived[off.born==0]<-NA
-      tably<-c(table(parentIDs[survivingChildren==1]))
-      off.survived[survivorsDF$id%in%names(tably)]<-unname(tably)
-      
+      # off.born <- rep(0,length(survivorsDF$id))
+      # tably<-c(table(parentIDs))
+      # off.born[survivorsDF$id%in%names(tably)]<-tably
+      # # 
+      # off.survived <- rep(0,length(survivorsDF$id))
+      # off.survived[off.born==0]<-NA
+      # tably<-c(table(parentIDs[survivingChildren==1]))
+      # off.survived[survivorsDF$id%in%names(tably)]<-unname(tably)
+      #       
+      off.born<-sapply(survivorsDF$id,helper2)
+      off.survived<-sapply(survivorsDF$id,helper)
       rec.wt<- t(sapply(survivorsDF$id,helper3))
     } else{
       off.survived <- rep(NA, current.pop.size)
@@ -390,10 +390,9 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
       cat("survival rate is", sum(survivors)/current.pop.size,"\n")
       oldSizes <- survivorsDF$size[which(survivors==1)]
       cat("average growth is", mean(na.omit(newSizes) - oldSizes), "\n")
-      # cat("reproduction rate is", nRepr/current.pop.size, "\n")
       cat("rate of births is", nOffspring/current.pop.size, "\n")
       cat("no. offspring is", mean(off.born[off.born>0],na.rm=T), "\n")
-      cat("no. surviving offspring is", mean(off.survived,na.rm=T), "\n")
+      cat("no. surviving offspring is", mean(off.survived/off.born,na.rm=T), "\n")
       cat("child censusing rate is", length(censusedChildren)/nOffspring,"\n")
       gr <- (length(censusedChildren)+sum(survivors))/current.pop.size
       cat("growth rate is", gr, "\n")
@@ -461,7 +460,6 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
               U=max(c(DF$size,DF$prev.size),na.rm = T)))
 
 }
-
 
 
 

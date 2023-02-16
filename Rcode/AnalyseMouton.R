@@ -43,18 +43,18 @@ names(x0)<-names(unlist(vals))[-c(6,7,14,15)]
 x0true<-x0
 
 # TO CHECK THE INITIAL SAMPLE DISTRIBUTION
-# sheepies<-cbind(data.frame(Distance=runif(1500)),as.data.frame(PropN(1500)))
-# names(sheepies)<-c("Distance",names(x0true))
-# shdens<-t(apply(sheepies[,-1],1,function(x) unname(unlist(Sample2Physical(x,IPMLTP)))[-c(6,7,14,15)]))
-# shdens<-cbind(sheepies$Distance,shdens)%>%as.data.frame()
-# colnames(shdens)<-colnames(sheepies)
-# shdens%<>%reshape2::melt(id.vars=c("Distance"))
-# abliny<-data.frame(variable=colnames(sheepies)[-1],Z=unname(unlist(Sample2Physical(x0true,IPMLTP)))[-c(6,7,14,15)])
-# q<-shdens%>%filter(variable!="Distance")%>%ggplot(aes(value))+geom_histogram(aes(colour=variable,fill=variable),alpha=0.5)+
-#   geom_vline(data = abliny, aes(xintercept = Z),colour="red")
-# q<-q+facet_wrap(. ~ variable,scales = "free") + theme(strip.text.x = element_text(size = 12))+
-#   xlab("Value")+ylab("Density")+
-#   theme(plot.title = element_text(hjust = 0.5)) ;q
+sheepies<-cbind(data.frame(Distance=runif(1500)),as.data.frame(PropN$proposal(1500)))
+names(sheepies)<-c("Distance",names(x0true))
+shdens<-t(apply(sheepies[,-1],1,function(x) unname(unlist(Sample2Physical(x,IPMLTP)))[-c(6,7,14,15)]))
+shdens<-cbind(sheepies$Distance,shdens)%>%as.data.frame()
+colnames(shdens)<-colnames(sheepies)
+shdens%<>%reshape2::melt(id.vars=c("Distance"))
+abliny<-data.frame(variable=colnames(sheepies)[-1],Z=unname(unlist(Sample2Physical(x0true,IPMLTP)))[-c(6,7,14,15)])
+q<-shdens%>%filter(variable!="Distance")%>%ggplot(aes(value))+geom_histogram(aes(colour=variable,fill=variable),alpha=0.5)+
+  geom_vline(data = abliny, aes(xintercept = Z),colour="red")
+q<-q+facet_wrap(. ~ variable,scales = "free") + theme(strip.text.x = element_text(size = 12))+
+  xlab("Value")+ylab("Density")+
+  theme(plot.title = element_text(hjust = 0.5)) ;q
 # ggsave("InitialProposalDist_VariableDensities.png", plot=q,path = paste0(directory,'Plots/Hamish/'),width = 12,height = 8)
 
 

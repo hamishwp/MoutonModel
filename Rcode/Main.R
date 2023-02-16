@@ -28,7 +28,8 @@ ptm_fin<-(proc.time()[3] - ptm); timeouter<-ptm_fin*4; print(paste0("Timeout = "
 # Make sure this timeout is integrated into the simulations
 initSIR$timeouter<-timeouter
 # if(file.exists(paste0("output_",namer))) initSIR$output<-readRDS(paste0("output_",namer)); initSIR$output<-initSIR$output[[length(initSIR$output)]]
-
+print(initSIR$x0)
+print(diag(initSIR$propCOV))
 # Save everything we need to replicate this run:
 earlytag<-paste0(namer,"_",priorName,"_its",itermax,"_",gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = ""))
 saveRDS(list(
