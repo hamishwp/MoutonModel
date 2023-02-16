@@ -921,7 +921,7 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
              delta=c(delta0),
              q_thresh=c(0.95),
              iteration=1)
-  
+
   return(outy)
 }
 
@@ -947,7 +947,7 @@ ModThresh<-function(output,xPrev){
   # Calculate the quantile function
   output$q_thresh<-CalcQuantile(output,xPrev)
   # Decrease the current ABC-threshold
-  output$delta[output$iteration+1L]<--abs(output$delta[output$iteration]*output$q_thresh[output$iteration])
+  output$delta[output$iteration+1L]<-quantile(output$delta[output$iteration],(1-output$q_thresh[output$iteration])) 
   
   return(output)
 }
@@ -975,6 +975,9 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
   if(is.null(initSIR$output)) {output<-InitABCSIR(lTarg, lTargPars, initSIR); it<-1} else {output<-initSIR$output; it<-output$iteration}
   # Setup shop for the full algorithm
   saveRDS(list(output),paste0("output_",namer));xPrev<-output$theta
+  # Show the goods!
+  print(paste0("Step = 1, No. samples = ",initSIR$Np*initSIR$k,", eps = ",signif(output$delta,3),
+               " with 1/c = ",signif(output$q_thresh,2)," and ESS = ",signif(CalcESS(output),3)))
   # Run the algorithm!
   while(!(output$q_thresh[it] > 0.98 & it > 3)){ # & cycles <= initSIR$itermax & stepmax<=it){
     # Set the ABC-step number

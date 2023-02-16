@@ -252,7 +252,7 @@ if(!fixedObsProb) flatPriors%<>%
   ))
 
 # Proposal Distribution
-PropN<-do.call(getInitialValDists,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,invlinks=IPMLTP$invlinks,MultiSD=2)))
+PropN<-do.call(getInitialValDists,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,invlinks=IPMLTP$invlinks,MultiSD=3)))
 # Either multivariate skew normal or multivariate normal
 if(PropDist=="MVSN") {ProposalDist<-function(initSIR) PropN$proposal(ABCNP*ABCk)
 }else ProposalDist<-function(initSIR) multvarNormProp(xt=PropN$x0, propPars=PropN$propCOV, n=ABCNP*ABCk)

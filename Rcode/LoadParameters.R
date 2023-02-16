@@ -14,7 +14,7 @@ fixedObsProb<-T
 # Number of MCMC simulations
 itermax <- 60000
 stepmax <- 10
-ABCNP<-2500L  # this is the number of particles to pass the ABC threshold
+ABCNP<-1000L  # this is the number of particles to pass the ABC threshold
 ABCk<-2L # this sets the number of particles to trial in ABC as N_trial=k*N (see table 2, U. Simola, et al, Bayesian Analysis (2021) 16, Number 2, Adaptive Approximate Bayesian Computation
 # Do we need to calculate the minimum number of particles required for the adaptive-epsilon algorithm?
 calcParts<-F
@@ -37,7 +37,7 @@ PropDist<-"MVSN"
 # What algorithm to use to parameterise the model?
 algorithm<-"ABCSIR"
 # For the ABCSMC particle weights, do we want the standard or the alternative (Filipi 2012) method?
-altWeights<-T
+altWeights<-F
 # Which perturbation function to the aSMC resampler?
 perturber<-"pert_GlobSkewCov"
 # If using a nearest neighbour perturbation, how many neighbours are required?
