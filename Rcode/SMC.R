@@ -195,8 +195,13 @@ multinomialObs <- function(Y, X, p, logy=T){
   out1[indy]<-dmnom(Y[,indy],multiProbs[,indy],logy)
   out2[indy]<-dbinom(obsPopSizes[indy], truePopSizes[indy], p, log = logy)
 
-  if (logy) return(out1+out2)
-  else return(out1*out2)
+  if (logy) {
+    outout<-out1+out2
+    outout[outout<log(.Machine$double.xmin)]<-log(.Machine$double.xmin)
+    return(outout)
+  }else {
+    return(out1*out2)
+  }
     
   # if (logy) {
   #   output<-out1+out2

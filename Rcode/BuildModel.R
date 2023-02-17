@@ -1,33 +1,49 @@
 # Housekeeping
 IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- NULL; x0%<>%unlist(); funcys<-NULL
-# Functions that map from estimated 'true' simulated values into the observed sim vals
-# if(obsModel=='poisson'){
-#   funcys<-list(
-#     NoSurv=function(true,sim,wArgs) {dpois(wArgs$pobs*sim+1L, lambda = true+1L,log = T)},
-#     NoAlive=function(true,sim,wArgs) {dpois(wArgs$pobs*sim+1L, lambda = true+1L,log = T)},
-#     NoParents=function(true,sim,wArgs) {dpois(wArgs$pobs*sim+1L, lambda = true+1L,log = T)},
-#     GrowCounts=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)},
-#     NoOff=function(true,sim,wArgs) {dpois(wArgs$pobs*sim+1L, lambda = true+1L,log = T)}
-#   )
-# } else if(obsModel=='binomial'){
-#   funcys<-list(
-#     NoSurv=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)},
-#     NoAlive=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)},
-#     NoParents=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)},
-#     GrowCounts=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)},,
-#     NoOff=function(true,sim,wArgs) {dbinom(sim, true, wArgs$pobs, log = T)}
-#   )
-# } else if(obsModel=='Minkowski'){
-# funcys<-list(
-#   NoSurv=function(sim,pobs) sim*pobs,
-#   NoAlive=function(sim,pobs) sim*pobs,
-#   NoParents=function(sim,pobs) sim*pobs,
-#   GrowCounts=function(sim,pobs) sim*pobs,
-#   NoOff=function(sim,pobs) sim*pobs
-# )
-# }
-# I know that this is ugly to generate functions using so many conditions, but it saves on computation!
-if(is.null(funcys)){
+
+# Combining the distance function with the observation model - 
+if(obsModel=="ProbMink"){
+  # multinomial observation probability-based
+  if(fixedObsProb){
+    obsfun<-function(output,wArgs){
+      # Calculate the distances per particle
+      MultiMod<-function(i) multinomialObs(wArgs$Sd[,i,rep(wArgs$time,dim(wArgs$Sstar)[3])], 
+                                           wArgs$Sstar[,i,], 
+                                           wArgs$pobs[wArgs$time], 
+                                           logy=T)
+      # For each type of summary statistic
+      output$sw<-rowSums(sapply(1:3,MultiMod)); output$sw[is.na(output$sw)]<-log(.Machine$double.xmin)
+      # Calculate the total distances
+      output$d<-output$d+sum(output$sw,na.rm = T)
+      # Exponentiate and scale the particle weights to become from 0 to 1
+      output$sw<-exp(output$sw-max(output$sw))
+      # Census-dependent dataframe
+      output$shat[,,wArgs$time]<-apply(wArgs$Sstar,1:2,median,na.rm=T)
+      
+      return(output)
+    }
+  } else {
+    obsfun<-function(output,wArgs){
+      # Simulate the obsProbPar from the beta distribution here
+      pobs<-rbeta(dim(wArgs$Sstar)[3],wArgs$pobs[1],wArgs$pobs[2])
+      # Calculate the distances per particle
+      MultiMod<-function(i) multinomialObs(wArgs$Sd[,i,rep(wArgs$time,dim(wArgs$Sstar)[3])], 
+                                           wArgs$Sstar[,i,], 
+                                           pobs, 
+                                           logy=T)
+      # For each type of summary statistic
+      output$sw<-rowSums(sapply(1:3,MultiMod)); output$sw[is.na(output$sw)]<-log(.Machine$double.xmin)
+      # Calculate the total distances
+      output$d<-output$d+sum(output$sw,na.rm = T)
+      # Exponentiate and scale the particle weights to become from 0 to 1
+      output$sw<-exp(output$sw-max(output$sw))
+      # Census-dependent dataframe
+      output$shat[,,wArgs$time]<-apply(wArgs$Sstar,1:2,median,na.rm=T)
+      
+      return(output)
+    }
+  }
+} else {
   if(fixedObsProb){
     # The observed probability is extracted directly from the data
     obsfun<-function(output,wArgs){
@@ -63,43 +79,8 @@ if(is.null(funcys)){
       return(output)
     }
   }
-} else {
-  if(fixedObsProb){
-    # The observed probability is extracted directly from the data
-    obsfun<-function(output,wArgs){
-      # first modify the true population from the observed to the latent/true values
-      Sstar<-sapply(1:dim(wArgs$Sstar)[3],function(j) sapply(1:ncol(wArgs$Sstar),function(i) funcys[[i]](wArgs$Sstar[,i,j],wArgs$pobs[wArgs$time])))
-      # Calculate the distances
-      disties<-Minkowski(sest = Sstar, 
-                         sobs = c(wArgs$Sd[,,wArgs$time]),
-                         dimmie=dim(output$shat)[3])
-      # Merge into a single output object
-      output$d<-disties$d + output$d
-      output$sw<-disties$sw
-      # Census-dependent dataframe
-      output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
-      return(output)
-    }
-  } else {
-    # The observed probability is sampled, per particle, from a beta distribution
-    obsfun<-function(output,wArgs){
-      # Simulate the obsProbPar from the beta distribution here
-      pobs<-rbeta(dim(wArgs$Sstar)[3],wArgs$pobs[1],wArgs$pobs[2])
-      # first modify the true population from the observed to the latent/true values
-      Sstar<-sapply(1:dim(wArgs$Sstar)[3],function(j) sapply(1:ncol(wArgs$Sstar),function(i) funcys[[i]](wArgs$Sstar[,i,j],pobs[j])))
-      # Calculate the distances
-      disties<-Minkowski(sest = Sstar, 
-                         sobs = c(wArgs$Sd[,,wArgs$time]),
-                         dimmie=dim(output$shat)[3])
-      # Merge into a single output object
-      output$d<-disties$d + output$d
-      output$sw<-disties$sw
-      # Census-dependent dataframe
-      output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
-      return(output)
-    }
-  }
 }
+
 # Temporarily set the number of mSMC particles at 500:
 SMC_parts<-500
 # Particle filter initialisation parameters

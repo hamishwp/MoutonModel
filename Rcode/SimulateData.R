@@ -176,8 +176,8 @@ GetSoaySheep_binned <-function(SHEEP,shift=0.5,oneSex=T,nbks=10,regbinspace=F){
   
   cen<-unique(SHEEP$solveDF$census.number)
   
-  SHEEP$SumStats<-sapply(2:length(cen),
-                         FUN = function(i) formData(SHEEP,cen[i]),
+  SHEEP$SumStats<-sapply(cen,
+                         FUN = function(i) formData(SHEEP,i),
                          simplify = F) %>% unlist() %>%
     array(dim=c(nbks-1,3,length(cen)))
   
@@ -284,7 +284,7 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
   previous.census <- DF
   
   time <- 2 # set the current census number (will be continually updated)
-  while((time < t + 1) & nrow(previous.census)<thresh){
+  while((time < t + 2) & nrow(previous.census)<thresh){
     
     # Select only the survivors of the previous census:
     survivorsDF <- subset(previous.census, previous.census$survived==1)
@@ -450,6 +450,8 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
       DF[sample(1:nrow(DF),size = round((1-obsProb)*nrow(DF)),replace = F),-c(1,3,4)]<-NA
     }
   } 
+  
+  DF%<>%filter(census.number!=1); DF$census.number<-DF$census.number-1
   
   detectedLiveFemales <- DF%>%filter(survived==1)%>%group_by(census.number)%>%
     summarise(detectedNum=length(size),.groups = 'drop_last')%>%pull(detectedNum)%>%unname()
