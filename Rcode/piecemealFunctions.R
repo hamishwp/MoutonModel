@@ -782,7 +782,8 @@ ExtractGLM<-function(solveDF,formular,alpha=0.025,familiar=NULL){
   
   extGLM<-function(i){
     # Generate the model
-    mmm<-modeller(i)
+    mmm<-tryCatch(modeller(i),error=function(e) NA)
+    if(class(mmm)[1]=="logical") return(rep(NA,9))
     # Output the coefficients, the CI ranges and the sigma values
     Pars<-c(coef(mmm),sigma(mmm))
     # Number of values
@@ -800,9 +801,9 @@ ExtractGLM<-function(solveDF,formular,alpha=0.025,familiar=NULL){
   
   estimated<-t(sapply(unique(solveDF$census.number)[-1], extGLM))
   # Calculate point estimates from these, based on median value, and min of lower CI and max of upper CI
-  pointest<-data.frame(intercept=c(median(estimated[,1]),median(estimated[,2]),median(estimated[,3])),
-                 gradient=c(median(estimated[,4]),median(estimated[,5]),median(estimated[,6])),
-                 sigma=c(median(estimated[,7]),median(estimated[,8]),median(estimated[,9])))
+  pointest<-data.frame(intercept=c(median(estimated[,1],na.rm=T),median(estimated[,2],na.rm=T),median(estimated[,3],na.rm=T)),
+                 gradient=c(median(estimated[,4],na.rm=T),median(estimated[,5],na.rm=T),median(estimated[,6],na.rm=T)),
+                 sigma=c(median(estimated[,7],na.rm=T),median(estimated[,8],na.rm=T),median(estimated[,9],na.rm=T)))
   # Add the CI range
   pointest%<>%rbind(pointest[3,]-pointest[2,])
   rownames(pointest)<-c("estimate","lower","upper","range")

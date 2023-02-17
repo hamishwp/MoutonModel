@@ -5,7 +5,7 @@
 simulation<-T
 if(simulation){
   poptot<-300 # The number of years for the simulation (IF SIMULATED)
-  yearing<-10 # The total population (IF SIMULATED)
+  yearing<-15 # The total population (IF SIMULATED)
 }
 # Is the population counted one sex or two?
 oneSex<-T
@@ -37,7 +37,7 @@ PropDist<-"MVSN"
 # What algorithm to use to parameterise the model?
 algorithm<-"ABCSIR"
 # For the ABCSMC particle weights, do we want the standard or the alternative (Filipi 2012) method?
-altWeights<-F
+altWeights<-T
 # Which perturbation function to the aSMC resampler?
 perturber<-"pert_GlobSkewCov"
 # If using a nearest neighbour perturbation, how many neighbours are required?

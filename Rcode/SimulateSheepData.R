@@ -12,19 +12,24 @@ x0<-vals<-c(-7.25, 3.77,
             IPMLTP$invlinks[[12]](0.873),
             log(50),
             log(10))
-Np<-length(unlist(x0))
-
-# Convert to physical coordinates
-vals%<>%Sample2Physical(IPMLTP)
 
 if(fixedObsProb) {
   # Calculate the expected observation probability
   obsMean<-exp(x0[13])/(exp(x0[13])+exp(x0[14]))
   # Remove the last two parameters
-  x0<-x0[1:12]; Np<-length(unlist(x0))
+  x0<-x0[1:12]
   # Temporal observation probability must be kept fixed
   lSHEEP$obsProbTime <- rep(obsMean,yearing+1)
-} else lSHEEP$obsProbTime <- rbeta(yearing+1,vals$obsProbPar[1],vals$obsProbPar[2])
+  # Convert to physical coordinates
+  vals%<>%Sample2Physical(IPMLTP)
+} else {
+  # Convert to physical coordinates
+  vals%<>%Sample2Physical(IPMLTP)
+  
+  lSHEEP$obsProbTime <- rbeta(yearing+1,vals$obsProbPar[1],vals$obsProbPar[2])
+}
+
+Np<-length(unlist(x0))
 
 # Stable population values and distribution from the eigenvalues & vectors
 popmod<-kernelOneVar(m = 500, growthFunc = IPMLTP$growthFunc,

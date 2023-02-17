@@ -499,7 +499,7 @@ sampleStateIPM_ABCSIR <- function(previousState, survFunc, survPars,
     if(oneSex) {
       # Are all sheep included in the study female?
       offCounts<-rbinom(D, reprCounts, 0.5)
-    }
+    } else offCounts<-reprCounts
     # Number of offspring born per PARENT size class
     offCounts[offCounts!=0]<-offNumSamp(offCounts[offCounts!=0],offNumPars)
     # Save the total number born

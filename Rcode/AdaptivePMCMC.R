@@ -946,6 +946,7 @@ CalcQuantile<-function(output,xPrev){
 ModThresh<-function(output,xPrev){
   # Calculate the quantile function
   output$q_thresh<-CalcQuantile(output,xPrev)
+  output$q_thresh[output$iteration]<-mean(c(output$q_thresh[output$iteration],output$q_thresh[output$iteration-1]))
   # Decrease the current ABC-threshold
   output$delta[output$iteration+1L]<-quantile(output$distance[output$distance>output$delta[output$iteration]],(1-output$q_thresh[output$iteration])) 
   
