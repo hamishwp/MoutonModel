@@ -277,6 +277,20 @@ fixedBinObs<-function(Y, X, p, logy=T, time, NoParts){
   return(detectionNumObs(Y[,rep(time,NoParts)], X, p[time], logy=logy))
 }
 
+maxESS<-function(sw, rate=0.5, mag=NULL){
+  vESS<-ifelse(is.null(mag),rate*Np,mag)
+  Np<-length(sw)
+  sw<-sw-max(sw)
+  if(1/sum(exp(sw)^2)<vESS){
+    
+    funESS<-function(rr) abs(sum(exp(sw*2/rr)-vESS))
+    optimize(funESS,interval = c(0.1,3*abs(min(sw[!is.infinite(sw)]))),tol = 0.1)
+    
+    adj<-sqrt(vESS/sum(exp(sw)^2))
+    return(sw/adj)
+  } else return(sw)
+}
+
 # Minkowski distance function
 # Distances were taken from https://www.biorxiv.org/content/10.1101/2021.07.29.454327v1.full.pdf
 # Note that if p=1 we are using the L1 distances - our default
@@ -334,7 +348,7 @@ if(obsModel=="MultinomObs"){
     # Calc median shat value
     shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)
     
-    return(list(sw=sw,shat=shat))
+    return(list(sw=maxESS(sw,mag=30),shat=shat))
   }
   
 } else if(obsModel=="multinomPoisObs"){
@@ -352,7 +366,7 @@ if(obsModel=="MultinomObs"){
     # Calc median shat value
     shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)
     
-    return(list(sw=sw,shat=shat))
+    return(list(sw=maxESS(sw,mag=30),shat=shat))
   }
 } else if (obsModel=="PoisObs"){
   
@@ -367,7 +381,7 @@ if(obsModel=="MultinomObs"){
     # Calc median shat value
     shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)
     
-    return(list(sw=sw,shat=shat))
+    return(list(sw=maxESS(sw,mag=30),shat=shat))
   }
   
 } else if (obsModel=="BinomObs"){
@@ -383,7 +397,7 @@ if(obsModel=="MultinomObs"){
     # Calc median shat value
     shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)
     
-    return(list(sw=sw,shat=shat))
+    return(list(sw=maxESS(sw,mag=30),shat=shat))
   }
   
 } else if (obsModel=="MADadaptdist"){
@@ -424,6 +438,7 @@ if(fixedObsProb){
     # Exponentiate and scale the particle weights to become from 0 to 1
     output$sw<-exp(diz$sw-max(diz$sw))
     summz<-sum(output$sw)
+    print(summz)
     if(summz==0) {stop("all model-SMC particles are zero")}
     # Normalise it!
     output$sw<-output$sw/summz

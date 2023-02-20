@@ -24,7 +24,7 @@ source(paste0(directory,'Rcode/BuildModel.R'))
 print("Initial Values Log-Likelihood=")
 ptm <- proc.time()[3]
 print(logTargetIPM(initSIR$x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F)$d)
-ptm_fin<-(proc.time()[3] - ptm); timeouter<-ptm_fin*4; print(paste0("Timeout = ",timeouter))
+ptm_fin<-(proc.time()[3] - ptm); timeouter<-ptm_fin*3; print(paste0("Timeout = ",timeouter))
 # Make sure this timeout is integrated into the simulations
 initSIR$timeouter<-timeouter
 # if(file.exists(paste0("output_",namer))) initSIR$output<-readRDS(paste0("output_",namer)); initSIR$output<-initSIR$output[[length(initSIR$output)]]

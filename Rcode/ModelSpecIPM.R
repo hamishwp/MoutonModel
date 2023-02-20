@@ -48,7 +48,7 @@ CombLogTargs<-function(lTargNew)  {
   # Get the right dimensionality
   dimmie<-c(length(lTargNew),length(lTargNew[[ids[1]]]$shat))
   # Template
-  outy<-list(d=rep(NA,length(lTargNew)),
+  outy<-list(d=rep(-Inf,length(lTargNew)),
              shat=array(NA,dim=dimmie))
   # Fill it up!
   outy$d[ids] <- vapply(ids,function(i) lTargNew[[i]]$d,1)

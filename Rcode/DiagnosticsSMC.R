@@ -196,7 +196,7 @@ TestPF<-function(x0,IPMLTP, samplez=10){
                                 prob = output$sw)
       sampledStates <-  prevStates[, particleIndices]
       # IPM push forward
-      wArgs$Sstar <- sampleState(sampledStates, sampleStatePar)
+      wArgs$Sstar <- vectorisedSamplerIPM_ABCSIR(sampledStates, sampleStatePar)
       # prevStates is the total population, by size bin
       prevStates<-wArgs$Sstar[,1,]+wArgs$Sstar[,3,]
       # Convert to observed from latent space & calculate the objective function vector

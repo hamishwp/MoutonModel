@@ -105,6 +105,7 @@ disties%>%ggplot(aes(distance,value,group=iteration))+geom_density(aes(colour=it
 
 output[[istep]]$q_thresh
 output[[istep]]$delta
+log(-output[[istep]]$delta)
 
 inds<-output[[istep]]$distance>output[[istep]]$delta[istep]
 # inds<-rep(T,length(output[[istep]]$distance))
