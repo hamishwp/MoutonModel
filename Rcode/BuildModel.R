@@ -1,86 +1,6 @@
 # Housekeeping
 IPMLTP$growthFunc <- IPMLTP$offSizeFunc <- NULL; x0%<>%unlist(); funcys<-NULL
 
-# Combining the distance function with the observation model - 
-if(obsModel=="ProbMink"){
-  # multinomial observation probability-based
-  if(fixedObsProb){
-    obsfun<-function(output,wArgs){
-      # Calculate the distances per particle
-      MultiMod<-function(i) multinomialObs(wArgs$Sd[,i,rep(wArgs$time,dim(wArgs$Sstar)[3])], 
-                                           wArgs$Sstar[,i,], 
-                                           wArgs$pobs[wArgs$time], 
-                                           logy=T)
-      # For each type of summary statistic
-      output$sw<-rowSums(sapply(1:3,MultiMod)); output$sw[is.na(output$sw)]<-log(.Machine$double.xmin)
-      # Calculate the total distances
-      output$d<-output$d+sum(output$sw,na.rm = T)
-      # Exponentiate and scale the particle weights to become from 0 to 1
-      output$sw<-exp(output$sw-max(output$sw))
-      # Census-dependent dataframe
-      output$shat[,,wArgs$time]<-apply(wArgs$Sstar,1:2,median,na.rm=T)
-      
-      return(output)
-    }
-  } else {
-    obsfun<-function(output,wArgs){
-      # Simulate the obsProbPar from the beta distribution here
-      pobs<-rbeta(dim(wArgs$Sstar)[3],wArgs$pobs[1],wArgs$pobs[2])
-      # Calculate the distances per particle
-      MultiMod<-function(i) multinomialObs(wArgs$Sd[,i,rep(wArgs$time,dim(wArgs$Sstar)[3])], 
-                                           wArgs$Sstar[,i,], 
-                                           pobs, 
-                                           logy=T)
-      # For each type of summary statistic
-      output$sw<-rowSums(sapply(1:3,MultiMod)); output$sw[is.na(output$sw)]<-log(.Machine$double.xmin)
-      # Calculate the total distances
-      output$d<-output$d+sum(output$sw,na.rm = T)
-      # Exponentiate and scale the particle weights to become from 0 to 1
-      output$sw<-exp(output$sw-max(output$sw))
-      # Census-dependent dataframe
-      output$shat[,,wArgs$time]<-apply(wArgs$Sstar,1:2,median,na.rm=T)
-      
-      return(output)
-    }
-  }
-} else {
-  if(fixedObsProb){
-    # The observed probability is extracted directly from the data
-    obsfun<-function(output,wArgs){
-      # first modify the true population from the observed to the latent/true values
-      Sstar<-apply(wArgs$Sstar*wArgs$pobs[wArgs$time],3,rbind)
-      # Calculate the distances
-      disties<-Minkowski(sest = Sstar,
-                         sobs = c(wArgs$Sd[,,wArgs$time]),
-                         dimmie=dim(output$shat)[3])
-      # Merge into a single output object
-      output$d<-disties$d + output$d
-      output$sw<-disties$sw
-      # Census-dependent dataframe
-      output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
-      return(output)
-    }
-  } else {
-    # The observed probability is sampled, per particle, from a beta distribution
-    obsfun<-function(output,wArgs){
-      # Simulate the obsProbPar from the beta distribution here
-      pobs<-rbeta(dim(wArgs$Sstar)[3],wArgs$pobs[1],wArgs$pobs[2])
-      # first modify the true population from the observed to the latent/true values
-      Sstar<-apply(wArgs$Sstar*pobs,3,rbind)
-      # Calculate the distances
-      disties<-Minkowski(sest = Sstar, 
-                         sobs = c(wArgs$Sd[,,wArgs$time]),
-                         dimmie=dim(output$shat)[3])
-      # Merge into a single output object
-      output$d<-disties$d + output$d
-      output$sw<-disties$sw
-      # Census-dependent dataframe
-      output$shat[,,wArgs$time]<-array(disties$shat,dim(output$shat)[1:2])
-      return(output)
-    }
-  }
-}
-
 # Temporarily set the number of mSMC particles at 500:
 SMC_parts<-500
 # Particle filter initialisation parameters
@@ -119,62 +39,8 @@ IPMLTP %<>% c(list(oneSex = oneSex,
 ##################### ESTIMATE REQUIRED SMC PARTICLES ########################
 # First check if this specific model has already been run
 if(!calcParts & file.exists(paste0(directory,"Results/SMCPARTS_calc.RData"))){SMC_parts<-readRDS(paste0(directory,"Results/SMCPARTS_calc.RData"))$SMC_parts
-} else {
-  print("Recalculating the number of particles required in the particle filter of the model, this will take some time...")
-  # Run particleFilter with varying NoParts
-  # First prepare everything for sampling, including initial values
-  proposed<-Sample2Physical(x0,IPMLTP)
-  stateSpaceSampArgs <- list(survFunc = IPMLTP$survFunc, survPars = proposed$survPars,
-                             growthSamp = IPMLTP$growthSamp, growthPars = proposed$growthPars,
-                             reprFunc = IPMLTP$reprFunc, reprPars = proposed$reprPars, 
-                             offNumSamp = IPMLTP$offNumSamp, offNumPars = proposed$offNumPars,
-                             offSizeSamp = IPMLTP$offSizeSamp, breaks = IPMLTP$breaks,
-                             offSizePars = proposed$offSizePars, Schild=proposed$Schild,
-                             sizes=IPMLTP$sizes, oneSex = IPMLTP$oneSex)
+} else print("Please run the code to estimate the lower bound of number of model-SMC particles required")
   
-  # Now we calculate the standard deviation of the samples, when using specific numbers of particles - NoParts
-  tmp<-c(unlist(mclapply(1:2000, function(i) {particleFilter(Sd=lSHEEP$SumStats, mu=mufun, muPar=muPar, obsProb = obsfun,
-                                                    sampleState = vectorisedSamplerIPM_ABCSIR,
-                                                    sampleStatePar = stateSpaceSampArgs,
-                                                    obsProbPar = obsProbPar, 
-                                                    fixedObsProb=fixedObsProb,
-                                                    NoParts = 500)$d},mc.cores = ncores)))
-  # We can see how many samples we need to achieve a stable standard deviation by plotting the cumulative SD (around 1800)
-  plot(vapply(seq_along(tmp), function(i) sd(tmp[1:i]), 1),xlab = "Number of Samples",ylab = "Cumulative S.D.",main = "How many samples required for S.D. ~ 600")
-  numsam<-2000
-  
-  parties<-(1:30)*500
-  coster<-sapply(parties,function(pp) {
-    muPar$n<-pp
-    c(unlist(mclapply(1:numsam, function(i) {particleFilter(Sd=lSHEEP$SumStats, mu=mufun, muPar=muPar, obsProb = obsfun,
-                      sampleState = vectorisedSamplerIPM_ABCSIR,
-                      sampleStatePar = stateSpaceSampArgs,
-                      obsProbPar = obsProbPar, 
-                      fixedObsProb=fixedObsProb,
-                      NoParts = pp)$d},mc.cores=ncores)))
-    })
-  # Calculate the running (k=3) standard deviation of the distance by number of particles
-  runSD<-data.frame(parties=parties[3:length(parties)],runSD=vapply(3:length(parties), function(i) sd(log(-apply(coster,2,mean))[(i-3):i]), 1))
-  # To find the ideal number of particles, fit various linear models trained with 
-  # the data using sequentially less of the lower no. particle values
-  # and predict when the gradient of the linear model equals zero.
-  # Note that this method most likely over-estimates the required number of particles.
-  tmp<-data.frame(parties=parties[1:(nrow(runSD)-1)],grad=vapply(1:(nrow(runSD)-1),function(i) (lm(runSD~parties,runSD[i:nrow(runSD),]))$coefficients[2],1))
-  # Predict the required number of mSMC particles!
-  SMC_parts<-round(unname(predict(lm(parties~poly(grad,4),tmp),newdata = data.frame(grad=c(0)))))
-
-  p<-runSD%>%ggplot(aes(parties,runSD))+geom_point()+geom_vline(xintercept = SMC_parts)+
-    xlab("Number of Particles in mSMC")+ylab("Running S.D (k=3)")+
-    ggtitle("Convergence in No. Particles by S.D")+theme(plot.title = element_text(hjust = 0.5))
-  q<-data.frame(meany=apply(coster,2,mean),parties=parties)%>%ggplot(aes(parties,meany))+geom_point()+geom_vline(xintercept = SMC_parts)+
-    xlab("Number of Particles in mSMC")+ylab("Average Distance")+
-    ggtitle("Convergence in No. Particles w.r.t Distance")+theme(plot.title = element_text(hjust = 0.5))
-  ggsave(filename = paste0(directory,"Plots/Hamish/Convergence/NoPart_mSMC.png"),
-         gridExtra::grid.arrange(q,p,nrow=1),width = 10,height = 4); gridExtra::grid.arrange(q,p,nrow=1)
-  
-  saveRDS(list(SMC_parts=SMC_parts,parties=parties,coster=coster,runSD=runSD),paste0(directory,"Results/SMCPARTS_calc.RData"))
-}
-
 # Particle initialisation of the population size distributions
 if(muModel=='multinomial'){
   # Multinomial Mu initialisation function

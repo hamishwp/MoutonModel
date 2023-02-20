@@ -42,6 +42,23 @@ if(fixedObsProb) {
 names(x0)<-names(unlist(vals))[-c(6,7,14,15)]
 x0true<-x0
 
+details = file.info(list.files("./","output_SIM"))
+details = details[with(details, order(as.POSIXct(mtime),decreasing = T)), ]
+files = rownames(details); rm(details)
+# Take the most recent, by default
+exty<-str_split(files[1],"output_")[[1]][2]
+output<-readRDS(paste0("./output_",exty))
+inexty<-grep(exty,list.files("./Results/"),value = T)
+inpy<-readRDS(paste0("./Results/",inexty))
+IPMLTP<-inpy$IPMLTP
+initSIR<-inpy$initSIR
+
+lSHEEP<-IPMLTP
+lSHEEP$detectedNum<-lSHEEP$solveDF%>%filter(survived==1)%>%group_by(census.number)%>%
+  summarise(detectedNum=length(size),.groups = 'drop_last')%>%pull(detectedNum)%>%unname()
+
+source(paste0(directory,'Rcode/BuildModel.R'))
+
 # TO CHECK THE INITIAL SAMPLE DISTRIBUTION
 sheepies<-cbind(data.frame(Distance=runif(1500)),as.data.frame(PropN$proposal(1500)))
 names(sheepies)<-c("Distance",names(x0true))
@@ -56,18 +73,6 @@ q<-q+facet_wrap(. ~ variable,scales = "free") + theme(strip.text.x = element_tex
   xlab("Value")+ylab("Density")+
   theme(plot.title = element_text(hjust = 0.5)) ;q
 # ggsave("InitialProposalDist_VariableDensities.png", plot=q,path = paste0(directory,'Plots/Hamish/'),width = 12,height = 8)
-
-
-details = file.info(list.files("./","output_SIM"))
-details = details[with(details, order(as.POSIXct(mtime),decreasing = T)), ]
-files = rownames(details); rm(details)
-# Take the most recent, by default
-exty<-str_split(files[1],"output_")[[1]][2]
-output<-readRDS(paste0("./output_",exty))
-inexty<-grep(exty,list.files("./Results/"),value = T)
-inpy<-readRDS(paste0("./Results/",inexty))
-IPMLTP<-inpy$IPMLTP
-initSIR<-inpy$initSIR
 
 disties<-scoring<-data.frame()
 for(i in 1:length(output)){

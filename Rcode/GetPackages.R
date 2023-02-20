@@ -16,6 +16,7 @@ source(paste0(directory,'Rcode/SimulateData.R'))
 source(paste0(directory,'Rcode/ModelSpecIPM.R'))
 source(paste0(directory,'Rcode/piecemealFunctions.R'))
 source(paste0(directory,'Rcode/SMC.R'))
+source(paste0(directory,'Rcode/ObsDistance.R'))
 
 library(dissPackage3)
 library(xtable)
