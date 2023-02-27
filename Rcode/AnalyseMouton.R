@@ -1,47 +1,49 @@
 # directory<-"/home/patten/Documents/Coding/Oxford/MoutonModel/"
 directory<-paste0(getwd(),"/")
-
-source(paste0(directory,'Rcode/AdaptivePMCMC.R'))
-source(paste0(directory,'Rcode/SimulateData.R'))
-source(paste0(directory,'Rcode/ModelSpecIPM.R'))
-source(paste0(directory,'Rcode/piecemealFunctions.R'))
-source(paste0(directory,'Rcode/SMC.R'))
-# library(dissPackage3,lib.loc=directory)
-library(xtable)
-# library(mcmcse)
-library(magrittr)
-library(tidyverse)
-# install.packages(c("rcorr","corrplot"))
-# devtools::install_github('harrelfe/Hmisc')
-# library(Hmisc)
-# library(corrplot)
+# Load the simulation parameters required for this run
+source(paste0(directory,'Rcode/LoadParameters.R'))
+# Load the packages required for the code, and install them if they don't already exist
+source(paste0(directory,'Rcode/GetPackages.R'))
+# Load the IPM object skeleton
+source(paste0(directory,'Rcode/CodeSkeleton.R'))
+# Either we read in the real data or generate our own!
+if(simulation) {source(paste0(directory,'Rcode/SimulateSheepData.R'))
+} else source(paste0(directory,'Rcode/SoaySheepData.R'))
+# Build up the model based on the parameters and sheep data
+source(paste0(directory,'Rcode/BuildModel.R'))
 
 x0<-vals<-c(-7.25, 3.77,
             1.49111883, 0.53069364, log(0.08806918),
             -4.619443,  1.369697,
             log(0.067204),
             0.6887019, 0.5931042, log(0.2073659),
-            IPMLTP$invlinks[[12]](0.873),
+            IPMLTP$links[[12]](0.873),
             log(50),
             log(10))
-Np<-length(unlist(x0))
-
-# Convert to physical coordinates
-vals%<>%Sample2Physical(IPMLTP)
 
 if(fixedObsProb) {
   # Calculate the expected observation probability
   obsMean<-exp(x0[13])/(exp(x0[13])+exp(x0[14]))
   # Remove the last two parameters
-  x0<-x0[1:12]; Np<-length(unlist(x0))
+  x0<-x0[1:12]
   # Temporal observation probability must be kept fixed
   lSHEEP$obsProbTime <- rep(obsMean,yearing+1)
-} else lSHEEP$obsProbTime <- rbeta(yearing+1,vals$obsProbPar[1],vals$obsProbPar[2])
+  # Convert to physical coordinates
+  vals%<>%Sample2Physical(IPMLTP)
+} else {
+  # Convert to physical coordinates
+  vals%<>%Sample2Physical(IPMLTP)
+  
+  lSHEEP$obsProbTime <- rbeta(yearing+1,vals$obsProbPar[1],vals$obsProbPar[2])
+}
+
+Np<-length(unlist(x0))
 
 # Convert to physical coordinates
 names(x0)<-names(unlist(vals))[-c(6,7,14,15)]
 x0true<-x0
 
+# Load the most recent simualtion data
 details = file.info(list.files("./","output_SIM"))
 details = details[with(details, order(as.POSIXct(mtime),decreasing = T)), ]
 files = rownames(details); rm(details)
@@ -92,16 +94,22 @@ for(i in 1:length(output)){
   scoring%<>%rbind(data.frame(pvalue=ptmp,RMSE=RMSE,variable=names(x0),iteration=i))
 } 
 
-scoring%>%group_by(iteration)%>%summarise(ptotal=prod(pvalue),RMSEtot=prod(RMSE))
-istep<-scoring%>%group_by(iteration)%>%summarise(ptotal=prod(pvalue),RMSEtot=prod(RMSE))%>%pull(RMSEtot)%>%which.min()
+tmp<-disties%>%filter(distance>log(-output[[length(output)]]$delta[length(output)]))%>%
+  group_by(iteration)%>%summarise(summy=sum(distance),meany=mean(distance));tmp
+istep<-tmp%>%pull(meany)%>%which.min()
 # istep<-length(output)
 # istep<-1
 
 scoring%>%ggplot()+geom_point(aes(iteration,RMSE,colour=pvalue))
 
 dimmie<-c(min(disties$distance),log(-output[[1]]$delta[1]))
+# dimmie<-c(quantile(disties$distance,0.1),quantile(disties$distance,0.9))
 disties%>%ggplot(aes(distance,value,group=iteration))+geom_density(aes(colour=iteration,fill=iteration,y=..density..),alpha=0.3)+
-  xlim(dimmie)+facet_grid(rows=vars(iteration))
+  facet_grid(rows=vars(iteration),scales = "free") + scale_x_log10()
+
+disties%>%ggplot(aes(distance,value,group=iteration))+
+  geom_density(aes(colour=iteration,fill=iteration,y=..density..),alpha=0.3)+
+  facet_grid(rows=vars(iteration),scales = "free")
 
 output[[istep]]$q_thresh
 output[[istep]]$delta
@@ -122,9 +130,6 @@ newSh%>%ggplot()+geom_point(aes(NewD,CurD))+facet_grid(rows=vars(iteration))
 newSh%>%ggplot()+geom_histogram(aes(NewD))+scale_y_log10()+facet_grid(rows=vars(iteration))
 newSh%>%ggplot()+geom_histogram(aes(CurD))+scale_y_log10()+facet_grid(rows=vars(iteration))
 
-min(newSh$NewD)
-
-
 tmp<-as.matrix(sheepies)
 colnames(tmp)<-c("Distance",names(x0))
 means <- apply(tmp[,-1], 2, mean,na.rm=T)
@@ -144,9 +149,20 @@ summaries <- data.frame(True=x0true,median = medis, mean = means, GLM=initSIR$x0
 summaries%<>%cbind(data.frame(inCI=summaries$GLM<summaries$upper & summaries$GLM>summaries$lower))
 
 print(summaries)
-xtable(summaries)
+
+initDist<-logTargetIPM(x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F, returnW=T)
+medDist<-logTargetIPM(summaries$median, logTargetPars = IPMLTP, returnNeg = F, printProp = F, returnW=T)
+initDist$d
+medDist$d
+hist(log(abs(c(initDist$shat)-c(IPMLTP$SumStats))),xlim=c(-2,6))
+hist(log(abs(c(medDist$shat)-c(IPMLTP$SumStats))),xlim=c(-2,6))
+sum(abs(initDist$shat-IPMLTP$SumStats))
+sum(abs(medDist$shat-IPMLTP$SumStats))
+# xtable(summaries)
 
 sheepies%>%ggplot()+geom_density(aes(Distance))
+
+sheepies$Distance_mod<-log(apply(output[[istep]]$shat[output[[istep]]$distance>output[[istep]]$delta[istep],],1,function(x) sum(abs(x-c(IPMLTP$SumStats)))))
 
 qq<-list()
 for(i in 2:ncol(sheepies)){
@@ -154,11 +170,26 @@ for(i in 2:ncol(sheepies)){
   p<-shtmp%>%ggplot(aes(x=Value,y=Distance))+
     geom_density_2d_filled()+ggtitle(varname)+
     ylab("log(-Distance)") + geom_vline(xintercept = x0true[i-1],colour="red")
-    # geom_vline(xintercept = x0[i],colour="red")
+  # geom_vline(xintercept = x0[i],colour="red")
   qq<-c(qq,list(p))
 }
 gridExtra::grid.arrange(qq[[1]],qq[[2]],qq[[3]],qq[[4]],qq[[5]],qq[[6]],
                         qq[[7]],qq[[8]],qq[[9]],qq[[10]],qq[[11]],qq[[12]])
+
+kkkl<-grep(names(sheepies),pattern = "Distance_mod")
+
+qq<-list()
+for(i in 2:ncol(sheepies)){
+  shtmp<-sheepies[,c(kkkl,i)]; varname<-names(shtmp)[2]; names(shtmp)[2]<-"Value"
+  p<-shtmp%>%ggplot(aes(x=Value,y=Distance_mod))+
+    geom_density_2d_filled()+ggtitle(varname)+
+    ylab("log(-Distance)") + geom_vline(xintercept = x0true[i-1],colour="red")
+  # geom_vline(xintercept = x0[i],colour="red")
+  qq<-c(qq,list(p))
+}
+gridExtra::grid.arrange(qq[[1]],qq[[2]],qq[[3]],qq[[4]],qq[[5]],qq[[6]],
+                        qq[[7]],qq[[8]],qq[[9]],qq[[10]],qq[[11]],qq[[12]])
+
 
 my_fn <- function(data, mapping, ...){
   p <- ggplot(data = data, mapping = mapping) + 

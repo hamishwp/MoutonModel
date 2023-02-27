@@ -58,6 +58,12 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 ###################################################################################
 ###################################################################################
 
+# 3) copy Max's adaptive epsilon algorithm
+
+
+
+
+
 # Short-term to do
 # - Sort out sampling from the priors?
 # - Add different resample & perturbation functions

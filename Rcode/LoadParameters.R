@@ -28,6 +28,8 @@ regbinspace<-F
 muModel<-'poisson' #'multinomial'
 # Observation Model
 obsModel<-"MAEdist"
+# Adaptive ABC threshold method
+DeltaCalc<-"QuantESS"
 # Do we automatically calculate the shift in the staggered grid of the size-class bins, based on the IPM kernal?
 manshift<-F
 # For the individual and offspring growth function - normal or truncated normal, or otherwise?

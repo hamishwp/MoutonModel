@@ -943,14 +943,44 @@ CalcQuantile<-function(output,xPrev){
   return(q_update)
 }
 
-ModThresh<-function(output,xPrev){
-  # Calculate the quantile function
-  output$q_thresh<-CalcQuantile(output,xPrev)
-  output$q_thresh[output$iteration]<-mean(c(output$q_thresh[output$iteration],output$q_thresh[output$iteration-1]))
-  # Decrease the current ABC-threshold
-  output$delta[output$iteration+1L]<-quantile(output$distance[output$distance>output$delta[output$iteration]],(1-output$q_thresh[output$iteration])) 
-  
-  return(output)
+tpa<-function(tolerance,x){ #calculate the total proportion of alive particles (have at least one distance less than the tolerance)
+  d<-abs(x)
+  Npart<-length(x)
+  for (i in 1:Npart){
+    count<-0
+    for (j in 1:M){
+      if (d[i,j]<tolerance){
+        count<-count+1
+      }
+    }
+    npa[i]<-count
+  }
+  return(sum(npa>0)/Npart)
+}
+
+tpa<-function(delta,output) sum(output$distance>delta)/length(output$distance)
+
+if(DeltaCalc=="QuantESS"){
+  ModThresh <- function(output, alpha=0.9){
+    #Find the new tolerance such that alpha proportion of the current alive particles stay alive
+    reflevel <- alpha*tpa(output$delta[output$iteration-1],output)
+    delta<-uniroot(function(delta) tpa(delta,output)-reflevel,c(0,output$delta[output$iteration-1]))$root
+    
+    output$delta[output$iteration] <- delta
+    output$q_thresh[output$iteration] <- tpa(output$delta[output$iteration],output)
+    
+    return(output)
+  }
+} else {
+  ModThresh<-function(output,xPrev){
+    # Calculate the quantile function
+    output$q_thresh<-CalcQuantile(output,xPrev)
+    output$q_thresh[output$iteration]<-mean(c(output$q_thresh[output$iteration],output$q_thresh[output$iteration-1]))
+    # Decrease the current ABC-threshold
+    output$delta[output$iteration+1L]<-quantile(output$distance[output$distance>output$delta[output$iteration]],(1-output$q_thresh[output$iteration])) 
+    
+    return(output)
+  }
 }
 
 CalcAltW<-function(output){

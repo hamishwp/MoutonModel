@@ -30,6 +30,9 @@ if(fixedObsProb) {
 }
 
 Np<-length(unlist(x0))
+# Convert to physical coordinates
+names(x0)<-names(unlist(vals))[-c(6,7,14,15)]
+x0true<-x0
 
 # Stable population values and distribution from the eigenvalues & vectors
 popmod<-kernelOneVar(m = 500, growthFunc = IPMLTP$growthFunc,
