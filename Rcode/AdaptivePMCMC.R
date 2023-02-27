@@ -943,25 +943,10 @@ CalcQuantile<-function(output,xPrev){
   return(q_update)
 }
 
-tpa<-function(tolerance,x){ #calculate the total proportion of alive particles (have at least one distance less than the tolerance)
-  d<-abs(x)
-  Npart<-length(x)
-  for (i in 1:Npart){
-    count<-0
-    for (j in 1:M){
-      if (d[i,j]<tolerance){
-        count<-count+1
-      }
-    }
-    npa[i]<-count
-  }
-  return(sum(npa>0)/Npart)
-}
-
 tpa<-function(delta,output) sum(output$distance>delta)/length(output$distance)
 
 if(DeltaCalc=="QuantESS"){
-  ModThresh <- function(output, alpha=0.9){
+  ModThresh <- function(output, xPrev=NULL, alpha=0.9){
     #Find the new tolerance such that alpha proportion of the current alive particles stay alive
     reflevel <- alpha*tpa(output$delta[output$iteration-1],output)
     delta<-uniroot(function(delta) tpa(delta,output)-reflevel,c(0,output$delta[output$iteration-1]))$root
@@ -971,24 +956,30 @@ if(DeltaCalc=="QuantESS"){
     
     return(output)
   }
+  
+  ABCconv<-function(output)  output$q_thresh[output$iteration]/output$q_thresh[output$iteration-1]>0.99
+  
 } else {
   ModThresh<-function(output,xPrev){
     # Calculate the quantile function
     output$q_thresh<-CalcQuantile(output,xPrev)
-    output$q_thresh[output$iteration]<-mean(c(output$q_thresh[output$iteration],output$q_thresh[output$iteration-1]))
+    output$q_thresh[output$iteration+1L]<-mean(c(output$q_thresh[output$iteration+1L],output$q_thresh[output$iteration]))
     # Decrease the current ABC-threshold
-    output$delta[output$iteration+1L]<-quantile(output$distance[output$distance>output$delta[output$iteration]],(1-output$q_thresh[output$iteration])) 
+    output$delta[output$iteration+1L]<-quantile(output$distance[output$distance>output$delta[output$iteration]],(1-output$q_thresh[output$iteration+1L])) 
     
     return(output)
   }
+  
+  ABCconv<-function(output)  output$q_thresh[output$iteration]>0.99
+  
 }
 
 CalcAltW<-function(output){
   output$weightings<-rep(0,length(output$weightings))
   # Weights are the number of particles that made it through current thresholds over the previous iteration
   output$weightings[output$distance>output$delta[output$iteration]]<-
-    sum(output$distance>=output$delta[output$iteration])/
-    sum(output$distance>=output$delta[output$iteration-1])
+    sum(output$distance>=output$delta[output$iteration],na.rm = T)/
+    sum(output$distance>=output$delta[output$iteration-1],na.rm = T)
   # Return the normalised weights
   return(output$weightings/sum(output$weightings))
 }
@@ -1007,24 +998,24 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
   # Setup shop for the full algorithm
   saveRDS(list(output),paste0("output_",namer));xPrev<-output$theta
   # Show the goods!
-  print(paste0("Step = 1, No. samples = ",initSIR$Np*initSIR$k,", eps = ",signif(output$delta,3),
-               " with 1/c = ",signif(output$q_thresh,2)," and ESS = ",signif(CalcESS(output),3)))
+  print(paste0("Step = 1, No. samples = ",initSIR$Np*initSIR$k,", eps = ",signif(output$delta[output$iteration],3),
+               " with 1/c = ",signif(output$q_thresh[output$iteration],2)," and ESS = ",signif(CalcESS(output),3)))
   # Run the algorithm!
-  while(!(output$q_thresh[it] > 0.98 & it > 3)){ # & cycles <= initSIR$itermax & stepmax<=it){
+  while(!(ABCconv(output) & it > 3)){ # & cycles <= initSIR$itermax & stepmax<=it){
     # Set the ABC-step number
-    it<-it+1
+    it<-it+1L
     # Dynamically define the resample & perturb function of new parameter sets
     ResampleSIR<-defFsamp(outin = output,lTargPars = lTargPars)
     # SIR routine
     output<-GenAccSamples(output, initSIR, lTarg, lTargPars, ResampleSIR)
     # Modify the ABC-threshold adaptively
-    output<-ModThresh(output,xPrev)
+    output<-ModThresh(output,xPrev=xPrev)
     # How many samples have we taken sum_t(D_t)?
-    cycles<-cycles+nrow(output$theta); output$iteration<-it
+    cycles<-cycles+nrow(output$theta)
     # Calculate weights by no. rejected particles using the current and previous ABC-threshold
     if(altWeights) output$weightings<-CalcAltW(output)
     # Calculate the Effective Sample Size (ESS), noting that it is already normalised
-    output$ESS<-CalcESS(output)
+    output$ESS<-CalcESS(output); output$iteration<-it
     # Save previous parameter space samples
     xPrev<-output$theta[output$distance>output$delta[output$iteration-1],]
     # Save the output!
