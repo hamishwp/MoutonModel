@@ -44,14 +44,14 @@ names(x0)<-names(unlist(vals))[-c(6,7,14,15)]
 x0true<-x0
 
 # Load the most recent simualtion data
-details = file.info(list.files("./","output_SIM"))
+details = file.info(list.files("./Results/","output_SIM"))
 details = details[with(details, order(as.POSIXct(mtime),decreasing = T)), ]
 files = rownames(details); rm(details)
 # Take the most recent, by default
 exty<-str_split(files[1],"output_")[[1]][2]
-output<-readRDS(paste0("./output_",exty))
-inexty<-grep(exty,list.files("./Results/"),value = T)
-inpy<-readRDS(paste0("./Results/",inexty))
+output<-readRDS(paste0("./Results/output_",exty))
+inexty<-grep(exty,list.files("./Results/INPUTS/"),value = T)
+inpy<-readRDS(paste0("./Results/INPUTS/",inexty))
 IPMLTP<-inpy$IPMLTP
 initSIR<-inpy$initSIR
 
@@ -107,10 +107,6 @@ dimmie<-c(min(disties$distance),log(-output[[1]]$delta[1]))
 disties%>%ggplot(aes(distance,value,group=iteration))+geom_density(aes(colour=iteration,fill=iteration,y=..density..),alpha=0.3)+
   facet_grid(rows=vars(iteration),scales = "free") + scale_x_log10()
 
-disties%>%ggplot(aes(distance,value,group=iteration))+
-  geom_density(aes(colour=iteration,fill=iteration,y=..density..),alpha=0.3)+
-  facet_grid(rows=vars(iteration),scales = "free")
-
 output[[istep]]$q_thresh
 output[[istep]]$delta
 log(-output[[istep]]$delta)
@@ -120,15 +116,6 @@ inds<-output[[istep]]$distance>output[[istep]]$delta[istep]
 sheepies<-as.data.frame(cbind(log(-output[[istep]]$distance[inds]),output[[istep]]$theta[inds,]))
 names(sheepies)<-c("Distance",names(x0))
 sheepies<-sheepies[!is.na(sheepies$Distance) & !is.infinite(sheepies$Distance),]
-
-newSh<-data.frame()
-for(i in 1:length(output)){
-  newSh%<>%rbind(data.frame(NewD=log(apply(output[[i]]$shat[output[[i]]$distance>output[[i]]$delta[[i]],],1,function(x) sum(abs(x-c(IPMLTP$SumStats))))),
-                  CurD=log(-output[[i]]$distance[output[[i]]$distance>output[[i]]$delta[[i]]]),iteration=i))
-}
-newSh%>%ggplot()+geom_point(aes(NewD,CurD))+facet_grid(rows=vars(iteration))
-newSh%>%ggplot()+geom_histogram(aes(NewD))+scale_y_log10()+facet_grid(rows=vars(iteration))
-newSh%>%ggplot()+geom_histogram(aes(CurD))+scale_y_log10()+facet_grid(rows=vars(iteration))
 
 tmp<-as.matrix(sheepies)
 colnames(tmp)<-c("Distance",names(x0))
@@ -149,6 +136,10 @@ summaries <- data.frame(True=x0true,median = medis, mean = means, GLM=initSIR$x0
 summaries%<>%cbind(data.frame(inCI=summaries$GLM<summaries$upper & summaries$GLM>summaries$lower))
 
 print(summaries)
+sumReal<-summaries
+for (i in 1:length(links)) sumReal[i,-ncol(sumReal)] <- links[[i]](sumReal[i,-ncol(sumReal)])
+print(signif(sumReal,2))
+
 
 initDist<-logTargetIPM(x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F, returnW=T)
 medDist<-logTargetIPM(summaries$median, logTargetPars = IPMLTP, returnNeg = F, printProp = F, returnW=T)
@@ -175,21 +166,6 @@ for(i in 2:ncol(sheepies)){
 }
 gridExtra::grid.arrange(qq[[1]],qq[[2]],qq[[3]],qq[[4]],qq[[5]],qq[[6]],
                         qq[[7]],qq[[8]],qq[[9]],qq[[10]],qq[[11]],qq[[12]])
-
-kkkl<-grep(names(sheepies),pattern = "Distance_mod")
-
-qq<-list()
-for(i in 2:ncol(sheepies)){
-  shtmp<-sheepies[,c(kkkl,i)]; varname<-names(shtmp)[2]; names(shtmp)[2]<-"Value"
-  p<-shtmp%>%ggplot(aes(x=Value,y=Distance_mod))+
-    geom_density_2d_filled()+ggtitle(varname)+
-    ylab("log(-Distance)") + geom_vline(xintercept = x0true[i-1],colour="red")
-  # geom_vline(xintercept = x0[i],colour="red")
-  qq<-c(qq,list(p))
-}
-gridExtra::grid.arrange(qq[[1]],qq[[2]],qq[[3]],qq[[4]],qq[[5]],qq[[6]],
-                        qq[[7]],qq[[8]],qq[[9]],qq[[10]],qq[[11]],qq[[12]])
-
 
 my_fn <- function(data, mapping, ...){
   p <- ggplot(data = data, mapping = mapping) + 

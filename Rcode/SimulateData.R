@@ -388,6 +388,7 @@ simulateIBM <- function(n, t, survFunc, survPars, growthSamp, growthPars,
     # Print out summaries of the simulation if desired:
     if (verbose){
       cat("survival rate is", sum(survivors)/current.pop.size,"\n")
+      cat("death rate is", sum(abs(survivors-1))/current.pop.size,"\n")
       oldSizes <- survivorsDF$size[which(survivors==1)]
       cat("average growth is", mean(na.omit(newSizes) - oldSizes), "\n")
       cat("rate of births is", nOffspring/current.pop.size, "\n")

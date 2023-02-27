@@ -346,7 +346,7 @@ if(obsModel=="MultinomObs"){
     # For each type of summary statistic
     sw<-rowSums(sapply(1:3,MultiMod))
     # Calc median shat value
-    shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)
+    shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)*pobs
     
     return(list(sw=maxESS(sw,mag=30),shat=shat))
   }
@@ -364,7 +364,7 @@ if(obsModel=="MultinomObs"){
     # For each type of summary statistic
     sw<-rowSums(sapply(1:3,MultiMod))
     # Calc median shat value
-    shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)
+    shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)*pobs
     
     return(list(sw=maxESS(sw,mag=30),shat=shat))
   }
@@ -379,7 +379,7 @@ if(obsModel=="MultinomObs"){
     # For each type of summary statistic
     sw<-sapply(1:dim(wArgs$Sstar)[3],MultiMod)
     # Calc median shat value
-    shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)
+    shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)*pobs
     
     return(list(sw=maxESS(sw,mag=30),shat=shat))
   }
@@ -390,12 +390,12 @@ if(obsModel=="MultinomObs"){
     # Distance function - binomial
     MultiMod<-function(i) sum(detectionNumObs(wArgs$Sd[,,wArgs$time], 
                                               wArgs$Sstar[,,i],
-                                         pobs, 
-                                         logy=T))
+                                              pobs, 
+                                              logy=T))
     # For each type of summary statistic
     sw<-sapply(1:dim(wArgs$Sstar)[3],MultiMod)
     # Calc median shat value
-    shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)
+    shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)*pobs
     
     return(list(sw=maxESS(sw,mag=30),shat=shat))
   }
@@ -410,7 +410,7 @@ if(obsModel=="MultinomObs"){
                       sobs = c(wArgs$Sd[,,wArgs$time]))
     
     return(list(sw=disties$sw,
-                shat=array(disties$shat,dim(wArgs$Sstar)[1:2])))
+                shat=array(disties$shat,dim(wArgs$Sstar)[1:2])*pobs))
   }
   
 } else if (obsModel=="MAEdist"){
@@ -423,7 +423,7 @@ if(obsModel=="MultinomObs"){
                      sobs = c(wArgs$Sd[,,wArgs$time]))
     
     return(list(sw=disties$sw,
-                shat=array(disties$shat,dim(wArgs$Sstar)[1:2])))
+                shat=array(disties$shat,dim(wArgs$Sstar)[1:2])*pobs))
   }
   
 }
@@ -438,7 +438,6 @@ if(fixedObsProb){
     # Exponentiate and scale the particle weights to become from 0 to 1
     output$sw<-exp(diz$sw-max(diz$sw))
     summz<-sum(output$sw)
-    print(summz)
     if(summz==0) {stop("all model-SMC particles are zero")}
     # Normalise it!
     output$sw<-output$sw/summz
@@ -451,8 +450,6 @@ if(fixedObsProb){
   obsfun<-function(output,wArgs){
     # Simulate the obsProbPar from the beta distribution here
     pobs<-rbeta(dim(wArgs$Sstar)[3],wArgs$pobs[1],wArgs$pobs[2])
-    # Calculate the distances
-    diz<-ObsDistance(wArgs,pobs=pobs)
     # Calculate the total distances
     output$d<-output$d+sum(diz$sw,na.rm = T)
     # Exponentiate and scale the particle weights to become from 0 to 1

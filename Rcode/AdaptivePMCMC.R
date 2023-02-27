@@ -920,7 +920,8 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
              shat=lTargNew$shat,
              delta=c(delta0),
              q_thresh=c(0.95),
-             iteration=1)
+             iteration=1,
+             ESS=initSIR$Np)
 
   return(outy)
 }
@@ -943,16 +944,17 @@ CalcQuantile<-function(output,xPrev){
   return(q_update)
 }
 
-tpa<-function(delta,output) sum(output$distance>delta)/length(output$distance)
-
 if(DeltaCalc=="QuantESS"){
+  
+  tpa<-function(delta,output) sum(output$distance>delta)/length(output$distance)
+  
   ModThresh <- function(output, xPrev=NULL, alpha=0.9){
     #Find the new tolerance such that alpha proportion of the current alive particles stay alive
-    reflevel <- alpha*tpa(output$delta[output$iteration-1],output)
-    delta<-uniroot(function(delta) tpa(delta,output)-reflevel,c(0,output$delta[output$iteration-1]))$root
+    reflevel <- alpha*tpa(output$delta[output$iteration],output)
+    delta<-uniroot(function(delta) tpa(delta,output)-reflevel,c(0,output$delta[output$iteration]))$root
     
-    output$delta[output$iteration] <- delta
-    output$q_thresh[output$iteration] <- tpa(output$delta[output$iteration],output)
+    output$delta[output$iteration+1L] <- delta
+    output$q_thresh[output$iteration+1L] <- tpa(output$delta[output$iteration],output)
     
     return(output)
   }
@@ -978,8 +980,8 @@ CalcAltW<-function(output){
   output$weightings<-rep(0,length(output$weightings))
   # Weights are the number of particles that made it through current thresholds over the previous iteration
   output$weightings[output$distance>output$delta[output$iteration]]<-
-    sum(output$distance>=output$delta[output$iteration],na.rm = T)/
-    sum(output$distance>=output$delta[output$iteration-1],na.rm = T)
+    sum(output$distance>=output$delta[output$iteration+1],na.rm = T)/
+    sum(output$distance>=output$delta[output$iteration],na.rm = T)
   # Return the normalised weights
   return(output$weightings/sum(output$weightings))
 }
@@ -996,12 +998,12 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
   # Find theta*(t=1) delta(t=1) -> the ABC-rejection value
   if(is.null(initSIR$output)) {output<-InitABCSIR(lTarg, lTargPars, initSIR); it<-1} else {output<-initSIR$output; it<-output$iteration}
   # Setup shop for the full algorithm
-  saveRDS(list(output),paste0("output_",namer));xPrev<-output$theta
+  saveRDS(list(output),paste0("./Results/output_",namer));xPrev<-output$theta; converger=F
   # Show the goods!
   print(paste0("Step = 1, No. samples = ",initSIR$Np*initSIR$k,", eps = ",signif(output$delta[output$iteration],3),
                " with 1/c = ",signif(output$q_thresh[output$iteration],2)," and ESS = ",signif(CalcESS(output),3)))
   # Run the algorithm!
-  while(!(ABCconv(output) & it > 3)){ # & cycles <= initSIR$itermax & stepmax<=it){
+  while(!(converger & it > 3)){ # & cycles <= initSIR$itermax & stepmax<=it){
     # Set the ABC-step number
     it<-it+1L
     # Dynamically define the resample & perturb function of new parameter sets
@@ -1019,11 +1021,13 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
     # Save previous parameter space samples
     xPrev<-output$theta[output$distance>output$delta[output$iteration-1],]
     # Save the output!
-    prev<-readRDS(paste0("output_",namer)); saveRDS(c(prev,list(output)),paste0("output_",namer)); rm(prev)
+    prev<-readRDS(paste0("./Results/output_",namer)); saveRDS(c(prev,list(output)),paste0("./Results/output_",namer)); rm(prev)
     # Tell me what's good... please, please, please
     print(paste0("Step = ",it,", No. samples = ",cycles,", eps = ",signif(output$delta[output$iteration],3),
                  " with 1/c = ",signif(output$q_thresh[it],2)," and ESS = ",signif(output$ESS,3)))
     print("")
+    # Have we reached convergence yet?
+    converger<-ABCconv(output)
   }
   return(output)
 }

@@ -14,12 +14,12 @@ fixedObsProb<-T
 # Number of MCMC simulations
 itermax <- 60000
 stepmax <- 10
-ABCNP<-1000L  # this is the number of particles to pass the ABC threshold
+ABCNP<-300L  # this is the number of particles to pass the ABC threshold
 ABCk<-2L # this sets the number of particles to trial in ABC as N_trial=k*N (see table 2, U. Simola, et al, Bayesian Analysis (2021) 16, Number 2, Adaptive Approximate Bayesian Computation
 # Do we need to calculate the minimum number of particles required for the adaptive-epsilon algorithm?
 calcParts<-F
 # Number of in-chain parallelised cores
-ncores<-55
+ncores<-50
 # Define the number of size class bins
 nbks<-10
 # Bins method:
@@ -30,6 +30,8 @@ muModel<-'poisson' #'multinomial'
 obsModel<-"MAEdist"
 # Adaptive ABC threshold method
 DeltaCalc<-"QuantESS"
+# Do we narrow things down with high level priors?
+HLPon<-T
 # Do we automatically calculate the shift in the staggered grid of the size-class bins, based on the IPM kernal?
 manshift<-F
 # For the individual and offspring growth function - normal or truncated normal, or otherwise?

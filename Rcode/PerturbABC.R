@@ -43,6 +43,17 @@ pert_GlobSkewCov<-function(outin,lTargPars){
     thth<-theta[sample(1:sum(inds),NN,T,prob = wewei),]
     # Perturb the sample
     thth<-t(apply(thth,1,function(tt) sn::rmsn(1, xi = tt, Omega = disty$Omega, alpha = disty$alpha)))
+    acc<-lTargPars$HLP(thth,lTargPars)
+    while(sum(!acc)>0){
+      thth[!acc,]<-theta[sample(1:sum(inds),sum(!acc),T,prob = wewei),]
+      if(sum(!acc)>1){
+        thth[!acc,]<-t(apply(thth[!acc,],1,function(tt) sn::rmsn(1, xi = tt, Omega = disty$Omega, alpha = disty$alpha)))
+        acc[!acc]<-lTargPars$HLP(thth[!acc,],lTargPars)
+      } else {
+        thth[!acc,]<-as.numeric(t(sn::rmsn(1, xi = thth[!acc,], Omega = disty$Omega, alpha = disty$alpha)))
+        acc<-lTargPars$HLP(thth,lTargPars)
+      }
+    }
     # Transition kernel K(theta_i | theta_j) for j = 1,..,N of old particles
     # NOTE WE RELY ON SYMMETRY OF MVN(theta1, theta2, COV) = MVN(theta2, theta1, COV)
     ptrans<-apply(thth,1,function(tt) sn::dmsn(theta, xi = tt, Omega = disty$Omega, alpha=disty$alpha)%*%wewei)
@@ -51,6 +62,7 @@ pert_GlobSkewCov<-function(outin,lTargPars){
     # Associated weights NOTE THAT NORMALISATION IS DONE LATER
     newW<-prpr/ptrans
     newW[is.infinite(newW)]<-max(newW[!is.infinite(newW)],na.rm = T)
+    newW[newW==0]<-min(newW[newW!=0])
     
     return(list(theta=thth,weightings=newW))
   }

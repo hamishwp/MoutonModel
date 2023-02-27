@@ -27,7 +27,19 @@ print(logTargetIPM(initSIR$x0, logTargetPars = IPMLTP, returnNeg = F, printProp 
 ptm_fin<-(proc.time()[3] - ptm); timeouter<-ptm_fin*3; print(paste0("Timeout = ",timeouter))
 # Make sure this timeout is integrated into the simulations
 initSIR$timeouter<-timeouter
-# if(file.exists(paste0("output_",namer))) initSIR$output<-readRDS(paste0("output_",namer)); initSIR$output<-initSIR$output[[length(initSIR$output)]]
+# In case user wants to start from a previous simulation
+prevSim<-NULL
+# prevSim<-"./output_SIM_pop100_yr10_ABCSIR_pert_GlobSkewCov_fixed_poissonMu_MAEdistObs_60000_10brks_regbinspaceFALSE_sampleDTN_autoshift_rand366"
+# if(!is.null(prevSim) & file.exists(paste0("output_",namer))) {
+#   output<-readRDS(prevSIM)
+#   exty<-str_split(prevSim,"output_")[[1]][2]
+#   inexty<-grep(exty,list.files("./Results/"),value = T)
+#   inpy<-readRDS(paste0("./Results/",inexty))
+#   IPMLTP<-inpy$IPMLTP
+#   initSIR<-inpy$initSIR
+#   initSIR$output<-initSIR$output[[length(initSIR$output)]]
+# }
+# print out the initial proposal distribution parameters
 print(initSIR$x0)
 print(diag(initSIR$propCOV))
 # Save everything we need to replicate this run:
@@ -35,7 +47,7 @@ earlytag<-paste0(namer,"_",priorName,"_its",itermax,"_",gsub(gsub(Sys.time(),pat
 saveRDS(list(
   initSIR=initSIR,
   IPMLTP=IPMLTP
-), paste0(directory,"Results/INPUT_",earlytag))
+), paste0(directory,"Results/INPUTS/INPUT_",earlytag))
 ###################################################################################
 ####################### Parameterise the model using ABCSMC #######################
 ###################################################################################

@@ -98,10 +98,26 @@ if(!fixedObsProb) flatPriors%<>%
     obsProbSh2=listy
   ))
 
+source(paste0(directory,'Rcode/HighLevelPriors.R'))
+
 # Proposal Distribution
 PropN<-do.call(getInitialValDists,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,invlinks=IPMLTP$invlinks,MultiSD=1)))
 # Either multivariate skew normal or multivariate normal
-if(PropDist=="MVSN") {ProposalDist<-function(initSIR) PropN$proposal(ABCNP*ABCk)
+if(PropDist=="MVSN") {
+  ProposalDist<-function(initSIR) {
+    # Sample from initial dist
+    thth<-PropN$proposal(ABCNP*ABCk)
+    acc<-IPMLTP$HLP(thth,IPMLTP)
+    while(sum(!acc)>0){
+      thth[!acc,]<-PropN$proposal(sum(!acc))
+      if(sum(!acc)>1){
+        acc[!acc]<-IPMLTP$HLP(thth[!acc,],IPMLTP)
+      } else {
+        acc<-IPMLTP$HLP(thth,IPMLTP)
+      }
+    }
+    return(thth)
+  }
 }else ProposalDist<-function(initSIR) multvarNormProp(xt=PropN$x0, propPars=PropN$propCOV, n=ABCNP*ABCk)
 # Setup the initial values for the ABSSIR algorithm:
 initSIR<-list(ProposalDist=ProposalDist, 

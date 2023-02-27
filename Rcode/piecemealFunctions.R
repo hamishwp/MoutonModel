@@ -792,7 +792,9 @@ ExtractGLM<-function(solveDF,formular,alpha=0.025,familiar=NULL){
     sigCI<-c(sigma(mmm)-(nn-2)*sigma(mmm)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE),
               sigma(mmm)+(nn-2)*sigma(mmm)^2/qchisq(1-alpha/2, df = nn-2, lower.tail = FALSE))
     # All CI values
-    ParsCI <- rbind(confint(mmm),sigCI); rownames(ParsCI)[3]<-"sigma"
+    confinie<-tryCatch(confint(mmm),error=function(e) NA)
+    if(any(is.na(confinie))) return(rep(NA,9))
+    ParsCI <- rbind(confinie,sigCI); rownames(ParsCI)[3]<-"sigma"
     # Output me!
     outout<-c(Pars,ParsCI); names(outout)<-c(rownames(ParsCI),paste0(rownames(ParsCI),"_L"),paste0(rownames(ParsCI),"_U"))
     
