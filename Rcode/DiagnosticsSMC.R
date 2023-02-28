@@ -122,7 +122,7 @@ TimeSMC<-function(x0,IPMLTP,timer=100000){
   # Return the ABCSIR object with all the count data, for this year only. This will be combined with rbind later
   vallies<-array(c(newCounts,
                    reprCounts,
-                   reppie),
+                   vectorToCounts(offSizes, breaks)),
                  dim = c(length(sizes),3),
                  dimnames = list(round(sizes,digits = 2),
                                  c("NoSurv","NoParents","NoOff")))
@@ -208,8 +208,17 @@ TestPF<-function(x0,IPMLTP, samplez=10){
     }
     outperf%<>%rbind(cbind(performy,data.frame(attempt=i)))
   }
+  # return(abs(output2$shat-IPMLTP$SumStats))
   return(outperf)
 }
+
+Perfy<-TestPF(x0,IPMLTP,samplez = 3)
+mean(Perfy$distance)
+
+xxx<-x0
+xxx[2]<--xxx[2]
+Perfy2<-TestPF(xxx,IPMLTP,samplez = 3)
+mean(Perfy2$distance)
 
 # Test the multinomial observation model
 obsModel<-"MultinomObs"

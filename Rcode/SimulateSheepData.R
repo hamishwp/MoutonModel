@@ -86,6 +86,21 @@ print(paste0("Grid shift = ",shift, " for ",nbks," number of breaks." ))
 # Get the sheep counts and sizes from the actual data (required even if simulated data is used)
 lSHEEP<-GetSoaySheep_binned(lSHEEP,shift=shift,oneSex=T,nbks=nbks,regbinspace=regbinspace)  
 
+# For the integral component we need infinite bounds
+lSHEEP$breaks[c(1,nbks)]<-c(-Inf,Inf)
+# Add to the log target parameters
+IPMLTP %<>% c(list(Y = lSHEEP$COUNTS,
+                   SumStats=lSHEEP$SumStats,
+                   breaks = lSHEEP$breaks,
+                   sizes = lSHEEP$sizes,
+                   priorProbs = lSHEEP$priorProbs,
+                   obsProbPar=lSHEEP$obsProbTime,
+                   DTN = data.frame(L=lSHEEP$L,U=lSHEEP$U),
+                   solveDF=lSHEEP$solveDF,
+                   detectedNum=lSHEEP$detectedNum
+))
+rm(lSHEEP)
+
 #################################################################################
 
 ###################### SIMULATE THE STATE SPACE MODEL ######################

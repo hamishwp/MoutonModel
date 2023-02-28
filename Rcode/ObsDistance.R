@@ -278,9 +278,10 @@ fixedBinObs<-function(Y, X, p, logy=T, time, NoParts){
 }
 
 maxESS<-function(sw, rate=0.5, mag=NULL){
-  vESS<-ifelse(is.null(mag),rate*Np,mag)
+  return(sw)
   Np<-length(sw)
   sw<-sw-max(sw)
+  vESS<-ifelse(is.null(mag),rate*Np,mag)
   if(1/sum(exp(sw)^2)<vESS){
     
     funESS<-function(rr) abs(sum(exp(sw*2/rr)-vESS))
@@ -368,7 +369,24 @@ if(obsModel=="MultinomObs"){
     
     return(list(sw=maxESS(sw,mag=30),shat=shat))
   }
-} else if (obsModel=="PoisObs"){
+} else if(obsModel=="multinomMAE"){
+  
+  ObsDistance<-function(wArgs,pobs){
+    # Distance function - multinomial-Poisson
+    MultiMod<-function(i) {
+      multiProbs <- countsToProbs(wArgs$Sd[,i,wArgs$time]+1)
+      
+      -abs(sum(wArgs$Sd[,i,wArgs$time])-colSums(wArgs$Sstar[,i,])*pobs) +
+        apply(wArgs$Sstar[,i,]+1,2,function(xx) dmultinom(x = xx,prob=multiProbs,log=T))
+    }
+    # For each type of summary statistic
+    sw<-rowSums(sapply(1:3,MultiMod))
+    # Calc median shat value
+    shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)*pobs
+    
+    return(list(sw=maxESS(sw,mag=30),shat=shat))
+  }
+}else if (obsModel=="PoisObs"){
   
   ObsDistance<-function(wArgs,pobs){
     # Distance function - poisson
@@ -436,8 +454,8 @@ if(fixedObsProb){
     # Calculate the total distances
     output$d<-output$d+sum(diz$sw,na.rm = T)
     # Exponentiate and scale the particle weights to become from 0 to 1
-    output$sw<-exp(diz$sw-max(diz$sw))
-    summz<-sum(output$sw)
+    output$sw<-exp(diz$sw-max(diz$sw,na.rm = T))
+    summz<-sum(output$sw,na.rm = T)
     if(summz==0) {stop("all model-SMC particles are zero")}
     # Normalise it!
     output$sw<-output$sw/summz
@@ -453,8 +471,8 @@ if(fixedObsProb){
     # Calculate the total distances
     output$d<-output$d+sum(diz$sw,na.rm = T)
     # Exponentiate and scale the particle weights to become from 0 to 1
-    output$sw<-exp(diz$sw-max(diz$sw))
-    summz<-sum(output$sw)
+    output$sw<-exp(diz$sw-max(diz$sw,na.rm = T))
+    summz<-sum(output$sw,na.rm = T)
     if(summz==0) {stop("all model-SMC particles are zero")}
     # Normalise it!
     output$sw<-output$sw/summz

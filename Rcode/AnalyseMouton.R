@@ -6,9 +6,20 @@ source(paste0(directory,'Rcode/LoadParameters.R'))
 source(paste0(directory,'Rcode/GetPackages.R'))
 # Load the IPM object skeleton
 source(paste0(directory,'Rcode/CodeSkeleton.R'))
+# Load the most recent simulation data
+details = file.info(list.files("./Results/","output_SIM"))
+details = details[with(details, order(as.POSIXct(mtime),decreasing = T)), ]
+files = rownames(details); rm(details)
+# Take the most recent, by default
+exty<-str_split(files[1],"output_")[[1]][2]
+output<-readRDS(paste0("./Results/output_",exty))
+inexty<-grep(exty,list.files("./Results/INPUTS/"),value = T)
+inpy<-readRDS(paste0("./Results/INPUTS/",inexty))
+IPMLTP<-inpy$IPMLTP
+initSIR<-inpy$initSIR
 # Either we read in the real data or generate our own!
-if(simulation) {source(paste0(directory,'Rcode/SimulateSheepData.R'))
-} else source(paste0(directory,'Rcode/SoaySheepData.R'))
+# if(simulation) {source(paste0(directory,'Rcode/SimulateSheepData.R'))
+# } else source(paste0(directory,'Rcode/SoaySheepData.R'))
 # Build up the model based on the parameters and sheep data
 source(paste0(directory,'Rcode/BuildModel.R'))
 
@@ -43,18 +54,6 @@ Np<-length(unlist(x0))
 names(x0)<-names(unlist(vals))[-c(6,7,14,15)]
 x0true<-x0
 
-# Load the most recent simualtion data
-details = file.info(list.files("./Results/","output_SIM"))
-details = details[with(details, order(as.POSIXct(mtime),decreasing = T)), ]
-files = rownames(details); rm(details)
-# Take the most recent, by default
-exty<-str_split(files[1],"output_")[[1]][2]
-output<-readRDS(paste0("./Results/output_",exty))
-inexty<-grep(exty,list.files("./Results/INPUTS/"),value = T)
-inpy<-readRDS(paste0("./Results/INPUTS/",inexty))
-IPMLTP<-inpy$IPMLTP
-initSIR<-inpy$initSIR
-
 lSHEEP<-IPMLTP
 lSHEEP$detectedNum<-lSHEEP$solveDF%>%filter(survived==1)%>%group_by(census.number)%>%
   summarise(detectedNum=length(size),.groups = 'drop_last')%>%pull(detectedNum)%>%unname()
@@ -63,6 +62,7 @@ source(paste0(directory,'Rcode/BuildModel.R'))
 
 # TO CHECK THE INITIAL SAMPLE DISTRIBUTION
 sheepies<-cbind(data.frame(Distance=runif(1500)),as.data.frame(PropN$proposal(1500)))
+# sheepies<-cbind(data.frame(Distance=runif(1500)),as.data.frame(ResampleSIR(1500)$theta))
 names(sheepies)<-c("Distance",names(x0true))
 shdens<-t(apply(sheepies[,-1],1,function(x) unname(unlist(Sample2Physical(x,IPMLTP)))[-c(6,7,14,15)]))
 shdens<-cbind(sheepies$Distance,shdens)%>%as.data.frame()

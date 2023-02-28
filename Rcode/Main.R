@@ -47,7 +47,7 @@ earlytag<-paste0(namer,"_",priorName,"_its",itermax,"_",gsub(gsub(Sys.time(),pat
 saveRDS(list(
   initSIR=initSIR,
   IPMLTP=IPMLTP
-), paste0(directory,"Results/INPUTS/INPUT_",earlytag))
+), paste0(directory,"Results/INPUTS/INPUT_",earlytag)); IPMLTP$solveDF<-IPMLTP$detectedNum<-NULL
 ###################################################################################
 ####################### Parameterise the model using ABCSMC #######################
 ###################################################################################

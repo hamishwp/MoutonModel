@@ -6,35 +6,28 @@ SMC_parts<-500
 # Particle filter initialisation parameters
 if(muModel=='multinomial'){
   # Multinomial Mu initialisation function
-  muPar<-list(popSize=rowSums(lSHEEP$COUNTS[,1]), n=SMC_parts, probs=lSHEEP$priorProbs)
+  muPar<-list(popSize=rowSums(IPMLTP$Y[,1]), n=SMC_parts, probs=IPMLTP$priorProbs)
   if(fixedObsProb) mufun<-match.fun("multnomMu")
   else mufun<-match.fun("beta_mnMu")
 } else if(muModel=='poisson'){
   # Poisson Mu initialisation function
-  muPar<-list(popSize=lSHEEP$COUNTS[,1],n=SMC_parts)
+  muPar<-list(popSize=IPMLTP$Y[,1],n=SMC_parts)
   if(fixedObsProb) mufun<-match.fun("poissonMu")
   else mufun<-match.fun("beta_poisMu")
 } else stop("Error in Mu Model input, we recommend muModel<-'poissonMu' ")
 # If we want to avoid parameterising the probability of being observed, we can extract it empirically straight from the data
 if(fixedObsProb){
-  obsProbPar<-lSHEEP$obsProbTime
+  obsProbPar<-IPMLTP$obsProbPar
   muPar$pobs<-obsProbPar[1]
-  IPMLTP %<>% c(list(obsProbPar = obsProbPar))
 } else {
-  obsProbPar <- proposed$obsProbPar
+  obsProbPar <- x0$obsProbPar
   muPar$pobs<-obsProbPar
 }
-# For the integral component we need infinite bounds
-lSHEEP$breaks[c(1,nbks)]<-c(-Inf,Inf)
 # Add to the log target parameters
 IPMLTP %<>% c(list(oneSex = oneSex,
                    mu = mufun, # mu = match.fun('multnomMu'), 
-                   Y = lSHEEP$COUNTS,
-                   SumStats=lSHEEP$SumStats,
                    obsProb = obsfun, # obsProb = match.fun('detectionNumObs'), # obsProb = match.fun('poissonObs'),
-                   fixedObsProb=fixedObsProb,
-                   breaks = lSHEEP$breaks,
-                   sizes = lSHEEP$sizes))
+                   fixedObsProb=fixedObsProb))
 
 ##################### ESTIMATE REQUIRED SMC PARTICLES ########################
 # First check if this specific model has already been run
@@ -44,10 +37,10 @@ if(!calcParts & file.exists(paste0(directory,"Results/SMCPARTS_calc.RData"))){SM
 # Particle initialisation of the population size distributions
 if(muModel=='multinomial'){
   # Multinomial Mu initialisation function
-  muPar<-list(popSize=sum(lSHEEP$COUNTS[,1]), n=SMC_parts, probs=lSHEEP$priorProbs)
+  muPar<-list(popSize=sum(IPMLTP$Y[,1]), n=SMC_parts, probs=IPMLTP$priorProbs)
 } else if(muModel=='poisson'){
   # Poisson Mu initialisation function
-  muPar<-list(popSize=lSHEEP$COUNTS[,1],n=SMC_parts)
+  muPar<-list(popSize=IPMLTP$Y[,1],n=SMC_parts)
 } else stop("Error in Mu Model input, we recommend muModel<-'poissonMu' ")
 # Make sure to add the observation probability parameters
 if(fixedObsProb){
@@ -98,10 +91,21 @@ if(!fixedObsProb) flatPriors%<>%
     obsProbSh2=listy
   ))
 
+IPMLTP %<>% c(list(
+  priorFunc = match.fun('evalPriors'),
+  priors = priorsIPM,
+  priorPars = flatPriors,
+  cores = ncores,
+  muPar = muPar, 
+  b = SMC_parts
+))
+
+IPMLTP$priorF<-function(thth) IPMLTP$priorFunc(thth, IPMLTP$priors, IPMLTP$priorPars)
+
 source(paste0(directory,'Rcode/HighLevelPriors.R'))
 
 # Proposal Distribution
-PropN<-do.call(getInitialValDists,c(lSHEEP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,invlinks=IPMLTP$invlinks,MultiSD=1)))
+PropN<-do.call(getInitialValDists,c(IPMLTP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,invlinks=IPMLTP$invlinks,MultiSD=1)))
 # Either multivariate skew normal or multivariate normal
 if(PropDist=="MVSN") {
   ProposalDist<-function(initSIR) {
@@ -126,22 +130,6 @@ initSIR<-list(ProposalDist=ProposalDist,
               Np=ABCNP,
               k=ABCk) 
 
-#################### CREATE THE LOGTARGETPARAMETERS OBJECT #####################
-# Storage object for the ABC-SIR algorithm
-# stop("Sort this out!")
-
-IPMLTP %<>% c(list(
-  priorFunc = match.fun('evalPriors'),
-  priors = priorsIPM,
-  priorPars = flatPriors,
-  cores = ncores,
-  DTN = data.frame(L=lSHEEP$L,U=lSHEEP$U),
-  muPar = muPar, 
-  b = SMC_parts,
-  solveDF=lSHEEP$solveDF
-))
-
-IPMLTP$priorF<-function(thth) IPMLTP$priorFunc(thth, IPMLTP$priors, IPMLTP$priorPars)
 
 if(NpCheck){
   print("Checking that number of samples per ABC-step is more than the minimum for the adaptive ABC threshold algorithm")

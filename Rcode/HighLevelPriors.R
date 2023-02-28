@@ -16,16 +16,16 @@
 # Find an upper bound on any of the above gradients?
 
 ######### make values by assuming NA values are all positive or all negative for survival and reproduction
-lSHEEP$solveDF%>%mutate(s_bins = cut(size, breaks = IPMLTP$breaks))%>%
+IPMLTP$solveDF%>%mutate(s_bins = cut(size, breaks = IPMLTP$breaks))%>%
   group_by(s_bins)%>%summarise(repr=mean(reproduced,na.rm = T))
 
-lSHEEP$solveDF%>%mutate(s_bins = cut(prev.size, breaks = IPMLTP$breaks))%>%
+IPMLTP$solveDF%>%mutate(s_bins = cut(prev.size, breaks = IPMLTP$breaks))%>%
   group_by(s_bins)%>%summarise(survy=mean(survived,na.rm = T))
 
 
 ### SCHILD ###
 # Offspring survival probability
-SchildEst<-boot::boot(lSHEEP$solveDF$survived[lSHEEP$solveDF$prev.size<IPMLTP$sizes[2]],
+SchildEst<-boot::boot(IPMLTP$solveDF$survived[IPMLTP$solveDF$prev.size<IPMLTP$sizes[2]],
                       function(u,i) mean(u[i],na.rm=T),R=1000)
 SchildEst<-boot::boot.ci(SchildEst,type=c("norm","basic","perc"),conf = 0.95)
 minSchild<-SchildEst$percent[4]
@@ -37,7 +37,7 @@ schildHLP<-function(schild) ifelse(schild>maxSchild | schild<minSchild, F,T)
 minSurv2<-0
 maxSurv2<-Inf
 # Survival Intercept, given that min gradient >=0
-survy<-lSHEEP$solveDF%>%group_by(census.number)%>%
+survy<-IPMLTP$solveDF%>%group_by(census.number)%>%
   summarise(survy=sum(survived,na.rm = T)/length(survived[!is.na(survived)]))%>%
   pull(survy)
 if(mean(survy)>(1-1e-5) | median(survy)>(1-1e-5)) {
@@ -59,7 +59,7 @@ survHLP<-function(survPars) {
 minRepr2<-0
 maxRepr2<-Inf
 # Reproduction Intercept, given that min gradient >=0
-repry<-lSHEEP$solveDF%>%group_by(census.number)%>%
+repry<-IPMLTP$solveDF%>%group_by(census.number)%>%
   summarise(repr=mean(reproduced,na.rm = T))%>%pull(repr)
 if(mean(repry)>(1-1e-5) | median(repry)>(1-1e-5)) {
   maxRepr1 <- Inf
@@ -70,7 +70,7 @@ if(mean(repry)>(1-1e-5) | median(repry)>(1-1e-5)) {
 minRepr1<--Inf
 # Higher level prior as a combination of the two parameters 
 # (note this is based on reproduction of lowest size class - Schild - as we already have upper-surv1 and lower-surv2)
-RchildEst<-boot::boot(lSHEEP$solveDF$reproduced[lSHEEP$solveDF$size<IPMLTP$sizes[2]],
+RchildEst<-boot::boot(IPMLTP$solveDF$reproduced[IPMLTP$solveDF$size<IPMLTP$sizes[2]],
                       function(u,i) mean(u[i],na.rm=T),R=1000)
 RchildEst<-boot::boot.ci(RchildEst,type=c("norm","basic","perc"),conf = 0.95)
 # Create the function
@@ -87,9 +87,9 @@ reprHLP<-function(reprPars) {
 # sizes<-IPMLTP$sizes
 # minsize<-c(IPMLTP$DTN$L,IPMLTP$sizes[1:length(IPMLTP$sizes)-1])
 # maxsize<-c(IPMLTP$sizes[2:length(IPMLTP$sizes)],IPMLTP$DTN$U)
-# lSHEEP$solveDF%>%mutate(s_bins = cut(size, breaks = IPMLTP$breaks))%>%group_by(s_bins)%>%
+# IPMLTP$solveDF%>%mutate(s_bins = cut(size, breaks = IPMLTP$breaks))%>%group_by(s_bins)%>%
 #   summarise(mingrow=min(size-prev.size,na.rm = T),maxgrow=max(size-prev.size,na.rm = T))
-# growers<-lSHEEP$solveDF%>%mutate(s_bins = cut(size, breaks = IPMLTP$breaks))%>%group_by(s_bins)%>%
+# growers<-IPMLTP$solveDF%>%mutate(s_bins = cut(size, breaks = IPMLTP$breaks))%>%group_by(s_bins)%>%
 #   summarise(mingrow=quantile(size-prev.size,0.05,na.rm = T),maxgrow=quantile(size-prev.size,0.95,na.rm = T))
 # growers<-growers[-nrow(growers),]
 # growers$realmin<-maxsize*vals$growthPars[2]+vals$growthPars[1]-5*vals$growthPars[3]-maxsize
@@ -124,7 +124,7 @@ osizHLP<-function(offSizePars) {
 }
 
 # Offspring number
-OnumEst<-boot::boot(lSHEEP$solveDF$off.born,
+OnumEst<-boot::boot(IPMLTP$solveDF$off.born,
                       function(u,i) mean(u[i],na.rm=T),R=1000)
 OnumEst<-boot::boot.ci(OnumEst,type=c("norm","basic","perc"),conf = 0.95)
 

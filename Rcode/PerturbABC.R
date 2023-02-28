@@ -40,12 +40,12 @@ pert_GlobSkewCov<-function(outin,lTargPars){
   # Then sample from the MV-SN distribution
   ResampleSIR<-function(NN) {
     # First sample particles based on the distance function
-    thth<-theta[sample(1:sum(inds),NN,T,prob = wewei),]
+    thth<-theta[sample(1:nrow(theta),NN,T,prob = wewei),]
     # Perturb the sample
     thth<-t(apply(thth,1,function(tt) sn::rmsn(1, xi = tt, Omega = disty$Omega, alpha = disty$alpha)))
     acc<-lTargPars$HLP(thth,lTargPars)
     while(sum(!acc)>0){
-      thth[!acc,]<-theta[sample(1:sum(inds),sum(!acc),T,prob = wewei),]
+      thth[!acc,]<-theta[sample(1:nrow(theta),sum(!acc),T,prob = wewei),]
       if(sum(!acc)>1){
         thth[!acc,]<-t(apply(thth[!acc,],1,function(tt) sn::rmsn(1, xi = tt, Omega = disty$Omega, alpha = disty$alpha)))
         acc[!acc]<-lTargPars$HLP(thth[!acc,],lTargPars)
