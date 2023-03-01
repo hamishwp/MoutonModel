@@ -277,28 +277,12 @@ fixedBinObs<-function(Y, X, p, logy=T, time, NoParts){
   return(detectionNumObs(Y[,rep(time,NoParts)], X, p[time], logy=logy))
 }
 
-maxESS<-function(sw, rate=0.5, mag=NULL){
-  return(sw)
-  Np<-length(sw)
-  sw<-sw-max(sw)
-  vESS<-ifelse(is.null(mag),rate*Np,mag)
-  if(1/sum(exp(sw)^2)<vESS){
-    
-    funESS<-function(rr) abs(sum(exp(sw*2/rr)-vESS))
-    optimize(funESS,interval = c(0.1,3*abs(min(sw[!is.infinite(sw)]))),tol = 0.1)
-    
-    adj<-sqrt(vESS/sum(exp(sw)^2))
-    return(sw/adj)
-  } else return(sw)
-}
-
 # Minkowski distance function
 # Distances were taken from https://www.biorxiv.org/content/10.1101/2021.07.29.454327v1.full.pdf
 # Note that if p=1 we are using the L1 distances - our default
 MADadaptdist<-function(sest,sobs,p=1){
-  # Remove all summary statistics that are the same across the observed and simulated values
-  sds<-apply(cbind(sest,array(sobs,dim=c(length(sobs),1))),1,sd,na.rm=T)
-  sest<-sest[sds!=0,]; sobs<-sobs[sds!=0]
+  # In case nothing works at all
+  if(all(sest==0)) return(list(shat=rep(0,length(sobs)), sw=rep(-1e300,ncol(sest)))) 
   # Median of columns
   meds<-apply(sest,1,median,na.rm=T)
   # Median Absolute Deviation (MAD) to the sample
@@ -308,23 +292,33 @@ MADadaptdist<-function(sest,sobs,p=1){
   # Don't punish the summary statistics that deviate more from obs data initially than others:
   if(sum(MADO>2*MAD,na.rm = T)/length(sobs)<1/3) PCMAD<-MAD+MADO else PCMAD<-MAD
   # Calculate the distance per summary statistic
-  d_i<--MADO/PCMAD
+  d_i<--MADO/(PCMAD+1e-5); d_i[,apply(PCMAD,2,sd)==0]<--1e300
   # Particle weight calculation
-  sw<--abs(apply(d_i,2,function(dd) pracma::nthroot(mean(dd[!is.infinite(dd)]^p,na.rm = T),p)))
+  sw<--abs(apply(d_i,2,function(dd) pracma::nthroot(median(dd^p,na.rm = T),p)))
   # output total distance
   return(list(shat=meds, sw=sw))
 }
 
+MAEdistVar<-function(sest,sobs,p=1){
+  # Now calculate the variance for the distance normalisation
+  sds<-apply(sest,2,sd,na.rm=T)
+  # Median of columns
+  meds<-apply(sest,1,median,na.rm=T)
+  # Calculate the distance per summary statistic
+  d_i<--abs(sest-sobs)/(sds+1e-5); d_i[,sds==0]<--1e300
+  # Particle weight calculation
+  sw<--abs(apply(d_i,2,function(dd) pracma::nthroot(mean(dd^p,na.rm = T),p)))
+  # output total distance
+  return(list(shat=meds, sw=sw)) 
+}
+
 MAEdist<-function(sest,sobs,p=1){
-  # Remove all summary statistics that are the same across the observed and simulated values
-  sds<-apply(cbind(sest,array(sobs,dim=c(length(sobs),1))),1,sd,na.rm=T)
-  sest<-sest[sds!=0,]; sobs<-sobs[sds!=0]
   # Median of columns
   meds<-apply(sest,1,median,na.rm=T)
   # Calculate the distance per summary statistic
   d_i<--abs(sest-sobs)
   # Particle weight calculation
-  sw<--abs(apply(d_i,2,function(dd) pracma::nthroot(mean(dd[!is.infinite(dd)]^p,na.rm = T),p)))
+  sw<--abs(apply(d_i,2,function(dd) pracma::nthroot(median(dd^p,na.rm = T),p)))
   # output total distance
   return(list(shat=meds, sw=sw)) 
 }
@@ -421,11 +415,30 @@ if(obsModel=="MultinomObs"){
 } else if (obsModel=="MADadaptdist"){
   
   ObsDistance<-function(wArgs,pobs){
-    # Distance function - multinomial
+    # Distance function
     Sstar<-apply(wArgs$Sstar*pobs,3,rbind)
     # Calculate the distances - 
     disties<-MADadaptdist(sest = Sstar,
                       sobs = c(wArgs$Sd[,,wArgs$time]))
+    # Make sure that anytime the summary stats are zero across all bins are zero
+    mostlyempty<-all(apply(apply(wArgs$Sstar*pobs,2:3,function(x) sum(x)==0),2,function(x) any(x)))
+    if(mostlyempty) disties$sw[]<--1e300
+
+    return(list(sw=disties$sw,
+                shat=array(disties$shat,dim(wArgs$Sstar)[1:2])*pobs))
+  }
+  
+} else if (obsModel=="MAEdistVar"){
+  
+  ObsDistance<-function(wArgs,pobs){
+    # Distance function
+    Sstar<-apply(wArgs$Sstar*pobs,3,rbind)
+    # Calculate the distances - 
+    disties<-MAEdistVar(sest = Sstar,
+                     sobs = c(wArgs$Sd[,,wArgs$time]))
+    # Make sure that anytime the summary stats are zero across all bins are zero
+    mostlyempty<-all(apply(apply(wArgs$Sstar*pobs,2:3,function(x) sum(x)==0),2,function(x) any(x)))
+    if(mostlyempty) disties$sw[]<--1e300
     
     return(list(sw=disties$sw,
                 shat=array(disties$shat,dim(wArgs$Sstar)[1:2])*pobs))
@@ -434,11 +447,14 @@ if(obsModel=="MultinomObs"){
 } else if (obsModel=="MAEdist"){
   
   ObsDistance<-function(wArgs,pobs){
-    # Distance function - multinomial
+    # Distance function
     Sstar<-apply(wArgs$Sstar*pobs,3,rbind)
     # Calculate the distances - 
     disties<-MAEdist(sest = Sstar,
                      sobs = c(wArgs$Sd[,,wArgs$time]))
+    # Make sure that anytime the summary stats are zero across all bins are zero
+    mostlyempty<-all(apply(apply(wArgs$Sstar*pobs,2:3,function(x) sum(x)==0),2,function(x) any(x)))
+    if(mostlyempty) disties$sw[]<--1e300
     
     return(list(sw=disties$sw,
                 shat=array(disties$shat,dim(wArgs$Sstar)[1:2])*pobs))
@@ -456,9 +472,10 @@ if(fixedObsProb){
     # Exponentiate and scale the particle weights to become from 0 to 1
     output$sw<-exp(diz$sw-max(diz$sw,na.rm = T))
     summz<-sum(output$sw,na.rm = T)
-    if(summz==0) {stop("all model-SMC particles are zero")}
     # Normalise it!
-    output$sw<-output$sw/summz
+    if(summz==0 | sum(!is.na(output$sw))<2) {
+      output$sw<-rep(1/length(output$sw),length(output$sw))
+    } else output$sw<-output$sw/summz
     # Add the median summary statistics data as well:
     output$shat[,,wArgs$time]<-diz$shat
     
@@ -473,9 +490,10 @@ if(fixedObsProb){
     # Exponentiate and scale the particle weights to become from 0 to 1
     output$sw<-exp(diz$sw-max(diz$sw,na.rm = T))
     summz<-sum(output$sw,na.rm = T)
-    if(summz==0) {stop("all model-SMC particles are zero")}
     # Normalise it!
-    output$sw<-output$sw/summz
+    if(summz==0 | sum(!is.na(output$sw))<2) {
+      output$sw<-rep(1/length(output$sw),length(output$sw))
+    } else output$sw<-output$sw/summz
     # Add the median summary statistics data as well:
     output$shat[,,wArgs$time]<-diz$shat
     

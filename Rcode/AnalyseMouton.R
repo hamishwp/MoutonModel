@@ -17,11 +17,8 @@ inexty<-grep(exty,list.files("./Results/INPUTS/"),value = T)
 inpy<-readRDS(paste0("./Results/INPUTS/",inexty))
 IPMLTP<-inpy$IPMLTP
 initSIR<-inpy$initSIR
-# Either we read in the real data or generate our own!
-# if(simulation) {source(paste0(directory,'Rcode/SimulateSheepData.R'))
-# } else source(paste0(directory,'Rcode/SoaySheepData.R'))
-# Build up the model based on the parameters and sheep data
-source(paste0(directory,'Rcode/BuildModel.R'))
+if(is.null(IPMLTP$detectedNum)) IPMLTP$detectedNum<- IPMLTP$solveDF%>%filter(survived==1)%>%group_by(census.number)%>%
+  summarise(detectedNum=length(size),.groups = 'drop_last')%>%pull(detectedNum)%>%unname()
 
 x0<-vals<-c(-7.25, 3.77,
             1.49111883, 0.53069364, log(0.08806918),
@@ -38,27 +35,28 @@ if(fixedObsProb) {
   # Remove the last two parameters
   x0<-x0[1:12]
   # Temporal observation probability must be kept fixed
-  lSHEEP$obsProbTime <- rep(obsMean,yearing+1)
+  # lSHEEP$obsProbTime <- rep(obsMean,yearing+1)
   # Convert to physical coordinates
   vals%<>%Sample2Physical(IPMLTP)
 } else {
   # Convert to physical coordinates
   vals%<>%Sample2Physical(IPMLTP)
   
-  lSHEEP$obsProbTime <- rbeta(yearing+1,vals$obsProbPar[1],vals$obsProbPar[2])
+  # lSHEEP$obsProbTime <- rbeta(yearing+1,vals$obsProbPar[1],vals$obsProbPar[2])
 }
 
 Np<-length(unlist(x0))
+
+# Either we read in the real data or generate our own!
+# if(simulation) {source(paste0(directory,'Rcode/SimulateSheepData.R'))
+# } else source(paste0(directory,'Rcode/SoaySheepData.R'))
+# Build up the model based on the parameters and sheep data
+source(paste0(directory,'Rcode/BuildModel.R'))
 
 # Convert to physical coordinates
 names(x0)<-names(unlist(vals))[-c(6,7,14,15)]
 x0true<-x0
 
-lSHEEP<-IPMLTP
-lSHEEP$detectedNum<-lSHEEP$solveDF%>%filter(survived==1)%>%group_by(census.number)%>%
-  summarise(detectedNum=length(size),.groups = 'drop_last')%>%pull(detectedNum)%>%unname()
-
-source(paste0(directory,'Rcode/BuildModel.R'))
 
 # TO CHECK THE INITIAL SAMPLE DISTRIBUTION
 sheepies<-cbind(data.frame(Distance=runif(1500)),as.data.frame(PropN$proposal(1500)))
@@ -104,7 +102,8 @@ scoring%>%ggplot()+geom_point(aes(iteration,RMSE,colour=pvalue))
 
 dimmie<-c(min(disties$distance),log(-output[[1]]$delta[1]))
 # dimmie<-c(quantile(disties$distance,0.1),quantile(disties$distance,0.9))
-disties%>%ggplot(aes(distance,value,group=iteration))+geom_density(aes(colour=iteration,fill=iteration,y=..density..),alpha=0.3)+
+disties%>%filter(distance<300)%>%
+  ggplot(aes(distance,value,group=iteration))+geom_density(aes(colour=iteration,fill=iteration,y=..density..),alpha=0.3)+
   facet_grid(rows=vars(iteration),scales = "free") + scale_x_log10()
 
 output[[istep]]$q_thresh
@@ -138,17 +137,7 @@ summaries%<>%cbind(data.frame(inCI=summaries$GLM<summaries$upper & summaries$GLM
 print(summaries)
 sumReal<-summaries
 for (i in 1:length(links)) sumReal[i,-ncol(sumReal)] <- links[[i]](sumReal[i,-ncol(sumReal)])
-print(signif(sumReal,2))
-
-
-initDist<-logTargetIPM(x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F, returnW=T)
-medDist<-logTargetIPM(summaries$median, logTargetPars = IPMLTP, returnNeg = F, printProp = F, returnW=T)
-initDist$d
-medDist$d
-hist(log(abs(c(initDist$shat)-c(IPMLTP$SumStats))),xlim=c(-2,6))
-hist(log(abs(c(medDist$shat)-c(IPMLTP$SumStats))),xlim=c(-2,6))
-sum(abs(initDist$shat-IPMLTP$SumStats))
-sum(abs(medDist$shat-IPMLTP$SumStats))
+print(signif(sumReal,4))
 # xtable(summaries)
 
 sheepies%>%ggplot()+geom_density(aes(Distance))
@@ -158,8 +147,8 @@ sheepies$Distance_mod<-log(apply(output[[istep]]$shat[output[[istep]]$distance>o
 qq<-list()
 for(i in 2:ncol(sheepies)){
   shtmp<-sheepies[,c(1,i)]; varname<-names(shtmp)[2]; names(shtmp)[2]<-"Value"
-  p<-shtmp%>%ggplot(aes(x=Value,y=Distance))+
-    geom_density_2d_filled()+ggtitle(varname)+
+  p<-shtmp%>%ggplot(aes(x=Value,y=log10(Distance)))+
+    geom_density_2d_filled(contour_var = "ndensity")+ggtitle(varname)+
     ylab("log(-Distance)") + geom_vline(xintercept = x0true[i-1],colour="red")
   # geom_vline(xintercept = x0[i],colour="red")
   qq<-c(qq,list(p))

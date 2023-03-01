@@ -33,7 +33,7 @@ pert_GlobSkewCov<-function(outin,lTargPars){
   inds<-!is.na(outin$distance) & outin$distance>=outin$delta[outin$iteration]
   # Reduce ewights and previous parameter samples for computation
   wewei<-outin$weightings[inds]; theta<-outin$theta[inds,]
-  # Calculate the global mean, skew and covariance matrix
+  # Calculate the global mean, skew and covariance matrix, weighted by the distance metric
   disty<-sn::msn.mle(y = theta)$dp
   # Adjust such that normally distributed values remain un-skewed
   for (i in 1:ncol(theta)) if(!lTargPars$skew[i]) disty$alpha[i]<-0

@@ -820,6 +820,24 @@ p_HMC <- function(propCOV, lTarg, lTargPars, x0, itermax=1000,
   
 }
 
+# Artificially modify the weights of the model-SMC such that the ESS isn't too low
+maxESS<-function(sw, rate=0.5, mag=NULL){
+  
+  return(sw)
+  
+  Np<-length(sw)
+  sw<-sw-max(sw)
+  vESS<-ifelse(is.null(mag),rate*Np,mag)
+  if(1/sum(exp(sw)^2)<vESS){
+    
+    funESS<-function(rr) abs(1/sum(exp(sw*2/rr))-vESS)
+    optimize(funESS,interval = c(0.1,3*abs(min(sw[!is.infinite(sw)]))),tol = 0.1)
+    
+    adj<-sqrt(vESS/sum(exp(sw)^2))
+    return(sw/adj)
+  } else return(sw)
+}
+
 # Find some quantiles of the accepted parameter space values
 multiQuants<-function(x,lenny=300,qmin=0.15,qmax=0.85){
   # Find the min and max values, per parameter, to create a grid from
@@ -902,8 +920,7 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
   Ninit<-initSIR$Np*initSIR$k
   # Generate the particles
   xNew<-initSIR$ProposalDist(initSIR)
-  # Calculate the priors for the weights, and normalise them
-  wtwt<-exp(apply(xNew,1,function(tt) lTargPars$priorF(tt))); wtwt<-wtwt/sum(wtwt)
+  # While loop ensures all initial values are at least plausible
   # Sample from the target distribution
   lTargNew <- mclapply(X = 1:Ninit,
                        FUN = function(c) {
@@ -911,6 +928,25 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
                                    TimeoutException = function(ex) "TimedOut")
                        },
                        mc.cores = lTargPars$cores) %>% CombLogTargs()
+  acc<-lTargNew$d > -1e300
+  while(sum(!acc)>initSIR$Np){
+    # Generate the particles
+    xNew[!acc,]<-initSIR$ProposalDist(initSIR)[!acc,]
+    # Sample from the target distribution
+    lTargNewtmp <- mclapply(X = which(!acc),
+                         FUN = function(c) {
+                           tryCatch (R.utils::withTimeout(lTarg(xNew[c,], lTargPars), timeout = initSIR$timeouter),
+                                     TimeoutException = function(ex) "TimedOut")
+                         },
+                         mc.cores = lTargPars$cores) %>% CombLogTargs()
+    # Replace into principal object
+    lTargNew$d[!acc]<-lTargNewtmp$d
+    lTargNew$shat[!acc,]<-lTargNewtmp$shat
+    # Check to see which passed
+    acc<-lTargNew$d > -1e300
+  }
+  # Calculate the priors for the weights, and normalise them
+  wtwt<-exp(apply(xNew,1,function(tt) lTargPars$priorF(tt))); wtwt<-wtwt/sum(wtwt)
   # Calculate the initial ABC-threshold required for the ABCSIR algorithm
   delta0<-lTargNew$d[order(lTargNew$d,decreasing = T)[initSIR$Np]]
   # Output both accepted & rejected values

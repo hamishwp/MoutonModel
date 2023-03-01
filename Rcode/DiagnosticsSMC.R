@@ -209,16 +209,16 @@ TestPF<-function(x0,IPMLTP, samplez=10){
     outperf%<>%rbind(cbind(performy,data.frame(attempt=i)))
   }
   # return(abs(output2$shat-IPMLTP$SumStats))
-  return(outperf)
+  return(list(outperf=outperf,shat=output$shat, Sstar=wArgs$Sstar))
 }
 
 Perfy<-TestPF(x0,IPMLTP,samplez = 3)
-mean(Perfy$distance)
+mean(Perfy$outperf$distance)
 
 xxx<-x0
 xxx[2]<--xxx[2]
 Perfy2<-TestPF(xxx,IPMLTP,samplez = 3)
-mean(Perfy2$distance)
+mean(Perfy2$outperf$distance)
 
 # Test the multinomial observation model
 obsModel<-"MultinomObs"
@@ -285,116 +285,123 @@ PerfMAE%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distan
 
 
 
-TimeSMC(xxx,IPMLTP,timer=1)$values
-
-sum(TestPF(x0,IPMLTP,samplez = 3)-TestPF(xxx,IPMLTP,samplez = 3))
-
-mean(Perfy)
-sum(Perfy)
-mean(Perfy2)
-sum(Perfy2)
-mean(Perfym05)
-sum(Perfym05)
-
-mean(Perfy-Perfy2)
-mean(Perfym05-Perfy2)
-
-sum(Perfy-Perfy2)
-sum(Perfym05-Perfy2)
-
 obsModel<-"MultinomObs"
 source(paste0(directory,'Rcode/ObsDistance.R'))
 IPMLTP$obsProb<-obsfun
-PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-c(sum(PerfMNO$distance),sum(PerfMNOm05$distance),sum(PerfMNOp05$distance),sum(PerfMNOxxx$distance))
-c(median(PerfMNO$distance),median(PerfMNOm05$distance),median(PerfMNOp05$distance),median(PerfMNOxxx$distance))
-c(median(PerfMNO$ESS),median(PerfMNOm05$ESS),median(PerfMNOp05$ESS),median(PerfMNOxxx$ESS))
-c(min(PerfMNO$ESS),min(PerfMNOm05$ESS),min(PerfMNOp05$ESS),min(PerfMNOxxx$ESS))
+PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)
+PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)
+PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)
+PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)
+c(sum(PerfMNO$outperf$distance),sum(PerfMNOm05$outperf$distance),sum(PerfMNOp05$outperf$distance),sum(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$distance),median(PerfMNOm05$outperf$distance),median(PerfMNOp05$outperf$distance),median(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$ESS),median(PerfMNOm05$outperf$ESS),median(PerfMNOp05$outperf$ESS),median(PerfMNOxxx$outperf$ESS))
+c(min(PerfMNO$outperf$ESS),min(PerfMNOm05$outperf$ESS),min(PerfMNOp05$outperf$ESS),min(PerfMNOxxx$outperf$ESS))
 
 
 # Test the poisson-multinomial observation model
 obsModel<-"multinomPoisObs"
 source(paste0(directory,'Rcode/ObsDistance.R'))
 IPMLTP$obsProb<-obsfun
-PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-c(sum(PerfMNO$distance),sum(PerfMNOm05$distance),sum(PerfMNOp05$distance),sum(PerfMNOxxx$distance))
-c(median(PerfMNO$distance),median(PerfMNOm05$distance),median(PerfMNOp05$distance),median(PerfMNOxxx$distance))
-c(median(PerfMNO$ESS),median(PerfMNOm05$ESS),median(PerfMNOp05$ESS),median(PerfMNOxxx$ESS))
-c(min(PerfMNO$ESS),min(PerfMNOm05$ESS),min(PerfMNOp05$ESS),min(PerfMNOxxx$ESS))
+PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)
+PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)
+PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)
+PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)
+c(sum(PerfMNO$outperf$distance),sum(PerfMNOm05$outperf$distance),sum(PerfMNOp05$outperf$distance),sum(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$distance),median(PerfMNOm05$outperf$distance),median(PerfMNOp05$outperf$distance),median(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$ESS),median(PerfMNOm05$outperf$ESS),median(PerfMNOp05$outperf$ESS),median(PerfMNOxxx$outperf$ESS))
+c(min(PerfMNO$outperf$ESS),min(PerfMNOm05$outperf$ESS),min(PerfMNOp05$outperf$ESS),min(PerfMNOxxx$outperf$ESS))
 
 
 # Test the poisson observation model
 obsModel<-"PoisObs"
 source(paste0(directory,'Rcode/ObsDistance.R'))
 IPMLTP$obsProb<-obsfun
-PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-c(sum(PerfMNO$distance),sum(PerfMNOm05$distance),sum(PerfMNOp05$distance),sum(PerfMNOxxx$distance))
-c(median(PerfMNO$distance),median(PerfMNOm05$distance),median(PerfMNOp05$distance),median(PerfMNOxxx$distance))
-c(median(PerfMNO$ESS),median(PerfMNOm05$ESS),median(PerfMNOp05$ESS),median(PerfMNOxxx$ESS))
-c(min(PerfMNO$ESS),min(PerfMNOm05$ESS),min(PerfMNOp05$ESS),min(PerfMNOxxx$ESS))
+PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)
+PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)
+PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)
+PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)
+c(sum(PerfMNO$outperf$distance),sum(PerfMNOm05$outperf$distance),sum(PerfMNOp05$outperf$distance),sum(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$distance),median(PerfMNOm05$outperf$distance),median(PerfMNOp05$outperf$distance),median(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$ESS),median(PerfMNOm05$outperf$ESS),median(PerfMNOp05$outperf$ESS),median(PerfMNOxxx$outperf$ESS))
+c(min(PerfMNO$outperf$ESS),min(PerfMNOm05$outperf$ESS),min(PerfMNOp05$outperf$ESS),min(PerfMNOxxx$outperf$ESS))
 
 
 # Test the binomial observation model
 obsModel<-"BinomObs"
 source(paste0(directory,'Rcode/ObsDistance.R'))
 IPMLTP$obsProb<-obsfun
-PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-c(sum(PerfMNO$distance),sum(PerfMNOm05$distance),sum(PerfMNOp05$distance),sum(PerfMNOxxx$distance))
-c(median(PerfMNO$distance),median(PerfMNOm05$distance),median(PerfMNOp05$distance),median(PerfMNOxxx$distance))
-c(median(PerfMNO$ESS),median(PerfMNOm05$ESS),median(PerfMNOp05$ESS),median(PerfMNOxxx$ESS))
-c(min(PerfMNO$ESS),min(PerfMNOm05$ESS),min(PerfMNOp05$ESS),min(PerfMNOxxx$ESS))
+PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)
+PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)
+PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)
+PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)
+c(sum(PerfMNO$outperf$distance),sum(PerfMNOm05$outperf$distance),sum(PerfMNOp05$outperf$distance),sum(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$distance),median(PerfMNOm05$outperf$distance),median(PerfMNOp05$outperf$distance),median(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$ESS),median(PerfMNOm05$outperf$ESS),median(PerfMNOp05$outperf$ESS),median(PerfMNOxxx$outperf$ESS))
+c(min(PerfMNO$outperf$ESS),min(PerfMNOm05$outperf$ESS),min(PerfMNOp05$outperf$ESS),min(PerfMNOxxx$outperf$ESS))
 
 # Test the adaptive MAD-based distance model
 obsModel<-"MADadaptdist"
 source(paste0(directory,'Rcode/ObsDistance.R'))
 IPMLTP$obsProb<-obsfun
-PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-c(sum(PerfMNO$distance),sum(PerfMNOm05$distance),sum(PerfMNOp05$distance),sum(PerfMNOxxx$distance))
-c(median(PerfMNO$distance),median(PerfMNOm05$distance),median(PerfMNOp05$distance),median(PerfMNOxxx$distance))
-c(median(PerfMNO$ESS),median(PerfMNOm05$ESS),median(PerfMNOp05$ESS),median(PerfMNOxxx$ESS))
-c(min(PerfMNO$ESS),min(PerfMNOm05$ESS),min(PerfMNOp05$ESS),min(PerfMNOxxx$ESS))
+PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)
+PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)
+PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)
+PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)
+c(sum(PerfMNO$outperf$distance),sum(PerfMNOm05$outperf$distance),sum(PerfMNOp05$outperf$distance),sum(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$distance),median(PerfMNOm05$outperf$distance),median(PerfMNOp05$outperf$distance),median(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$ESS),median(PerfMNOm05$outperf$ESS),median(PerfMNOp05$outperf$ESS),median(PerfMNOxxx$outperf$ESS))
+c(min(PerfMNO$outperf$ESS),min(PerfMNOm05$outperf$ESS),min(PerfMNOp05$outperf$ESS),min(PerfMNOxxx$outperf$ESS))
+PerfMNO$shat[,,10]
+PerfMNOm05$shat[,,10]
+PerfMNOp05$shat[,,10]
+PerfMNOxxx$shat[,,10]
+
+# Test the adaptive MAD-based distance model
+obsModel<-"MAEdistVar"
+source(paste0(directory,'Rcode/ObsDistance.R'))
+IPMLTP$obsProb<-obsfun
+PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)
+PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)
+PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)
+PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)
+c(sum(PerfMNO$outperf$distance),sum(PerfMNOm05$outperf$distance),sum(PerfMNOp05$outperf$distance),sum(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$distance),median(PerfMNOm05$outperf$distance),median(PerfMNOp05$outperf$distance),median(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$ESS),median(PerfMNOm05$outperf$ESS),median(PerfMNOp05$outperf$ESS),median(PerfMNOxxx$outperf$ESS))
+c(min(PerfMNO$outperf$ESS),min(PerfMNOm05$outperf$ESS),min(PerfMNOp05$outperf$ESS),min(PerfMNOxxx$outperf$ESS))
+PerfMNO$shat[,,10]
+PerfMNOm05$shat[,,10]
+PerfMNOp05$shat[,,10]
+PerfMNOxxx$shat[,,10]
 
 # Test the mean absolute error distance model
 obsModel<-"MAEdist"
 source(paste0(directory,'Rcode/ObsDistance.R'))
 IPMLTP$obsProb<-obsfun
-PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-c(sum(PerfMNO$distance),sum(PerfMNOm05$distance),sum(PerfMNOp05$distance),sum(PerfMNOxxx$distance))
-c(median(PerfMNO$distance),median(PerfMNOm05$distance),median(PerfMNOp05$distance),median(PerfMNOxxx$distance))
-c(median(PerfMNO$ESS),median(PerfMNOm05$ESS),median(PerfMNOp05$ESS),median(PerfMNOxxx$ESS))
-c(min(PerfMNO$ESS),min(PerfMNOm05$ESS),min(PerfMNOp05$ESS),min(PerfMNOxxx$ESS))
-
+PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)
+PerfMNOm05<-TestPF(xxl,IPMLTP,samplez = 3)
+PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)
+PerfMNOp05<-TestPF(xxu,IPMLTP,samplez = 3)
+c(sum(PerfMNO$outperf$distance),sum(PerfMNOm05$outperf$distance),sum(PerfMNOp05$outperf$distance),sum(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$distance),median(PerfMNOm05$outperf$distance),median(PerfMNOp05$outperf$distance),median(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$ESS),median(PerfMNOm05$outperf$ESS),median(PerfMNOp05$outperf$ESS),median(PerfMNOxxx$outperf$ESS))
+c(min(PerfMNO$outperf$ESS),min(PerfMNOm05$outperf$ESS),min(PerfMNOp05$outperf$ESS),min(PerfMNOxxx$outperf$ESS))
+PerfMNO$shat[,,10]
+PerfMNOm05$shat[,,10]
+PerfMNOp05$shat[,,10]
+PerfMNOxxx$shat[,,10]
 
 
 obsModel<-"multinomMAE"
 source(paste0(directory,'Rcode/ObsDistance.R'))
 IPMLTP$obsProb<-obsfun
-PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)%>%group_by(time)%>%summarise(distance=mean(distance),ESS=mean(ESS))
-c(sum(PerfMNO$distance),sum(PerfMNOm05$distance),sum(PerfMNOp05$distance),sum(PerfMNOxxx$distance))
-c(median(PerfMNO$distance),median(PerfMNOm05$distance),median(PerfMNOp05$distance),median(PerfMNOxxx$distance))
-c(median(PerfMNO$ESS),median(PerfMNOm05$ESS),median(PerfMNOp05$ESS),median(PerfMNOxxx$ESS))
-c(min(PerfMNO$ESS),min(PerfMNOm05$ESS),min(PerfMNOp05$ESS),min(PerfMNOxxx$ESS))
+PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)
+PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)
+PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)
+PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)
+c(sum(PerfMNO$outperf$distance),sum(PerfMNOm05$outperf$distance),sum(PerfMNOp05$outperf$distance),sum(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$distance),median(PerfMNOm05$outperf$distance),median(PerfMNOp05$outperf$distance),median(PerfMNOxxx$outperf$distance))
+c(median(PerfMNO$outperf$ESS),median(PerfMNOm05$outperf$ESS),median(PerfMNOp05$outperf$ESS),median(PerfMNOxxx$outperf$ESS))
+c(min(PerfMNO$outperf$ESS),min(PerfMNOm05$outperf$ESS),min(PerfMNOp05$outperf$ESS),min(PerfMNOxxx$outperf$ESS))
 
 PerfMAE%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distance))
 
