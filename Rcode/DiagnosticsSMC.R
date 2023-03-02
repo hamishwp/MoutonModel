@@ -346,9 +346,9 @@ obsModel<-"MADadaptdist"
 source(paste0(directory,'Rcode/ObsDistance.R'))
 IPMLTP$obsProb<-obsfun
 PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)
-PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)
+PerfMNOm05<-TestPF(xxl,IPMLTP,samplez = 3)
 PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)
-PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)
+PerfMNOp05<-TestPF(xxu,IPMLTP,samplez = 3)
 c(sum(PerfMNO$outperf$distance),sum(PerfMNOm05$outperf$distance),sum(PerfMNOp05$outperf$distance),sum(PerfMNOxxx$outperf$distance))
 c(median(PerfMNO$outperf$distance),median(PerfMNOm05$outperf$distance),median(PerfMNOp05$outperf$distance),median(PerfMNOxxx$outperf$distance))
 c(median(PerfMNO$outperf$ESS),median(PerfMNOm05$outperf$ESS),median(PerfMNOp05$outperf$ESS),median(PerfMNOxxx$outperf$ESS))
@@ -363,9 +363,9 @@ obsModel<-"MAEdistVar"
 source(paste0(directory,'Rcode/ObsDistance.R'))
 IPMLTP$obsProb<-obsfun
 PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)
-PerfMNOm05<-TestPF(x0-0.5,IPMLTP,samplez = 3)
+PerfMNOm05<-TestPF(xxl,IPMLTP,samplez = 3)
 PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)
-PerfMNOp05<-TestPF(x0+0.5,IPMLTP,samplez = 3)
+PerfMNOp05<-TestPF(xxu,IPMLTP,samplez = 3)
 c(sum(PerfMNO$outperf$distance),sum(PerfMNOm05$outperf$distance),sum(PerfMNOp05$outperf$distance),sum(PerfMNOxxx$outperf$distance))
 c(median(PerfMNO$outperf$distance),median(PerfMNOm05$outperf$distance),median(PerfMNOp05$outperf$distance),median(PerfMNOxxx$outperf$distance))
 c(median(PerfMNO$outperf$ESS),median(PerfMNOm05$outperf$ESS),median(PerfMNOp05$outperf$ESS),median(PerfMNOxxx$outperf$ESS))

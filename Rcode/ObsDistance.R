@@ -292,9 +292,9 @@ MADadaptdist<-function(sest,sobs,p=1){
   # Don't punish the summary statistics that deviate more from obs data initially than others:
   if(sum(MADO>2*MAD,na.rm = T)/length(sobs)<1/3) PCMAD<-MAD+MADO else PCMAD<-MAD
   # Calculate the distance per summary statistic
-  d_i<--MADO/(PCMAD+1e-5); d_i[apply(PCMAD,1,sd)==0  & sobs!=0,]<--1e300; d_i[,apply(PCMAD,2,sd)==0]<--1e300
+  d_i<--MADO/(PCMAD+1e-5); d_i[,apply(PCMAD,2,sd)==0]<--1e300
   # Particle weight calculation
-  sw<--abs(apply(d_i,2,function(dd) pracma::nthroot(mean(dd^p,na.rm = T),p)))
+  sw<--abs(apply(d_i,2,function(dd) pracma::nthroot(median(dd^p,na.rm = T),p)))
   # output total distance
   return(list(shat=meds, sw=sw))
 }
@@ -305,7 +305,7 @@ MAEdistVar<-function(sest,sobs,p=1){
   # Median of columns
   meds<-apply(sest,1,median,na.rm=T)
   # Calculate the distance per summary statistic
-  d_i<--abs(sest-sobs)/(sds+1e-5); d_i[sds==0 & sobs!=0,]<--1e300; d_i[,apply(sest,2,sd,na.rm=T)==0]<--1e300
+  d_i<--abs(sest-sobs)/(sds+1e-5); d_i[,sds==0]<--1e300
   # Particle weight calculation
   sw<--abs(apply(d_i,2,function(dd) pracma::nthroot(mean(dd^p,na.rm = T),p)))
   # output total distance
@@ -316,9 +316,9 @@ MAEdist<-function(sest,sobs,p=1){
   # Median of columns
   meds<-apply(sest,1,median,na.rm=T)
   # Calculate the distance per summary statistic
-  d_i<--abs(sest-sobs); d_i[apply(sest,1,sd,na.rm=T)==0 & sobs!=0,]<--1e300; d_i[,apply(sest,2,sd,na.rm=T)==0]<--1e300
+  d_i<--abs(sest-sobs)
   # Particle weight calculation
-  sw<--abs(apply(d_i,2,function(dd) pracma::nthroot(mean(dd^p,na.rm = T),p)))
+  sw<--abs(apply(d_i,2,function(dd) pracma::nthroot(median(dd^p,na.rm = T),p)))
   # output total distance
   return(list(shat=meds, sw=sw)) 
 }

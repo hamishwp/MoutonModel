@@ -51,7 +51,7 @@ Np<-length(unlist(x0))
 # if(simulation) {source(paste0(directory,'Rcode/SimulateSheepData.R'))
 # } else source(paste0(directory,'Rcode/SoaySheepData.R'))
 # Build up the model based on the parameters and sheep data
-source(paste0(directory,'Rcode/BuildModel.R'))
+# source(paste0(directory,'Rcode/BuildModel.R'))
 
 # Convert to physical coordinates
 names(x0)<-names(unlist(vals))[-c(6,7,14,15)]
