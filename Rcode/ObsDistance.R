@@ -301,7 +301,7 @@ MADadaptdist<-function(sest,sobs,p=1){
 
 MAEdistVar<-function(sest,sobs,p=1){
   # Now calculate the variance for the distance normalisation
-  sds<-apply(sest,2,sd,na.rm=T)
+  sds<-apply(sest,1,sd,na.rm=T)
   # Median of columns
   meds<-apply(sest,1,median,na.rm=T)
   # Calculate the distance per summary statistic
