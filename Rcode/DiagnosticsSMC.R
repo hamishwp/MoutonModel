@@ -283,7 +283,9 @@ PerfMAE%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distan
 
 
 
-
+xxx<-summaries$mean
+xxl<-summaries$lower
+xxu<-summaries$upper
 
 obsModel<-"MultinomObs"
 source(paste0(directory,'Rcode/ObsDistance.R'))
