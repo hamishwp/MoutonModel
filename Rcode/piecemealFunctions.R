@@ -819,7 +819,7 @@ ExtractGLM<-function(solveDF,formular,alpha=0.025,familiar=NULL){
                  gradient=c(median(estimated[,4],na.rm=T),median(estimated[,5],na.rm=T),median(estimated[,6],na.rm=T)),
                  sigma=c(median(estimated[,7],na.rm=T),median(estimated[,8],na.rm=T),median(estimated[,9],na.rm=T)))
   # Add the CI range
-  pointest%<>%rbind(pointest[3,]-pointest[2,])
+  pointest%<>%rbind((pointest[3,]-pointest[2,])/4)
   rownames(pointest)<-c("estimate","lower","upper","range")
   
   return(pointest)
