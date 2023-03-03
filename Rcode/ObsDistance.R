@@ -316,9 +316,9 @@ MAEdist<-function(sest,sobs,p=1){
   # Median of columns
   meds<-apply(sest,1,median,na.rm=T)
   # Calculate the distance per summary statistic
-  d_i<--abs(sest-sobs)
+  d_i<--abs(sest-sobs)#-abs(apply(sest,2,sum)-sum(sobs))/nrow(sest)
   # Particle weight calculation
-  sw<--abs(apply(d_i,2,function(dd) pracma::nthroot(median(dd^p,na.rm = T),p)))
+  sw<--abs(apply(d_i,2,function(dd) pracma::nthroot(mean(dd^p,na.rm = T),p)))
   # output total distance
   return(list(shat=meds, sw=sw)) 
 }
@@ -421,8 +421,8 @@ if(obsModel=="MultinomObs"){
     disties<-MADadaptdist(sest = Sstar,
                       sobs = c(wArgs$Sd[,,wArgs$time]))
     # Make sure that anytime the summary stats are zero across all bins are zero
-    mostlyempty<-all(apply(apply(wArgs$Sstar*pobs,2:3,function(x) sum(x)==0),2,function(x) any(x)))
-    if(mostlyempty) disties$sw[]<--1e300
+    # mostlyempty<-all(apply(apply(wArgs$Sstar*pobs,2:3,function(x) sum(x)==0),2,function(x) any(x)))
+    # if(mostlyempty) disties$sw[]<--1e300
 
     return(list(sw=disties$sw,
                 shat=array(disties$shat,dim(wArgs$Sstar)[1:2])*pobs))
@@ -437,8 +437,8 @@ if(obsModel=="MultinomObs"){
     disties<-MAEdistVar(sest = Sstar,
                      sobs = c(wArgs$Sd[,,wArgs$time]))
     # Make sure that anytime the summary stats are zero across all bins are zero
-    mostlyempty<-all(apply(apply(wArgs$Sstar*pobs,2:3,function(x) sum(x)==0),2,function(x) any(x)))
-    if(mostlyempty) disties$sw[]<--1e300
+    # mostlyempty<-all(apply(apply(wArgs$Sstar*pobs,2:3,function(x) sum(x)==0),2,function(x) any(x)))
+    # if(mostlyempty) disties$sw[]<--1e300
     
     return(list(sw=disties$sw,
                 shat=array(disties$shat,dim(wArgs$Sstar)[1:2])*pobs))
@@ -453,11 +453,49 @@ if(obsModel=="MultinomObs"){
     disties<-MAEdist(sest = Sstar,
                      sobs = c(wArgs$Sd[,,wArgs$time]))
     # Make sure that anytime the summary stats are zero across all bins are zero
-    mostlyempty<-all(apply(apply(wArgs$Sstar*pobs,2:3,function(x) sum(x)==0),2,function(x) any(x)))
-    if(mostlyempty) disties$sw[]<--1e300
+    # mostlyempty<-all(apply(apply(wArgs$Sstar*pobs,2:3,function(x) sum(x)==0),2,function(x) any(x)))
+    # if(mostlyempty) disties$sw[]<--1e300
     
     return(list(sw=disties$sw,
                 shat=array(disties$shat,dim(wArgs$Sstar)[1:2])*pobs))
+  }
+  
+} else if (obsModel=="KSlike"){
+  
+  ObsDistance<-function(wArgs,pobs,p=1){
+    # Distance function - LP-norm based distance (Kolmogorov-Smirnoff as p -> infinity)
+    MultiMod<-function(i) {
+      # Cumulative sum of observed and estimated
+      d_i<-apply(wArgs$Sstar[,i,]*pobs,2,cumsum) - cumsum(wArgs$Sd[,i,wArgs$time])
+      # LP-norm dist
+      -abs(apply(d_i,2,function(dd) pracma::nthroot(mean(dd^p,na.rm = T),p)))
+    }
+    # For each type of summary statistic
+    sw<-rowSums(sapply(1:3,MultiMod))
+    # Calc median shat value
+    shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)*pobs
+    
+    return(list(sw=sw,shat=shat))
+  }
+  
+} else if (obsModel=="Fudger"){
+  
+  ObsDistance<-function(wArgs,pobs,p=1){
+    # Distance function - LP-norm based distance (Kolmogorov-Smirnoff as p -> infinity)
+    MultiMod<-function(i) {
+      # Cumulative sum of observed and estimated
+      d_i <- -abs(wArgs$Sstar[,i,]*pobs - wArgs$Sd[,i,wArgs$time]) -
+              abs(apply(wArgs$Sstar[,i,]*pobs,2,sum)-sum(wArgs$Sd[,i,wArgs$time]))/
+              length(wArgs$Sd[,i,wArgs$time])
+      # LP-norm distance calculation
+      -abs(apply(d_i,2,function(dd) pracma::nthroot(mean(dd^p,na.rm = T),p)))
+    }
+    # For each type of summary statistic
+    sw<-rowSums(sapply(1:3,MultiMod))
+    # Calc median shat value
+    shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)*pobs
+    
+    return(list(sw=sw,shat=shat))
   }
   
 }

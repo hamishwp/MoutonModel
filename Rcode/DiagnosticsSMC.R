@@ -382,7 +382,25 @@ IPMLTP$obsProb<-obsfun
 PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)
 PerfMNOm05<-TestPF(xxl,IPMLTP,samplez = 3)
 PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)
-PerfMNOp05<-TestPF(xxu,IPMLTP,samplez = 3)
+# PerfMNOp05<-TestPF(xxu,IPMLTP,samplez = 3)
+
+PerfMNO$outperf%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distance))
+PerfMNOm05$outperf%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distance))
+PerfMNOp05$outperf%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distance))
+PerfMNOxxx$outperf%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distance))
+# PerfMNO$outperf%>%group_by(time)%>%summarise(avESS=mean(ESS),avDist=mean(distance))
+
+
+obsModel<-"KSlike"
+source(paste0(directory,'Rcode/ObsDistance.R'))
+IPMLTP$obsProb<-obsfun
+PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)
+PerfMNOm05<-TestPF(xxl,IPMLTP,samplez = 3)
+PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)
+PerfMNO$outperf%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distance))
+PerfMNOm05$outperf%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distance))
+PerfMNOxxx$outperf%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distance))
+
 c(sum(PerfMNO$outperf$distance),sum(PerfMNOm05$outperf$distance),sum(PerfMNOp05$outperf$distance),sum(PerfMNOxxx$outperf$distance))
 c(median(PerfMNO$outperf$distance),median(PerfMNOm05$outperf$distance),median(PerfMNOp05$outperf$distance),median(PerfMNOxxx$outperf$distance))
 c(median(PerfMNO$outperf$ESS),median(PerfMNOm05$outperf$ESS),median(PerfMNOp05$outperf$ESS),median(PerfMNOxxx$outperf$ESS))
@@ -406,8 +424,6 @@ c(median(PerfMNO$outperf$ESS),median(PerfMNOm05$outperf$ESS),median(PerfMNOp05$o
 c(min(PerfMNO$outperf$ESS),min(PerfMNOm05$outperf$ESS),min(PerfMNOp05$outperf$ESS),min(PerfMNOxxx$outperf$ESS))
 
 PerfMAE%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distance))
-
-
 
 
 
