@@ -914,6 +914,23 @@ GenAccSamples<-function(output, initSIR, lTarg, lTargPars, ResampleSIR){
   return(output)
 }
 
+# Make sure that all-zero summary statistics set the minimum ABC-threshold value
+CalcMinDelta<-function(initSIR,lTargPars){
+  
+  dimmie<-dim(lTargPars$SumStats)
+  
+  initSIR$mindelta<- sum(sapply(1:dimmie[3],FUN = 
+                                  function(i) {
+                                    wArgs<-list(Sstar=array(0,dim = c(dimmie[1:2],lTargPars$b)),
+                                                Sd=lTargPars$SumStats,
+                                                time=i)
+                                    ObsDistance(wArgs = wArgs,pobs=0.9)$sw
+                                  })) + 
+                     lTargPars$priorF(initSIR$x0)
+  return(initSIR)
+  
+}
+
 # Initialise the first round of the ABCSMC algorithm
 InitABCSIR<-function(lTarg, lTargPars, initSIR){
   # Total number of parameter-space particles to run through particle filter
@@ -928,7 +945,7 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
                                    TimeoutException = function(ex) "TimedOut")
                        },
                        mc.cores = lTargPars$cores) %>% CombLogTargs()
-  acc<-lTargNew$d > -1e300
+  acc<-lTargNew$d > initSIR$mindelta
   while(sum(!acc)>initSIR$Np){
     # Generate the particles
     xNew[!acc,]<-initSIR$ProposalDist(initSIR)[!acc,]
@@ -943,7 +960,7 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
     lTargNew$d[!acc]<-lTargNewtmp$d
     lTargNew$shat[!acc,]<-lTargNewtmp$shat
     # Check to see which passed
-    acc<-lTargNew$d > -1e300
+    acc<-lTargNew$d > initSIR$mindelta
   }
   # Calculate the priors for the weights, and normalise them
   wtwt<-exp(apply(xNew,1,function(tt) lTargPars$priorF(tt))); wtwt<-wtwt/sum(wtwt)

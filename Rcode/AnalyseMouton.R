@@ -147,7 +147,7 @@ sheepies$Distance_mod<-log(apply(output[[istep]]$shat[output[[istep]]$distance>o
 qq<-list()
 for(i in 2:ncol(sheepies)){
   shtmp<-sheepies[,c(1,i)]; varname<-names(shtmp)[2]; names(shtmp)[2]<-"Value"
-  p<-shtmp%>%ggplot(aes(x=Value,y=log10(Distance)))+
+  p<-shtmp%>%ggplot(aes(x=Value,y=Distance))+
     geom_density_2d_filled(contour_var = "ndensity")+ggtitle(varname)+
     ylab("log(-Distance)") + geom_vline(xintercept = x0true[i-1],colour="red")
   # geom_vline(xintercept = x0[i],colour="red")

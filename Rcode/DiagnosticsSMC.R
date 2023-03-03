@@ -411,6 +411,19 @@ PerfMNOp05$shat[,,10]
 PerfMNOxxx$shat[,,10]
 
 
+obsModel<-"Fudger"
+source(paste0(directory,'Rcode/ObsDistance.R'))
+IPMLTP$obsProb<-obsfun
+PerfMNO<-TestPF(x0,IPMLTP,samplez = 3)
+PerfMNOm05<-TestPF(xxl,IPMLTP,samplez = 3)
+PerfMNOxxx<-TestPF(xxx,IPMLTP,samplez = 3)
+PerfMNOp05<-TestPF(xxu,IPMLTP,samplez = 3)
+PerfMNO$outperf%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distance))
+PerfMNOm05$outperf%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distance))
+PerfMNOp05$outperf%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distance))
+PerfMNOxxx$outperf%>%filter(time==max(time))%>%summarise(avESS=mean(ESS),avDist=mean(distance))
+
+
 obsModel<-"multinomMAE"
 source(paste0(directory,'Rcode/ObsDistance.R'))
 IPMLTP$obsProb<-obsfun

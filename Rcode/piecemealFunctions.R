@@ -735,6 +735,18 @@ getInitialValues_R <- function(solveDF,printPars=T,plotty=F,detectedNum=NULL,brk
 betavals<-function(ratios,MultiSD=1){
   # We can't handle 0 or 1, modify them:
   ratios[ratios<=0]<-1e-6; ratios[ratios>=1]<-1-1e-6
+  # First estimate from method of moments
+  expX<-mean(ratios); varX<-sd(ratios)^2
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   # Cost function to maximise
   CostF<-function(beta) prod(sapply(ratios,function(r) dbeta(r,beta[1],beta[2])))
   # Sample from uniform distribution around the initial guess from optim

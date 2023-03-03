@@ -492,6 +492,7 @@ if(obsModel=="MultinomObs"){
     }
     # For each type of summary statistic
     sw<-rowSums(sapply(1:3,MultiMod))
+    
     # Calc median shat value
     shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)*pobs
     
@@ -523,6 +524,8 @@ if(fixedObsProb){
   obsfun<-function(output,wArgs){
     # Simulate the obsProbPar from the beta distribution here
     pobs<-rbeta(dim(wArgs$Sstar)[3],wArgs$pobs[1],wArgs$pobs[2])
+    # Calculate the distances
+    diz<-ObsDistance(wArgs,pobs=wArgs$pobs[wArgs$time])
     # Calculate the total distances
     output$d<-output$d+sum(diz$sw,na.rm = T)
     # Exponentiate and scale the particle weights to become from 0 to 1
