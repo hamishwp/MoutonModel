@@ -945,7 +945,20 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
                                    TimeoutException = function(ex) "TimedOut")
                        },
                        mc.cores = lTargPars$cores) %>% CombLogTargs()
-  acc<-lTargNew$d > initSIR$mindelta & apply(lTargNew$shat,1,median) > 0.1
+  acc<-lTargNew$d > initSIR$mindelta & apply(lTargNew$shat,1,median) > 0.01
+  
+  
+  
+  
+  
+  
+  apply(apply(lTargNew$shat,1, function(ss) quantile(ss,1:Ninit/Ninit,na.rm=T)),2,function(x) sum(x<0.1)/Ninit)
+  
+  
+  
+  
+  
+  
   while(sum(!acc)>initSIR$Np){
     # Generate the particles
     xNew[!acc,]<-initSIR$ProposalDist(initSIR)[!acc,]
@@ -960,7 +973,7 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
     lTargNew$d[!acc]<-lTargNewtmp$d
     lTargNew$shat[!acc,]<-lTargNewtmp$shat
     # Check to see which passed
-    acc<-lTargNew$d > initSIR$mindelta & apply(lTargNew$shat,1,median) > 0.1
+    acc<-lTargNew$d > initSIR$mindelta & apply(lTargNew$shat,1,median) > 0.01
     print(paste0("ABC-Initialisation: ",sum(acc)," / ",length(acc)," particles finished"))
   }
   # Calculate the priors for the weights, and normalise them
