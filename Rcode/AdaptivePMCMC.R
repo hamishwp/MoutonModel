@@ -966,6 +966,7 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
     medSS<-apply(lTargNew$shat,1,median,na.rm=T) > 0.01; medSS[is.na(medSS)]<-F
     acc<-lTargNew$d > initSIR$mindelta & medSS
     print(paste0("ABC-Initialisation: ",sum(acc)," / ",length(acc)," particles finished"))
+    saveRDS(list(lTargNew=lTargNew,xNew=xNew,initSIR=initSIR),"./Results/init_tmp.RData")
   }
   # Calculate the priors for the weights, and normalise them
   wtwt<-exp(apply(xNew,1,function(tt) lTargPars$priorF(tt))); wtwt<-wtwt/sum(wtwt)
