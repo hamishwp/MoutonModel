@@ -108,9 +108,9 @@ source(paste0(directory,'Rcode/HighLevelPriors.R'))
 PropN<-do.call(getInitialValDists,c(IPMLTP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,invlinks=IPMLTP$invlinks,MultiSD=1)))
 # Either multivariate skew normal or multivariate normal
 if(PropDist=="MVSN") {
-  ProposalDist<-function(initSIR) {
+  ProposalDist<-function(initSIR,MultiSD=1) {
     # Sample from initial dist
-    thth<-PropN$proposal(ABCNP*ABCk)
+    thth<-PropN$proposal(ABCNP*ABCk,MultiSD=MultiSD)
     acc<-IPMLTP$HLP(thth,IPMLTP)
     while(sum(!acc)>0){
       thth[!acc,]<-PropN$proposal(sum(!acc))
@@ -122,7 +122,7 @@ if(PropDist=="MVSN") {
     }
     return(thth)
   }
-}else ProposalDist<-function(initSIR) multvarNormProp(xt=PropN$x0, propPars=PropN$propCOV, n=ABCNP*ABCk)
+} else ProposalDist<-function(initSIR) multvarNormProp(xt=PropN$x0, propPars=PropN$propCOV, n=ABCNP*ABCk)
 # Setup the initial values for the ABSSIR algorithm:
 initSIR<-list(ProposalDist=ProposalDist, 
               x0=PropN$x0, propCOV=PropN$propCOV,

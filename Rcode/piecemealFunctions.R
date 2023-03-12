@@ -736,17 +736,9 @@ betavals<-function(ratios,MultiSD=1){
   # We can't handle 0 or 1, modify them:
   ratios[ratios<=0]<-1e-6; ratios[ratios>=1]<-1-1e-6
   # First estimate from method of moments
-  expX<-mean(ratios); varX<-sd(ratios)^2
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
+  #   expX<-mean(ratios); varX<-sd(ratios)^2
+  #   prepy <- expX*(1-expX)/varX - 1
+  #   MoM  <- c(prepy*expX, prepy*(1-expX))
   # Cost function to maximise
   CostF<-function(beta) prod(sapply(ratios,function(r) dbeta(r,beta[1],beta[2])))
   # Sample from uniform distribution around the initial guess from optim
@@ -783,7 +775,7 @@ betavals<-function(ratios,MultiSD=1){
 }
 
 gammavals<-function(mu,sig){
-  function(n) rgamma(n,shape=(mu/sig)^2,scale=(sig^2/mu))
+  function(n,MultiSD=1) rgamma(n,shape=(mu/sig*MultiSD)^2,scale=((sig*MultiSD)^2/mu))
 }
 
 ExtractGLM<-function(solveDF,formular,alpha=0.025,familiar=NULL){
@@ -873,28 +865,28 @@ getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,
  
   # Survival probability
   survivalSol<-ExtractGLM(solveDF,"survived ~ prev.size",alpha=alpha,familiar="binomial")
-  survP1Func<-function(n) rnorm(n,survivalSol[1,1],survivalSol[4,1]*MultiSD)
-  survP2Func<-function(n) rnorm(n,survivalSol[1,2],survivalSol[4,2]*MultiSD)
+  survP1Func<-function(n,MultiSD) rnorm(n,survivalSol[1,1],survivalSol[4,1]*MultiSD)
+  survP2Func<-function(n,MultiSD) rnorm(n,survivalSol[1,2],survivalSol[4,2]*MultiSD)
   
   # Reproduction likelihood
   reproductionSol <- ExtractGLM(solveDF,"reproduced ~ size",alpha=alpha,familiar="binomial")
-  reprP1Func<-function(n) rnorm(n,reproductionSol[1,1],reproductionSol[4,1]*MultiSD)
-  reprP2Func<-function(n) rnorm(n,reproductionSol[1,2],reproductionSol[4,2]*MultiSD)
+  reprP1Func<-function(n,MultiSD) rnorm(n,reproductionSol[1,1],reproductionSol[4,1]*MultiSD)
+  reprP2Func<-function(n,MultiSD) rnorm(n,reproductionSol[1,2],reproductionSol[4,2]*MultiSD)
   
   # Student's distribution confidence levels
   alpha<-0.025
   
   # Growth probability
   growthSol <- ExtractGLM(solveDF,"size ~ prev.size",alpha=alpha)
-  growP1Func<-function(n) rnorm(n,growthSol[1,1],growthSol[4,1]*MultiSD)
-  growP2Func<-function(n) rnorm(n,growthSol[1,2],growthSol[4,2]*MultiSD)
-  growP3Func<-gammavals(growthSol[1,3],growthSol[4,3]*MultiSD)
+  growP1Func<-function(n,MultiSD) rnorm(n,growthSol[1,1],growthSol[4,1]*MultiSD)
+  growP2Func<-function(n,MultiSD) rnorm(n,growthSol[1,2],growthSol[4,2]*MultiSD)
+  growP3Func<-gammavals(growthSol[1,3],growthSol[4,3])
   
   # Offspring-parent size probability
   offspringSizeSol <- ExtractGLM(solveDF,"rec1.wt ~ size",alpha=alpha)
-  OffSizeP1Func<-function(n) rnorm(n,offspringSizeSol[1,1],offspringSizeSol[4,1]*MultiSD)
-  OffSizeP2Func<-function(n) rnorm(n,offspringSizeSol[1,2],offspringSizeSol[4,2]*MultiSD)
-  OffSizeP3Func<-gammavals(offspringSizeSol[1,3],offspringSizeSol[4,3]*MultiSD)
+  OffSizeP1Func<-function(n,MultiSD) rnorm(n,offspringSizeSol[1,1],offspringSizeSol[4,1]*MultiSD)
+  OffSizeP2Func<-function(n,MultiSD) rnorm(n,offspringSizeSol[1,2],offspringSizeSol[4,2]*MultiSD)
+  OffSizeP3Func<-gammavals(offspringSizeSol[1,3],offspringSizeSol[4,3])
   
   # Offspring number probability
   offNumPars <- solveDF%>%filter(off.born>0)%>%group_by(census.number)%>%
@@ -911,7 +903,7 @@ getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,
   # offNumSig<-(offNumParsCI[2]-offNumParsCI[1])/5*MultiSD
   
   OffNumFuncPre<-gammavals((offNumPars-1),offNumSig)
-  OffNumFunc<-function(n) OffNumFuncPre(n)+1
+  OffNumFunc<-function(n,MultiSD=1) OffNumFuncPre(n,MultiSD)+1
   
   x0<-unname(unlist(c(survivalSol[1,1:2],
                growthSol[1,],
@@ -929,19 +921,19 @@ getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,
   
   if(fixedObsProb) {
     
-    SampleEmpBayes<-function(n){
+    SampleEmpBayes<-function(n,MultiSD=1){
       tmp<-cbind(
-        survP1Func(n),
-        survP2Func(n),
-        growP1Func(n),
-        growP2Func(n),
-        growP3Func(n),
-        reprP1Func(n),
-        reprP2Func(n),
-        OffNumFunc(n),
-        OffSizeP1Func(n),
-        OffSizeP2Func(n),
-        OffSizeP3Func(n),
+        survP1Func(n,MultiSD),
+        survP2Func(n,MultiSD),
+        growP1Func(n,MultiSD),
+        growP2Func(n,MultiSD),
+        growP3Func(n,MultiSD),
+        reprP1Func(n,MultiSD),
+        reprP2Func(n,MultiSD),
+        OffNumFunc(n,MultiSD),
+        OffSizeP1Func(n,MultiSD),
+        OffSizeP2Func(n,MultiSD),
+        OffSizeP3Func(n,MultiSD),
         offSFunc(n))
       for (i in 1:length(invlinks))  tmp[,i] <- invlinks[[i]](tmp[,i])
       return(tmp)
@@ -949,19 +941,19 @@ getInitialValDists <- function(solveDF,detectedNum=NULL,fixedObsProb=F,invlinks,
     
   } else {
     
-    SampleEmpBayes<-function(n){
+    SampleEmpBayes<-function(n,MultiSD=1){
       tmp<-cbind(
-        survP1Func(n),
-        survP2Func(n),
-        growP1Func(n),
-        growP2Func(n),
-        growP3Func(n),
-        reprP1Func(n),
-        reprP2Func(n),
-        OffNumFunc(n),
-        OffSizeP1Func(n),
-        OffSizeP2Func(n),
-        OffSizeP3Func(n),
+        survP1Func(n,MultiSD),
+        survP2Func(n,MultiSD),
+        growP1Func(n,MultiSD),
+        growP2Func(n,MultiSD),
+        growP3Func(n,MultiSD),
+        reprP1Func(n,MultiSD),
+        reprP2Func(n,MultiSD),
+        OffNumFunc(n,MultiSD),
+        OffSizeP1Func(n,MultiSD),
+        OffSizeP2Func(n,MultiSD),
+        OffSizeP3Func(n,MultiSD),
         offSFunc(n),
         obsProb1Func(n),
         obsProb2Func(n))
