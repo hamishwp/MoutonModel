@@ -948,7 +948,7 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
   medSS<-apply(lTargNew$shat,1,median,na.rm=T) > 0.01; medSS[is.na(medSS)]<-F
   acc<-lTargNew$d > initSIR$mindelta & medSS
   # apply(apply(lTargNew$shat,1, function(ss) quantile(ss,1:Ninit/Ninit,na.rm=T)),2,function(x) sum(x<0.1)/Ninit)
-  
+  print(paste0("ABC-Initialisation: ",sum(acc)," / ",length(acc)," particles finished"))
   while(sum(!acc)>initSIR$Np){
     # Generate the particles
     xNew[!acc,]<-initSIR$ProposalDist(initSIR)[!acc,]
