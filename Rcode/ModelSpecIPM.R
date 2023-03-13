@@ -51,8 +51,8 @@ CombLogTargs<-function(lTargNew)  {
   outy<-list(d=rep(-Inf,length(lTargNew)),
              shat=array(NA,dim=dimmie))
   # Fill it up!
-  outy$d[ids] <- vapply(ids,function(i) lTargNew[[i]]$d,1)
-  outy$shat[ids,]=sapply(ids,function(i) lTargNew[[i]]$shat)
+  outy$d[ids]     <- vapply(ids,function(i) lTargNew[[i]]$d,1)
+  outy$shat[ids,] <- t(sapply(ids,function(i) c(lTargNew[[i]]$shat)))
   
   return(outy)
 }

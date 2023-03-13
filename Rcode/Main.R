@@ -29,8 +29,6 @@ print(paste0("Median SS: ",median(tmp$shat)))
 ptm_fin<-(proc.time()[3] - ptm); timeouter<-ptm_fin*3; print(paste0("Timeout = ",timeouter))
 # Ensure that the minimum delta distance ensures that all-zero summary stats are not included
 initSIR%<>%CalcMinDelta(IPMLTP)
-
-
 # Make sure this timeout is integrated into the simulations
 initSIR$timeouter<-timeouter
 # In case user wants to start from a previous simulation

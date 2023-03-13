@@ -141,9 +141,9 @@ print(signif(sumReal,4))
 # xtable(summaries)
 
 shatter<-output[[istep]]$shat[inds,]
-tmp<-t(apply(shatter,2,function(shat) quantile(shat,c(0.05,0.2,0.5,0.8,0.95))))
+tmp<-t(apply(shatter,2,function(shat) quantile(shat,c(0.05,0.2,0.5,0.8,0.95),na.rm=T)))
 View(tmp)
-tmp<-t(apply(shatter,1,function(shat) quantile(shat,c(0.05,0.2,0.5,0.8,0.95))))
+tmp<-t(apply(shatter,1,function(shat) quantile(shat,c(0.05,0.2,0.5,0.8,0.95),na.rm=T)))
 View(tmp)
 
 sheepies%>%ggplot()+geom_density(aes(Distance))

@@ -2,7 +2,7 @@
 # MVN based on resampled theta with a global covariance matrix
 pert_GlobCov<-function(outin,lTargPars){
   # Make sure only successful samples contribute to the perturbation
-  inds<-!is.na(outin$distance) & outin$distance>=outin$delta[outin$iteration]
+  inds<-Acceptance(outin$shat,lTargPars,outin$distance,outin$delta[outin$iteration])
   # Reduce ewights and previous parameter samples for computation
   wewei<-outin$weightings[inds]; theta<-outin$theta[inds,]
   # Calculate the global weighted mean and covariance matrix
@@ -30,7 +30,7 @@ pert_GlobCov<-function(outin,lTargPars){
 # MV skew-norm based on resampled theta with a global skew-covariance matrix
 pert_GlobSkewCov<-function(outin,lTargPars){
   # Make sure only successful samples contribute to the perturbation
-  inds<-!is.na(outin$distance) & outin$distance>=outin$delta[outin$iteration]
+  inds<-Acceptance(outin$shat,lTargPars,outin$distance,outin$delta[outin$iteration])
   # Reduce ewights and previous parameter samples for computation
   wewei<-outin$weightings[inds]; theta<-outin$theta[inds,]
   # Calculate the global mean, skew and covariance matrix, weighted by the distance metric
