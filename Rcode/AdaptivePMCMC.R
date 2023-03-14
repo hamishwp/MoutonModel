@@ -914,7 +914,7 @@ GenAccSamples<-function(output, initSIR, lTarg, lTargPars, ResampleSIR){
     print(paste0(particles," out of ",initSIR$Np," left to simulate"))
   }
   # Set the weights of rejected particles to zero
-  output$weightings[!Acceptance(lTargNew$shat,lTargPars,lTargNew$d,output$delta[output$iteration])]<-0
+  output$weightings[!Acceptance(output$shat,lTargPars,output$distance,output$delta[output$iteration])]<-0; output$weightings[is.na(output$weightings)]<-0
   # Normalise the weights
   output$weightings<-output$weightings/sum(output$weightings)
   
@@ -1066,7 +1066,10 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
   # Find theta*(t=1) delta(t=1) -> the ABC-rejection value
   if(is.null(initSIR$output)) {output<-InitABCSIR(lTarg, lTargPars, initSIR); it<-1} else {output<-initSIR$output; it<-output$iteration}
   # Setup shop for the full algorithm
-  saveRDS(list(output),paste0("./Results/output_",namer));xPrev<-output$theta; converger=F
+  saveRDS(list(output),paste0("./Results/output_",namer)); converger=F
+  # Store previous parameter space values
+  accPrev<-Acceptance(output$shat,lTargPars,output$distance,output$delta[output$iteration-1])
+  xPrev<-output$theta[accPrev,]; rm(accPrev)
   # Show the goods!
   print(paste0("Step = 1, No. samples = ",initSIR$Np*initSIR$k,", eps = ",signif(output$delta[output$iteration],3),
                " with 1/c = ",signif(output$q_thresh[output$iteration],2)," and ESS = ",signif(CalcESS(output),3)))
@@ -1079,7 +1082,7 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
     # SIR routine
     output<-GenAccSamples(output, initSIR, lTarg, lTargPars, ResampleSIR)
     # Modify the ABC-threshold adaptively
-    output<-ModThresh(output,xPrev=xPrev,lTargPars)
+    output<-ModThresh(output,xPrev=xPrev,lTargPars=lTargPars)
     # How many samples have we taken sum_t(D_t)?
     cycles<-cycles+nrow(output$theta)
     # Calculate weights by no. rejected particles using the current and previous ABC-threshold
