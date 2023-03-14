@@ -766,8 +766,14 @@ betavals<-function(ratios,MultiSD=1){
   www<-(resy-min(resy))/(max(resy)-min(resy))
   # Calculate the initial guess of distribution
   ibeta<-cov.wt(betas,www)
+  muib<-ibeta$center[1]/sum(ibeta$center)
+  vaib<-prod(ibeta$center)/(sum(ibeta$center)^2*sum(c(ibeta$center,1)))
+  # Now expand the estimate using a basic optimisation algorithm
+  estimie<-optim(ibeta$center,function(ib) {
+    (ib[1]/sum(ib)-muib)^2 + (prod(ib)/(sum(ib)^2*sum(c(ib,1))) - MultiSD*vaib)^2
+  })$par
   # Output!
-  list(estimate=ibeta$center,
+  list(estimate=estimie,
        n=length(ratios),
        shape = c((ibeta$center[1]/(ibeta$cov[1,1]*MultiSD))^2,(ibeta$center[2]/(ibeta$cov[2,2]*MultiSD))^2),
        scale = c((ibeta$cov[1,1]*MultiSD)^2/ibeta$center[1],(ibeta$cov[2,2]*MultiSD)^2/ibeta$center[2]),
@@ -775,7 +781,7 @@ betavals<-function(ratios,MultiSD=1){
 }
 
 gammavals<-function(mu,sig){
-  function(n,MultiSD=1) rgamma(n,shape=(mu/sig*MultiSD)^2,scale=((sig*MultiSD)^2/mu))
+  function(n,MultiSD=1) rgamma(n,shape=(mu/(sig*MultiSD))^2,scale=((sig*MultiSD)^2/mu))
 }
 
 ExtractGLM<-function(solveDF,formular,alpha=0.025,familiar=NULL){

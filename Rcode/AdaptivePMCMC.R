@@ -868,12 +868,74 @@ Supremum<-function(q_old,xNew,xPrev,xN=T,meth="KLIEP",warny=T){
   return(c(q_old,1/max(w_hat)))
 }
 
+# Make sure that all-zero summary statistics set the minimum ABC-threshold value
+CalcMinDelta<-function(initSIR,lTargPars){
+  
+  dimmie<-dim(lTargPars$SumStats)
+  
+  initSIR$mindelta<- sum(sapply(1:dimmie[3],FUN = 
+                                  function(i) {
+                                    wArgs<-list(Sstar=array(0,dim = c(dimmie[1:2],lTargPars$b)),
+                                                Sd=lTargPars$SumStats,
+                                                time=i)
+                                    ObsDistance(wArgs = wArgs,pobs=0.9)$sw
+                                  })) + 
+    lTargPars$priorF(initSIR$x0)
+  return(initSIR)
+  
+}
+
 RemNA<-function(lTargNew,SIR){
   ids<-!is.na(lTargNew$d)
   lTargNew$d<-lTargNew$d[ids]; lTargNew$shat<-lTargNew$shat[ids,]
   SIR$theta<-SIR$theta[ids,]; SIR$weightings<-SIR$weightings[ids]
   
   return(list(lTargNew=lTargNew,SIR=SIR))
+}
+
+# Initialise the first round of the ABCSMC algorithm
+InitABCSIR<-function(lTarg, lTargPars, initSIR){
+  # How many particles do we want?
+  particles<-round(initSIR$Np*initSIR$k); Complete<-0
+  # Output skeleton
+  output<-list(delta=initSIR$mindelta,iteration=1L,q_thresh=1/initSIR$k,
+               distance=c(),theta=array(dim = c(0,length(unlist(lTargPars$skeleton)))),
+               weightings=c(),shat=array(dim = c(0,length(lTargPars$SumStats))))
+  
+  while (particles>0){
+    # Generate the particles
+    xNew<-initSIR$ProposalDist(initSIR)[1:max(particles,lTargPars$cores),]; SIR<-list(theta=xNew,weightings=rep(1,nrow(xNew)))
+    # Sample from the target distribution
+    lTargNew <- mclapply(X = 1:nrow(xNew),
+                         FUN = function(c) {
+                           tryCatch (R.utils::withTimeout(lTarg(xNew[c,], lTargPars), timeout = initSIR$timeouter),
+                                     TimeoutException = function(ex) "TimedOut")
+                         },
+                         mc.cores = lTargPars$cores) %>% CombLogTargs()
+    # Remove any NA values
+    tmp<-RemNA(lTargNew,SIR); lTargNew<-tmp$lTargNew; SIR<-tmp$SIR; rm(tmp)
+    # Modify which particles are sampled from at next iteration
+    Complete<-sum(Acceptance(lTargNew$shat,lTargPars,lTargNew$d,initSIR$mindelta),na.rm = T)+Complete
+    # Save both accepted & rejected values
+    output$distance%<>%c(lTargNew$d)
+    output$theta%<>%rbind(SIR$theta)
+    output$weightings%<>%c(SIR$weightings)
+    output$shat%<>%rbind(lTargNew$shat)
+    # Adjust the number of particles required for the next iteration
+    particles<-initSIR$Np-Complete
+    # print out
+    print(paste0(particles," out of ",initSIR$Np," left to simulate"))
+  }
+  # Get the successful particles
+  indies<-Acceptance(output$shat,lTargPars,output$distance,initSIR$mindelta)
+  # Calculate the priors for the weights, and normalise them
+  output$weightings[indies]<-exp(apply(output$theta[indies,],1,function(tt) lTargPars$priorF(tt))); output$weightings[!indies]<-0; output$weightings<-output$weightings/sum(output$weightings)
+  # Calculate the initial ABC-threshold required for the ABCSIR algorithm
+  delta0<-(output$distance[indies])[order(output$distance[indies],decreasing = T)[initSIR$Np]]
+  # Output both accepted & rejected values
+  output$ESS<-sum(indies)
+  
+  return(output)
 }
 
 # Generate Np accepted particles (sets of model-parameters)
@@ -919,75 +981,6 @@ GenAccSamples<-function(output, initSIR, lTarg, lTargPars, ResampleSIR){
   output$weightings<-output$weightings/sum(output$weightings)
   
   return(output)
-}
-
-# Make sure that all-zero summary statistics set the minimum ABC-threshold value
-CalcMinDelta<-function(initSIR,lTargPars){
-  
-  dimmie<-dim(lTargPars$SumStats)
-  
-  initSIR$mindelta<- sum(sapply(1:dimmie[3],FUN = 
-                                  function(i) {
-                                    wArgs<-list(Sstar=array(0,dim = c(dimmie[1:2],lTargPars$b)),
-                                                Sd=lTargPars$SumStats,
-                                                time=i)
-                                    ObsDistance(wArgs = wArgs,pobs=0.9)$sw
-                                  })) + 
-                     lTargPars$priorF(initSIR$x0)
-  return(initSIR)
-  
-}
-
-# Initialise the first round of the ABCSMC algorithm
-InitABCSIR<-function(lTarg, lTargPars, initSIR){
-  # Total number of parameter-space particles to run through particle filter
-  Ninit<-round(initSIR$Np*initSIR$k)
-  # Generate the particles
-  xNew<-initSIR$ProposalDist(initSIR)
-  # While loop ensures all initial values are at least plausible
-  # Sample from the target distribution
-  lTargNew <- mclapply(X = 1:Ninit,
-                       FUN = function(c) {
-                         tryCatch (R.utils::withTimeout(lTarg(xNew[c,], lTargPars), timeout = initSIR$timeouter),
-                                   TimeoutException = function(ex) "TimedOut")
-                       },
-                       mc.cores = lTargPars$cores) %>% CombLogTargs()
-  # Make sure that simulations that have almost all-zero summary stats are removed
-  acc <- Acceptance(lTargNew$shat,lTargPars,lTargNew$d,initSIR$mindelta)
-  # apply(apply(lTargNew$shat,1, function(ss) quantile(ss,1:Ninit/Ninit,na.rm=T)),2,function(x) sum(x<0.1)/Ninit)
-  print(paste0("ABC-Initialisation: ",sum(acc)," / ",length(acc)," particles finished"))
-  while(sum(!acc)>0){
-    # Generate the particles
-    xNew[!acc,]<-initSIR$ProposalDist(initSIR)[!acc,]
-    # Sample from the target distribution
-    lTargNewtmp <- mclapply(X = which(!acc),
-                         FUN = function(c) {
-                           tryCatch (R.utils::withTimeout(lTarg(xNew[c,], lTargPars), timeout = initSIR$timeouter),
-                                     TimeoutException = function(ex) "TimedOut")
-                         },
-                         mc.cores = lTargPars$cores) %>% CombLogTargs()
-    # Replace into principal object
-    lTargNew$d[!acc]<-lTargNewtmp$d
-    lTargNew$shat[!acc,]<-lTargNewtmp$shat
-    # Check to see which passed
-    acc <- Acceptance(lTargNew$shat,lTargPars,lTargNew$d,initSIR$mindelta)
-    print(paste0("ABC-Initialisation: ",sum(acc)," / ",length(acc)," particles finished"))
-  }
-  # Calculate the priors for the weights, and normalise them
-  wtwt<-exp(apply(xNew,1,function(tt) lTargPars$priorF(tt))); wtwt<-wtwt/sum(wtwt)
-  # Calculate the initial ABC-threshold required for the ABCSIR algorithm
-  delta0<-lTargNew$d[order(lTargNew$d,decreasing = T)[initSIR$Np]]
-  # Output both accepted & rejected values
-  outy<-list(distance=lTargNew$d,
-             theta=xNew,
-             weightings=wtwt,
-             shat=lTargNew$shat,
-             delta=c(delta0),
-             q_thresh=c(1/initSIR$k),
-             iteration=1,
-             ESS=initSIR$Np)
-
-  return(outy)
 }
 
 # Define the function that will be used to resample the SIR-particles
@@ -1062,7 +1055,7 @@ CalcESS<-function(output){
 # The ABCSIR (also referred to as ABCSMC) algorithm 
 ABCSIR<-function(initSIR, lTarg, lTargPars){
   # Initialisations of storage variables and algorithm parameters
-  indy<-1:length(lTargPars$x0); cycles<-initSIR$Np*initSIR$k
+  indy<-1:length(lTargPars$x0)
   # Find theta*(t=1) delta(t=1) -> the ABC-rejection value
   if(is.null(initSIR$output)) {output<-InitABCSIR(lTarg, lTargPars, initSIR); it<-1} else {output<-initSIR$output; it<-output$iteration}
   # Setup shop for the full algorithm
@@ -1083,21 +1076,18 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
     output<-GenAccSamples(output, initSIR, lTarg, lTargPars, ResampleSIR)
     # Modify the ABC-threshold adaptively
     output<-ModThresh(output,xPrev=xPrev,lTargPars=lTargPars)
-    # How many samples have we taken sum_t(D_t)?
-    cycles<-cycles+nrow(output$theta)
     # Calculate weights by no. rejected particles using the current and previous ABC-threshold
     if(altWeights) output$weightings<-CalcAltW(output)
     # Calculate the Effective Sample Size (ESS), noting that it is already normalised
     output$ESS<-CalcESS(output); output$iteration<-it
+    # Save the output!
+    prev<-readRDS(paste0("./Results/output_",namer)); saveRDS(c(prev,list(output)),paste0("./Results/output_",namer)); rm(prev)
     # Save previous parameter space samples
     accPrev<-Acceptance(output$shat,lTargPars,output$distance,output$delta[output$iteration-1])
     xPrev<-output$theta[accPrev,]; rm(accPrev)
-    # Save the output!
-    prev<-readRDS(paste0("./Results/output_",namer)); saveRDS(c(prev,list(output)),paste0("./Results/output_",namer)); rm(prev)
     # Tell me what's good... please, please, please
-    print(paste0("Step = ",it,", No. samples = ",cycles,", eps = ",signif(output$delta[output$iteration],3),
-                 " with 1/c = ",signif(output$q_thresh[it],2)," and ESS = ",signif(output$ESS,3)))
-    print("")
+    print(paste0("Step = ",it,", eps = ",signif(output$delta[output$iteration],3),
+                 " with 1/c = ",signif(output$q_thresh[it],2)," and ESS = ",signif(output$ESS,3))); print("")
     # Have we reached convergence yet?
     converger<-ABCconv(output)
   }

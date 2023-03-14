@@ -25,7 +25,7 @@ x0<-vals<-c(-7.25, 3.77,
             -4.619443,  1.369697,
             log(0.067204),
             0.6887019, 0.5931042, log(0.2073659),
-            IPMLTP$links[[12]](0.873),
+            IPMLTP$invlinks[[12]](0.873),
             log(50),
             log(10))
 
@@ -56,23 +56,6 @@ Np<-length(unlist(x0))
 # Convert to physical coordinates
 names(x0)<-names(unlist(vals))[-c(6,7,14,15)]
 x0true<-x0
-
-
-# TO CHECK THE INITIAL SAMPLE DISTRIBUTION
-sheepies<-cbind(data.frame(Distance=runif(1500)),as.data.frame(PropN$proposal(1500)))
-# sheepies<-cbind(data.frame(Distance=runif(1500)),as.data.frame(ResampleSIR(1500)$theta))
-names(sheepies)<-c("Distance",names(x0true))
-shdens<-t(apply(sheepies[,-1],1,function(x) unname(unlist(Sample2Physical(x,IPMLTP)))[-c(6,7,14,15)]))
-shdens<-cbind(sheepies$Distance,shdens)%>%as.data.frame()
-colnames(shdens)<-colnames(sheepies)
-shdens%<>%reshape2::melt(id.vars=c("Distance"))
-abliny<-data.frame(variable=colnames(sheepies)[-1],Z=unname(unlist(Sample2Physical(x0true,IPMLTP)))[-c(6,7,14,15)])
-q<-shdens%>%filter(variable!="Distance")%>%ggplot(aes(value))+geom_histogram(aes(colour=variable,fill=variable),alpha=0.5)+
-  geom_vline(data = abliny, aes(xintercept = Z),colour="red")
-q<-q+facet_wrap(. ~ variable,scales = "free") + theme(strip.text.x = element_text(size = 12))+
-  xlab("Value")+ylab("Density")+
-  theme(plot.title = element_text(hjust = 0.5)) ;q
-# ggsave("InitialProposalDist_VariableDensities.png", plot=q,path = paste0(directory,'Plots/Hamish/'),width = 12,height = 8)
 
 disties<-scoring<-data.frame()
 for(i in 1:length(output)){
@@ -139,6 +122,32 @@ sumReal<-summaries
 for (i in 1:length(links)) sumReal[i,-ncol(sumReal)] <- links[[i]](sumReal[i,-ncol(sumReal)])
 print(signif(sumReal,4))
 # xtable(summaries)
+
+
+# TO CHECK THE INITIAL SAMPLE DISTRIBUTION
+sheepies2<-cbind(data.frame(Distance=runif(1500)),as.data.frame(PropN$proposal(1500,3)))
+# sheepies<-cbind(data.frame(Distance=runif(1500)),as.data.frame(ResampleSIR(1500)$theta))
+names(sheepies2)<-c("Distance",names(x0true))
+
+sheepies3<-rbind(cbind(data.frame(Source=rep("ABCSMC",nrow(sheepies))),sheepies),
+                 cbind(data.frame(Source=rep("GLM",nrow(sheepies2))),sheepies2))
+
+shdens<-t(apply(sheepies3[,-c(1:2)],1,function(x) unname(unlist(Sample2Physical(x,IPMLTP)))[-c(6,7,14,15)]))
+shdens<-cbind(sheepies3[,1:2],shdens)%>%as.data.frame()
+colnames(shdens)<-colnames(sheepies3)
+shdens%<>%reshape2::melt(id.vars=c("Distance","Source"))
+abliny<-data.frame(variable=colnames(sheepies3)[-c(1:2)],Z=unlist(vals)[-c(6,7,14,15)])
+q<-shdens%>%filter(variable!="Distance")%>%ggplot(aes(value))+geom_density(aes(colour=Source,fill=Source),alpha=0.1)+
+  geom_vline(data = abliny, aes(xintercept = Z),colour="red")
+q<-q+facet_wrap(. ~ variable,scales = "free") + theme(strip.text.x = element_text(size = 12))+
+  xlab("Value")+ylab("Density")+
+  theme(plot.title = element_text(hjust = 0.5)) ;q
+# ggsave("InitialProposalDist_VariableDensities.png", plot=q,path = paste0(directory,'Plots/Hamish/'),width = 12,height = 8)
+
+
+
+
+
 
 shatter<-output[[istep]]$shat[inds,]
 tmp<-t(apply(shatter,2,function(shat) quantile(shat,c(0.05,0.2,0.5,0.8,0.95),na.rm=T)))
