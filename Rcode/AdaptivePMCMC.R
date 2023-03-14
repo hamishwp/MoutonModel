@@ -1036,7 +1036,7 @@ if(DeltaCalc=="QuantESS"){
   
 }
 
-CalcAltW<-function(output){
+CalcAltW<-function(output,lTargPars){
   output$weightings<-rep(0,length(output$weightings))
   # Calculate the number of accepted particles from current and previous ABC-threshold
   acc<-Acceptance(output$shat,lTargPars,output$distance,output$delta[output$iteration])
@@ -1077,7 +1077,7 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
     # Modify the ABC-threshold adaptively
     output<-ModThresh(output,xPrev=xPrev,lTargPars=lTargPars)
     # Calculate weights by no. rejected particles using the current and previous ABC-threshold
-    if(altWeights) output$weightings<-CalcAltW(output)
+    if(altWeights) output$weightings<-CalcAltW(output,lTargPars)
     # Calculate the Effective Sample Size (ESS), noting that it is already normalised
     output$ESS<-CalcESS(output); output$iteration<-it
     # Save the output!
