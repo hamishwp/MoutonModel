@@ -12,8 +12,8 @@ oneSex<-T
 # Is the observation probability an empirically-based fixed value or sampled as a R.V.?
 fixedObsProb<-T
 # Number of MCMC simulations
-# itermax <- 60000
-# stepmax <- 10
+itermax <- 60000
+stepmax <- 10
 ABCNP<-100L  # this is the number of particles to pass the ABC threshold
 ABCk<-1.2 # this sets the number of particles to trial in ABC as N_trial=k*N (see table 2, U. Simola, et al, Bayesian Analysis (2021) 16, Number 2, Adaptive Approximate Bayesian Computation
 # Do we need to calculate the minimum number of particles required for the adaptive-epsilon algorithm?
