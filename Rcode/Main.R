@@ -32,8 +32,8 @@ initSIR%<>%CalcMinDelta(IPMLTP)
 # Make sure this timeout is integrated into the simulations
 initSIR$timeouter<-timeouter
 # In case user wants to start from a previous simulation
-# prevSim<-NULL
-prevSim<-"./Results/output_SIM_pop100_yr10_ABCSIR_pert_GlobSkewCov_fixed_poissonMu_FudgerObs_60000_10brks_regbinspaceFALSE_sampleDTN_autoshift_rand142000"
+prevSim<-NULL
+# prevSim<-"./Results/output_SIM_pop100_yr10_ABCSIR_pert_GlobSkewCov_fixed_poissonMu_FudgerObs_60000_10brks_regbinspaceFALSE_sampleDTN_autoshift_rand142000"
 if(!is.null(prevSim) & file.exists(paste0("output_",namer))) {
   output<-readRDS(prevSim)
   exty<-str_split(prevSim,"output_")[[1]][2]
@@ -74,8 +74,6 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 ###################################################################################
 ###################################################################################
 
-# 3) copy Max's adaptive epsilon algorithm
-
 
 
 
@@ -83,8 +81,6 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 # Short-term to do
 # - Sort out sampling from the priors?
 # - Add different resample & perturbation functions
-# - parallelise properly obsFun when funcys is only one function
-# - make it possible to choose between Minkowski or distribution-based obsFun
 # - what is NoParts doing in all the old obsProb models?
 # - Sample from priors for initialisation: 
 #   if no prior values are provided, setup the priors distributions from the GLM
