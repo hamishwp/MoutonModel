@@ -74,7 +74,11 @@ saveRDS(Sheepies, paste0(directory,"Results/",tag))
 ###################################################################################
 ###################################################################################
 
-
+# TO DO MARCH:
+# 1) Start with MultiSD=3
+# 2) Try the different distance measures
+# 3) Extend to a larger number of years
+# 4) Use Supremum instead of QuantESS
 
 
 

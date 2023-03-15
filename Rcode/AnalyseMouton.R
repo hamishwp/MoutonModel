@@ -75,6 +75,13 @@ for(i in 1:length(output)){
   scoring%<>%rbind(data.frame(pvalue=ptmp,RMSE=RMSE,variable=names(x0),iteration=i))
 } 
 
+abliny<-data.frame(variable=names(x0),Z=x0)
+q<-disties%>%filter(variable!="Distance")%>%ggplot(aes(value))+geom_density(aes(colour=factor(iteration)),alpha=0.1)+
+  geom_vline(data = abliny, aes(xintercept = Z),colour="red")
+q<-q+facet_wrap(. ~ variable,scales = "free") + theme(strip.text.x = element_text(size = 12))+
+  xlab("Value")+ylab("Density")+
+  theme(plot.title = element_text(hjust = 0.5)) ;q
+
 tmp<-disties%>%filter(distance>log(-output[[length(output)]]$delta[length(output)]))%>%
   group_by(iteration)%>%summarise(summy=sum(distance),meany=mean(distance));tmp
 istep<-tmp%>%pull(meany)%>%which.min()
@@ -125,7 +132,7 @@ print(signif(sumReal,4))
 
 
 # TO CHECK THE INITIAL SAMPLE DISTRIBUTION
-sheepies2<-cbind(data.frame(Distance=runif(1500)),as.data.frame(PropN$proposal(1500,3)))
+sheepies2<-cbind(data.frame(Distance=runif(1500)),as.data.frame(PropN$proposal(1500,1)))
 # sheepies<-cbind(data.frame(Distance=runif(1500)),as.data.frame(ResampleSIR(1500)$theta))
 names(sheepies2)<-c("Distance",names(x0true))
 

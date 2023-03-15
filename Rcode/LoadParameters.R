@@ -27,9 +27,11 @@ regbinspace<-F
 # Particle filter initialisation function
 muModel<-'poisson' #'multinomial'
 # Observation Model
-obsModel<-"MADadaptdist"
+obsModel<-"MAEdistVar"
 # Adaptive ABC threshold method
 DeltaCalc<-"QuantESS"
+# How wide do we want to initialise our proposal distribution?
+InitSD<-3
 # Do we narrow things down with high level priors?
 HLPon<-F
 # Do we automatically calculate the shift in the staggered grid of the size-class bins, based on the IPM kernal?

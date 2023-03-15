@@ -105,7 +105,7 @@ IPMLTP$priorF<-function(thth) IPMLTP$priorFunc(thth, IPMLTP$priors, IPMLTP$prior
 source(paste0(directory,'Rcode/HighLevelPriors.R'))
 
 # Proposal Distribution
-PropN<-do.call(getInitialValDists,c(IPMLTP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,invlinks=IPMLTP$invlinks,MultiSD=1)))
+PropN<-do.call(getInitialValDists,c(IPMLTP[c("solveDF","detectedNum")],list(fixedObsProb=fixedObsProb,invlinks=IPMLTP$invlinks,MultiSD=InitSD)))
 # Either multivariate skew normal or multivariate normal
 if(PropDist=="MVSN") {
   ProposalDist<-function(initSIR,MultiSD=1) {
