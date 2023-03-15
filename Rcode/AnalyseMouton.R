@@ -59,12 +59,16 @@ x0true<-x0
 
 disties<-scoring<-data.frame()
 for(i in 1:length(output)){
-  # inds<-output[[i]]$distance>output[[i]]$delta[i]
-  inds<-rep(T,length(output[[i]]$distance))
+  inds<-Acceptance(output[[i]]$shat,
+                   IPMLTP,output[[i]]$distance,
+                   output[[length(output)]]$delta[length(output)])
+  # inds<-rep(T,length(output[[i]]$distance))
   sheepies<-as.data.frame(cbind(log(-output[[i]]$distance[inds]),output[[i]]$theta[inds,]))
   names(sheepies)<-c("distance",names(x0))
   sheepies<-sheepies[!is.na(sheepies$distance) & !is.infinite(sheepies$distance),]  
-  disties%<>%rbind(cbind(reshape2::melt(sheepies,id.vars=c("distance")),data.frame(iteration=rep(i,nrow(sheepies)*(ncol(sheepies)-1)))))
+  tmp<-reshape2::melt(sheepies,id.vars=c("distance"))
+  disties%<>%rbind(cbind(tmp,
+                         data.frame(iteration=rep(i,nrow(tmp)))))
   
   ptmp<-RMSE<-c()
   for(j in 2:ncol(sheepies)) {

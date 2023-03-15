@@ -27,9 +27,9 @@ regbinspace<-F
 # Particle filter initialisation function
 muModel<-'poisson' #'multinomial'
 # Observation Model
-obsModel<-"MADadaptdist"
+obsModel<-"MAEdistVar"
 # Adaptive ABC threshold method
-DeltaCalc<-"QuantESS"
+DeltaCalc<-"other" #"QuantESS"
 # How wide do we want to initialise our proposal distribution?
 InitSD<-3
 # Do we narrow things down with high level priors?
