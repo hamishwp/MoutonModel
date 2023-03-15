@@ -27,7 +27,7 @@ regbinspace<-F
 # Particle filter initialisation function
 muModel<-'poisson' #'multinomial'
 # Observation Model
-obsModel<-"Fudger"
+obsModel<-"MADadaptdist"
 # Adaptive ABC threshold method
 DeltaCalc<-"QuantESS"
 # Do we narrow things down with high level priors?
