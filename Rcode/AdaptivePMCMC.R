@@ -841,7 +841,7 @@ maxESS<-function(sw, rate=0.5, mag=NULL){
 # Prevents zero-inflated simulations from being included.
 # (Equivalent to having a multi-dim ABC-threshold)
 Acceptance<-function(SS,lTargPars,d,delta){
-  !is.na(d) & d>delta &
+  !is.na(d) & d>delta & d > -1e300 & 
   sapply(1:nrow(SS),function(i) all(SS[i,]>c(array(rep((apply(lTargPars$SumStats,1:2,min)-1e-3)/max(lTargPars$SumStats),3),dim(lTargPars$SumStats)))))
 }
 
