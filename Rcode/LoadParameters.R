@@ -29,7 +29,7 @@ muModel<-'poisson' #'multinomial'
 # Observation Model
 obsModel<-"Reducer"
 # Adaptive ABC threshold method
-DeltaCalc<-"other" #"QuantESS"
+DeltaCalc<-"QuantESS" #"other"
 # Only use the first and last years in the distance function
 firstlast<-F
 # How wide do we want to initialise our proposal distribution?
