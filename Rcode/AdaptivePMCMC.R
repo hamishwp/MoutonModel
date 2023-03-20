@@ -932,17 +932,6 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
   # Calculate the priors for the weights, and normalise them
   output$weightings[indies]<-exp(apply(output$theta[indies,],1,function(tt) lTargPars$priorF(tt))); output$weightings[!indies]<-0; output$weightings<-output$weightings/sum(output$weightings)
   # Calculate the initial ABC-threshold required for the ABCSIR algorithm
-  
-  
-  
-  
-  stop("Create the new delta here and DONT FORGET TO ADD IT")
-  
-  
-  
-  
-  
-  
   delta0<-(output$distance[indies])[order(output$distance[indies],decreasing = T)[initSIR$Np]]
   # Output both accepted & rejected values
   output$ESS<-sum(indies)
