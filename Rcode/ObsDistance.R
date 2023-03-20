@@ -505,8 +505,8 @@ if(obsModel=="MultinomObs"){
     # Distance function - sum over all bins, split by type
     MultiMod<-function(i) {
       # Sum over the bins and calculate the Poisson distance
-      sapply(apply(wArgs$Sstar[,i,]*pobs,2,sum), 
-                  function(lam)  dpois(sum(wArgs$Sd[,i,wArgs$time]),lam,T))
+      sapply(apply(wArgs$Sstar[,i,]*pobs,2,sum)+1, 
+                  function(lam)  dpois(sum(wArgs$Sd[,i,wArgs$time])+1L,lam,T))
     }
     # For each type of summary statistic
     sw<-rowSums(sapply(1:3,MultiMod))

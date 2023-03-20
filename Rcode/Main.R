@@ -34,15 +34,15 @@ initSIR$timeouter<-timeouter
 # In case user wants to start from a previous simulation
 prevSim<-NULL
 # prevSim<-"./Results/output_SIM_pop100_yr10_ABCSIR_pert_GlobSkewCov_fixed_poissonMu_FudgerObs_60000_10brks_regbinspaceFALSE_sampleDTN_autoshift_rand142000"
-if(!is.null(prevSim) & file.exists(paste0("output_",namer))) {
-  output<-readRDS(prevSim)
-  exty<-str_split(prevSim,"output_")[[1]][2]
-  inexty<-grep(exty,list.files("./Results/"),value = T)
-  inpy<-readRDS(paste0("./Results/",inexty))
-  IPMLTP<-inpy$IPMLTP
-  initSIR<-inpy$initSIR
-  initSIR$output<-initSIR$output[[length(initSIR$output)]]
-}
+# if(!is.null(prevSim) & file.exists(paste0("output_",namer))) {
+#   output<-readRDS(prevSim)
+#   exty<-str_split(prevSim,"output_")[[1]][2]
+#   inexty<-grep(exty,list.files("./Results/"),value = T)
+#   inpy<-readRDS(paste0("./Results/",inexty))
+#   IPMLTP<-inpy$IPMLTP
+#   initSIR<-inpy$initSIR
+#   initSIR$output<-initSIR$output[[length(initSIR$output)]]
+# }
 # print out the initial proposal distribution parameters
 print(initSIR$x0)
 print(diag(initSIR$propCOV))
