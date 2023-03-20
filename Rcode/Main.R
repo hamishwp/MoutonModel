@@ -24,7 +24,7 @@ source(paste0(directory,'Rcode/BuildModel.R'))
 print("Initial Values Log-Likelihood=")
 ptm <- proc.time()[3]
 tmp<-logTargetIPM(initSIR$x0, logTargetPars = IPMLTP, returnNeg = F, printProp = F)
-print(paste0("Distance at GLM: ",tmp$d))
+print(paste0("Distance at GLM: ",tmp$distance))
 print(paste0("Median SS: ",median(tmp$shat)))
 ptm_fin<-(proc.time()[3] - ptm); timeouter<-ptm_fin*3; print(paste0("Timeout = ",timeouter))
 # Ensure that the minimum delta distance ensures that all-zero summary stats are not included

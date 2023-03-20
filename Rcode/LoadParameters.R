@@ -14,7 +14,7 @@ fixedObsProb<-T
 # Number of MCMC simulations
 itermax <- 60000
 stepmax <- 10
-ABCNP<-1000L  # this is the number of particles to pass the ABC threshold
+ABCNP<-2500L  # this is the number of particles to pass the ABC threshold
 ABCk<-1.2 # this sets the number of particles to trial in ABC as N_trial=k*N (see table 2, U. Simola, et al, Bayesian Analysis (2021) 16, Number 2, Adaptive Approximate Bayesian Computation
 # Do we need to calculate the minimum number of particles required for the adaptive-epsilon algorithm?
 calcParts<-F
@@ -27,9 +27,11 @@ regbinspace<-F
 # Particle filter initialisation function
 muModel<-'poisson' #'multinomial'
 # Observation Model
-obsModel<-"MAEdistVar"
+obsModel<-"Reducer"
 # Adaptive ABC threshold method
 DeltaCalc<-"other" #"QuantESS"
+# Only use the first and last years in the distance function
+firstlast<-F
 # How wide do we want to initialise our proposal distribution?
 InitSD<-3
 # Do we narrow things down with high level priors?

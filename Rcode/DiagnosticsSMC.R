@@ -153,7 +153,7 @@ TimeSMC<-function(x0,IPMLTP,timer=100000){
   
 }
 
-TimeSMC(x0,IPMLTP,timer=100000)
+tmp<-TimeSMC(x0,IPMLTP,timer=1)
 
 # Test out the model-SMC to check for numerical underflow (ESS too low)
 TestPF<-function(x0,IPMLTP, samplez=10){
@@ -182,7 +182,7 @@ TestPF<-function(x0,IPMLTP, samplez=10){
     # Setup initial states
     prevStates <- do.call(IPMLTP$mu, IPMLTP$muPar)
     # Setup weight matrix and standardised weight matrix:
-    output <- list(d=0, sw=rep(1,IPMLTP$b),
+    output <- list(distance=0, sw=rep(1,IPMLTP$b),
                    shat=array(NA, dim=c(nrow(Sd),3,t)))
     # Update weights for first time step:
     wArgs <- list(Sd=Sd, pobs=IPMLTP$obsProbPar, NoParts=IPMLTP$b)
@@ -203,7 +203,7 @@ TestPF<-function(x0,IPMLTP, samplez=10){
       output2 <- IPMLTP$obsProb(output,wArgs)
       if(any(is.na(output2$sw))) {saveRDS(list(wArgs=wArgs,outputN=output2,outputO=output),"./tmpPF.Rdata"); stop("")} else output<-output2
       
-      performy%<>%rbind(data.frame(time=time,distance=output$d,ESS=1/(sum(output$sw^2))))
+      performy%<>%rbind(data.frame(time=time,distance=output$distance,ESS=1/(sum(output$sw^2))))
       
     }
     outperf%<>%rbind(cbind(performy,data.frame(attempt=i)))
@@ -212,7 +212,7 @@ TestPF<-function(x0,IPMLTP, samplez=10){
   return(list(outperf=outperf,shat=output$shat, Sstar=wArgs$Sstar))
 }
 
-Perfy<-TestPF(x0,IPMLTP,samplez = 3)
+Perfy<-TestPF(x0,IPMLTP,samplez = 1)
 mean(Perfy$outperf$distance)
 
 xxx<-x0
@@ -512,7 +512,7 @@ tmp<-c(unlist(mclapply(1:numsam, function(i) {particleFilter(Sd=lSHEEP$SumStats,
                                                            sampleStatePar = stateSpaceSampArgs,
                                                            obsProbPar = obsProbPar, 
                                                            fixedObsProb=fixedObsProb,
-                                                           NoParts = 500)$d},mc.cores = ncores)))
+                                                           NoParts = 500)$distance},mc.cores = ncores)))
 # We can see how many samples we need to achieve a stable standard deviation by plotting the cumulative SD (around 1800)
 plot(vapply(seq_along(tmp), function(i) sd(tmp[1:i]), 1),xlab = "Number of Samples",ylab = "Cumulative S.D.",main = "How many samples required for S.D. ~ 600")
 
@@ -524,7 +524,7 @@ coster<-sapply(parties,function(pp) {
                                                           sampleStatePar = stateSpaceSampArgs,
                                                           obsProbPar = obsProbPar, 
                                                           fixedObsProb=fixedObsProb,
-                                                          NoParts = pp)$d},mc.cores=ncores)))
+                                                          NoParts = pp)$distance},mc.cores=ncores)))
 })
 # Calculate the running (k=3) standard deviation of the distance by number of particles
 runSD<-data.frame(parties=parties[3:length(parties)],runSD=vapply(3:length(parties), function(i) sd(log(-apply(coster,2,mean))[(i-3):i]), 1))

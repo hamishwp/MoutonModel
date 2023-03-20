@@ -499,6 +499,24 @@ if(obsModel=="MultinomObs"){
     return(list(sw=sw,shat=shat))
   }
   
+} else if (obsModel=="Reducer"){
+  
+  ObsDistance<-function(wArgs,pobs,p=1){
+    # Distance function - sum over all bins, split by type
+    MultiMod<-function(i) {
+      # Sum over the bins and calculate the Poisson distance
+      sapply(apply(wArgs$Sstar[,i,]*pobs,2,sum), 
+                  function(lam)  dpois(sum(wArgs$Sd[,i,wArgs$time]),lam,T))
+    }
+    # For each type of summary statistic
+    sw<-rowSums(sapply(1:3,MultiMod))
+    
+    # Calc median shat value
+    shat<-apply(wArgs$Sstar,1:2,median,na.rm=T)*pobs
+    
+    return(list(sw=sw,shat=shat))
+  }
+  
 }
 
 # To choose the distance function, please see 'ObsDistance.R'
@@ -506,8 +524,10 @@ if(fixedObsProb){
   obsfun<-function(output,wArgs){
     # Calculate the distances
     diz<-ObsDistance(wArgs,pobs=wArgs$pobs[wArgs$time])
-    # Calculate the total distances
-    output$d<-output$d+sum(diz$sw,na.rm = T)
+    # Calculate the total distances734686
+    if (firstlast) {
+      if(wArgs$time%in%c(1,dim(output$shat)[3])) output$distance<-output$distance+sum(diz$sw,na.rm = T)
+    } else output$distance<-output$distance+sum(diz$sw,na.rm = T)
     # Exponentiate and scale the particle weights to become from 0 to 1
     output$sw<-exp(diz$sw-max(diz$sw,na.rm = T))
     summz<-sum(output$sw,na.rm = T)
@@ -527,7 +547,9 @@ if(fixedObsProb){
     # Calculate the distances
     diz<-ObsDistance(wArgs,pobs=wArgs$pobs[wArgs$time])
     # Calculate the total distances
-    output$d<-output$d+sum(diz$sw,na.rm = T)
+    if (firstlast) {
+      if(wArgs$time%in%c(1,dim(output$shat)[3])) output$distance<-output$distance+sum(diz$sw,na.rm = T)
+    } else output$distance<-output$distance+sum(diz$sw,na.rm = T)
     # Exponentiate and scale the particle weights to become from 0 to 1
     output$sw<-exp(diz$sw-max(diz$sw,na.rm = T))
     summz<-sum(output$sw,na.rm = T)

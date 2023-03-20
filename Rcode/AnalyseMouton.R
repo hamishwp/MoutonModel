@@ -59,9 +59,9 @@ x0true<-x0
 
 disties<-scoring<-data.frame()
 for(i in 1:length(output)){
-  inds<-Acceptance(output[[i]]$shat,
-                   IPMLTP,output[[i]]$distance,
-                   output[[length(output)]]$delta[length(output)])
+  inds<-Acceptance(output[[i]],
+                   IPMLTP,
+                   output[[length(output)]]$delta[1])# & output[[i]]$distance>-exp(11.6)
   # inds<-rep(T,length(output[[i]]$distance))
   sheepies<-as.data.frame(cbind(log(-output[[i]]$distance[inds]),output[[i]]$theta[inds,]))
   names(sheepies)<-c("distance",names(x0))
@@ -86,7 +86,52 @@ q<-q+facet_wrap(. ~ variable,scales = "free") + theme(strip.text.x = element_tex
   xlab("Value")+ylab("Density")+
   theme(plot.title = element_text(hjust = 0.5)) ;q
 
-tmp<-disties%>%filter(distance>log(-output[[length(output)]]$delta[length(output)]))%>%
+shatter<-outsheep<-data.frame()
+for(i in 1:length(output)){
+  inds<-Acceptance(output[[i]],
+                   IPMLTP,
+                   output[[length(output)]]$delta[1])
+  shatter%<>%rbind(as.data.frame(cbind(apply(sapply(1:12,function(j) abs(output[[i]]$theta[inds,j]-x0[j])),1,sum,na.rm=T),
+                               output[[i]]$shat[inds,])))
+  outsheep%<>%rbind(output[[i]]$theta[inds,])
+  
+}
+
+www<-abs(sapply(2:ncol(shatter),function(j) cor(shatter[,j]-c(IPMLTP$SumStats)[j-1],shatter[,1]))); www<-www/sum(www)
+ssww<-apply(abs(shatter[,-1]-c(IPMLTP$SumStats)),1,function(x) weighted.mean(x,www))
+ssww<-exp(ssww-max(ssww))
+1/sum(ssww^2)
+
+names(outsheep)<-names(x0)
+apply(outsheep,2,function(x) weighted.mean(x,w = ssww))
+apply(outsheep,2,function(x) modi::weighted.quantile(x,w = ssww,prob = 0.05))
+apply(outsheep,2,function(x) modi::weighted.quantile(x,w = ssww,prob = 0.95))
+x0
+
+stmp<-abs(shatter[,-1]-c(IPMLTP$SumStats))
+stmp<-(stmp-apply(stmp,2,median))/apply(stmp,2,sd)
+pcaout<-prcomp(stmp)
+summary(pcaout)
+
+cory<-as.data.frame(cbind(ssww,stmp))
+smodel<-lm(ssww ~ . + 0,cory)
+summary(smodel)
+apply(array(abs(smodel$coefficients),dim(IPMLTP$SumStats)),1:2,mean)
+plot(c(apply(array(abs(smodel$coefficients),dim(IPMLTP$SumStats)),1:2,mean)))
+plot(c(apply(array(abs(smodel$coefficients),dim(IPMLTP$SumStats)),1:2,sd)))
+plot(apply(array(abs(smodel$coefficients),dim(IPMLTP$SumStats)),3,median))
+
+
+cory<-as.data.frame(cbind(ssww,pcaout$x[,1:23]))
+summary(lm(ssww ~ . + 0,cory))
+
+
+
+
+
+
+
+tmp<-disties%>%filter(distance>log(-output[[length(output)]]$delta))%>%
   group_by(iteration)%>%summarise(summy=sum(distance),meany=mean(distance));tmp
 istep<-tmp%>%pull(meany)%>%which.min()
 # istep<-length(output)
@@ -94,7 +139,7 @@ istep<-tmp%>%pull(meany)%>%which.min()
 
 scoring%>%ggplot()+geom_point(aes(iteration,RMSE,colour=pvalue))
 
-dimmie<-c(min(disties$distance),log(-output[[1]]$delta[1]))
+dimmie<-c(min(disties$distance),log(-output[[1]]$delta))
 # dimmie<-c(quantile(disties$distance,0.1),quantile(disties$distance,0.9))
 disties%>%filter(distance<300)%>%
   ggplot(aes(distance,value,group=iteration))+geom_density(aes(colour=iteration,fill=iteration,y=..density..),alpha=0.3)+
@@ -104,7 +149,7 @@ output[[istep]]$q_thresh
 output[[istep]]$delta
 log(-output[[istep]]$delta)
 
-inds<-output[[istep]]$distance>output[[istep]]$delta[istep]
+inds<-output[[istep]]$distance>output[[istep]]$delta
 # inds<-rep(T,length(output[[istep]]$distance))
 sheepies<-as.data.frame(cbind(log(-output[[istep]]$distance[inds]),output[[istep]]$theta[inds,]))
 names(sheepies)<-c("Distance",names(x0))
@@ -168,7 +213,7 @@ View(tmp)
 
 sheepies%>%ggplot()+geom_density(aes(Distance))
 
-sheepies$Distance_mod<-log(apply(output[[istep]]$shat[output[[istep]]$distance>output[[istep]]$delta[istep],],1,function(x) sum(abs(x-c(IPMLTP$SumStats)))))
+sheepies$Distance_mod<-log(apply(output[[istep]]$shat[output[[istep]]$distance>output[[istep]]$delta,],1,function(x) sum(abs(x-c(IPMLTP$SumStats)))))
 
 qq<-list()
 for(i in 2:ncol(sheepies)){
@@ -246,7 +291,7 @@ sheepies%>%ggplot(aes(x=offSizePars1,offSizePars2,z=Distance))+
   scale_color_gradient2(mid="red",high="yellow")
 
 initDist<-logTargetIPM(x0true, logTargetPars = IPMLTP, returnNeg = F, printProp = F, returnW=T)
-initDist$d
+initDist$distance
 
 hist(log(abs(c(initDist$shat)-c(IPMLTP$SumStats))))
 hist(log(abs(output[[istep]]$shat[which.max(sheepies$Distance),]-IPMLTP$SumStats)))

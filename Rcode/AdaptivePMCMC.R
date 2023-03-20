@@ -840,9 +840,9 @@ maxESS<-function(sw, rate=0.5, mag=NULL){
 
 # Prevents zero-inflated simulations from being included.
 # (Equivalent to having a multi-dim ABC-threshold)
-Acceptance<-function(SS,lTargPars,d,delta){
-  !is.na(d) & d>delta & d > -1e300 & 
-  sapply(1:nrow(SS),function(i) all(SS[i,]>c(array(rep((apply(lTargPars$SumStats,1:2,min)-1e-3)/max(lTargPars$SumStats),3),dim(lTargPars$SumStats)))))
+Acceptance<-function(output,lTargPars,delta){
+  !is.na(output$distance) & output$distance>delta & output$distance > -1e300 & 
+  sapply(1:nrow(output$shat),function(i) all(output$shat[i,]>c(array(rep((apply(lTargPars$SumStats,1:2,min)-1e-3)/max(lTargPars$SumStats),3),dim(lTargPars$SumStats)))))
 }
 
 # Find some quantiles of the accepted parameter space values
@@ -855,7 +855,7 @@ multiQuants<-function(x,lenny=300,qmin=0.15,qmax=0.85){
 
 # To adjust the ABC-threshold, we calculate the supremum of the ratio of two posteriors (at time t and t-1)
 # U. Simola, et al, 'Adaptive Approximate Bayesian Computation Tolerance Selection', Bayesian Anal. 16(2): 397-423 (June 2021). DOI: 10.1214/20-BA1211 
-Supremum<-function(q_old,xNew,xPrev,xN=T,meth="KLIEP",warny=T){
+Supremum<-function(xNew,xPrev,xN=T,meth="KLIEP",warny=T){
   # Calculate the density ratio using Kullback-Leibler Importance Estimation Procedure (KLIEP) - https://github.com/hoxo-m/densratio
   densratio_obj <- densratio(xNew,xPrev,method = meth,verbose = warny)
   # Which parameter space values should have quantiles?
@@ -865,7 +865,7 @@ Supremum<-function(q_old,xNew,xPrev,xN=T,meth="KLIEP",warny=T){
   # Compute the ratio for the range of prediction values
   w_hat <- densratio_obj$compute_density_ratio(x_quants)
   # Return the updated supremum*, as a vector that includes the older values
-  return(c(q_old,1/max(w_hat)))
+  return(1/max(w_hat))
 }
 
 # Make sure that all-zero summary statistics set the minimum ABC-threshold value
@@ -886,8 +886,8 @@ CalcMinDelta<-function(initSIR,lTargPars){
 }
 
 RemNA<-function(lTargNew,SIR){
-  ids<-!is.na(lTargNew$d)
-  lTargNew$d<-lTargNew$d[ids]; lTargNew$shat<-lTargNew$shat[ids,]
+  ids<-!is.na(lTargNew$distance)
+  lTargNew$distance<-lTargNew$distance[ids]; lTargNew$shat<-lTargNew$shat[ids,]
   SIR$theta<-SIR$theta[ids,]; SIR$weightings<-SIR$weightings[ids]
   
   return(list(lTargNew=lTargNew,SIR=SIR))
@@ -898,7 +898,8 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
   # How many particles do we want?
   particles<-round(initSIR$Np*initSIR$k); Complete<-0
   # Output skeleton
-  output<-list(delta=initSIR$mindelta,iteration=1L,q_thresh=1/initSIR$k,
+  output<-list(delta=initSIR$mindelta,olddelta=initSIR$mindelta,
+               iteration=1L,q_thresh=1/initSIR$k,q_old=1/initSIR$k,
                distance=c(),theta=array(dim = c(0,length(unlist(lTargPars$skeleton)))),
                weightings=c(),shat=array(dim = c(0,length(lTargPars$SumStats))))
   
@@ -915,9 +916,9 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
     # Remove any NA values
     tmp<-RemNA(lTargNew,SIR); lTargNew<-tmp$lTargNew; SIR<-tmp$SIR; rm(tmp)
     # Modify which particles are sampled from at next iteration
-    Complete<-sum(Acceptance(lTargNew$shat,lTargPars,lTargNew$d,initSIR$mindelta),na.rm = T)+Complete
+    Complete<-sum(Acceptance(lTargNew,lTargPars,initSIR$mindelta),na.rm = T)+Complete
     # Save both accepted & rejected values
-    output$distance%<>%c(lTargNew$d)
+    output$distance%<>%c(lTargNew$distance)
     output$theta%<>%rbind(SIR$theta)
     output$weightings%<>%c(SIR$weightings)
     output$shat%<>%rbind(lTargNew$shat)
@@ -927,10 +928,21 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
     print(paste0(particles," out of ",initSIR$Np," left to simulate"))
   }
   # Get the successful particles
-  indies<-Acceptance(output$shat,lTargPars,output$distance,initSIR$mindelta)
+  indies<-Acceptance(output,lTargPars,initSIR$mindelta)
   # Calculate the priors for the weights, and normalise them
   output$weightings[indies]<-exp(apply(output$theta[indies,],1,function(tt) lTargPars$priorF(tt))); output$weightings[!indies]<-0; output$weightings<-output$weightings/sum(output$weightings)
   # Calculate the initial ABC-threshold required for the ABCSIR algorithm
+  
+  
+  
+  
+  stop("Create the new delta here and DONT FORGET TO ADD IT")
+  
+  
+  
+  
+  
+  
   delta0<-(output$distance[indies])[order(output$distance[indies],decreasing = T)[initSIR$Np]]
   # Output both accepted & rejected values
   output$ESS<-sum(indies)
@@ -944,7 +956,8 @@ GenAccSamples<-function(output, initSIR, lTarg, lTargPars, ResampleSIR){
   # How many particles do we want?
   particles<-initSIR$Np; Complete<-0
   # Output skeleton
-  output<-list(delta=output$delta,iteration=output$iteration,q_thresh=output$q_thresh,
+  output<-list(delta=output$delta,olddelta=output$olddelta,
+               iteration=output$iteration,q_thresh=output$q_thresh,q_old=output$q_old,
                distance=c(),theta=array(dim = c(0,length(unlist(lTargPars$skeleton)))),
                weightings=c(),shat=array(dim = c(0,length(lTargPars$SumStats))))
   # Sample from parameter space until we have Np accepted particles
@@ -964,9 +977,9 @@ GenAccSamples<-function(output, initSIR, lTarg, lTargPars, ResampleSIR){
     # Remove any NA values
     tmp<-RemNA(lTargNew,SIR); lTargNew<-tmp$lTargNew; SIR<-tmp$SIR; rm(tmp)
     # Modify which particles are sampled from at next iteration
-    Complete<-sum(Acceptance(lTargNew$shat,lTargPars,lTargNew$d,output$delta[output$iteration]),na.rm = T)+Complete
+    Complete<-sum(Acceptance(lTargNew,lTargPars,output$delta),na.rm = T)+Complete
     # Save both accepted & rejected values
-    output$distance%<>%c(lTargNew$d)
+    output$distance%<>%c(lTargNew$distance)
     output$theta%<>%rbind(SIR$theta)
     output$weightings%<>%c(SIR$weightings)
     output$shat%<>%rbind(lTargNew$shat)
@@ -976,7 +989,7 @@ GenAccSamples<-function(output, initSIR, lTarg, lTargPars, ResampleSIR){
     print(paste0(particles," out of ",initSIR$Np," left to simulate"))
   }
   # Set the weights of rejected particles to zero
-  output$weightings[!Acceptance(output$shat,lTargPars,output$distance,output$delta[output$iteration])]<-0; output$weightings[is.na(output$weightings)]<-0
+  output$weightings[!Acceptance(output,lTargPars,output$delta)]<-0; output$weightings[is.na(output$weightings)]<-0
   # Normalise the weights
   output$weightings<-output$weightings/sum(output$weightings)
   
@@ -989,14 +1002,14 @@ defFsamp<-match.fun(perturber)
 CalcQuantile<-function(output,xPrev,lTargPars){
   # BLOODY DENSITY RATIO ALGORITHM IS A PAIN IN MY ARSE!
   q_thresh<-output$q_thresh
-  outpass<-output$theta[Acceptance(output$shat,lTargPars,output$distance,output$delta[output$iteration]),]
-  q_update<-tryCatch(Supremum(q_thresh,outpass,xPrev),error=function(e) NA)
-  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,outpass,F),error=function(e) NA); print("Trying xNew & xPrev quantiles only")}
-  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,outpass,T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF")}
-  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,outpass,T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF and xNew & xPrev quantiles only")}
-  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(q_thresh,xPrev,outpass),error=function(e) NA); print("Reversing KLIEP num/denom")}
+  outpass<-output$theta[Acceptance(output,lTargPars,output$delta),]
+  q_update<-tryCatch(Supremum(outpass,xPrev),error=function(e) NA)
+  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(xPrev,outpass,F),error=function(e) NA); print("Trying xNew & xPrev quantiles only")}
+  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(xPrev,outpass,T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF")}
+  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(xPrev,outpass,T,meth = "RuLSIF"),error=function(e) NA); print("Trying RuLSIF and xNew & xPrev quantiles only")}
+  if(any(is.na(q_update))) {q_update<-tryCatch(Supremum(xPrev,outpass),error=function(e) NA); print("Reversing KLIEP num/denom")}
   if(any(is.na(q_update))) {
-    q_update<-c(q_thresh,q_thresh[length(q_thresh)])
+    q_update<-q_thresh
     print("warning: issues with the quantile threshold calculation")
   } 
   return(q_update)
@@ -1004,43 +1017,47 @@ CalcQuantile<-function(output,xPrev,lTargPars){
 
 if(DeltaCalc=="QuantESS"){
   
-  tpa<-function(delta,output,lTargPars) sum(Acceptance(output$shat,lTargPars,output$distance,delta))/length(output$distance)
+  tpa<-function(delta,output,lTargPars) sum(Acceptance(output,lTargPars,delta))/length(output$distance)
   
   ModThresh <- function(output, xPrev=NULL, alpha=0.9,lTargPars){
     #Find the new tolerance such that alpha proportion of the current alive particles stay alive
-    reflevel <- alpha*tpa(output$delta[output$iteration],output,lTargPars)
-    delta<-uniroot(function(delta) tpa(delta,output,lTargPars)-reflevel,c(0,output$delta[output$iteration]))$root
+    reflevel <- alpha*tpa(output$delta,output,lTargPars)
+    delta<-uniroot(function(delta) tpa(delta,output,lTargPars)-reflevel,c(0,output$delta))$root
     
-    output$delta[output$iteration+1L] <- delta
-    output$q_thresh[output$iteration+1L] <- tpa(output$delta[output$iteration],output,lTargPars)
+    output$olddelta<-output$delta
+    output$delta <- delta
+    output$q_old <- output$q_thresh
+    output$q_thresh <- tpa(output$delta,output,lTargPars)
     
     return(output)
   }
   
-  ABCconv<-function(output)  output$q_thresh[output$iteration]/output$q_thresh[output$iteration-1]>0.99
+  ABCconv<-function(output)  output$q_thresh/output$q_old>0.99
   
 } else {
   ModThresh<-function(output,xPrev,lTargPars){
     # Calculate the quantile function
+    output$q_old<-output$q_thresh
     output$q_thresh<-CalcQuantile(output,xPrev,lTargPars)
-    output$q_thresh[output$iteration+1L]<-mean(c(output$q_thresh[output$iteration+1L],output$q_thresh[output$iteration]))
+    # output$q_thresh<-mean(c(output$q_thresh,output$q_old))
     # Find alive particles
-    acc<-Acceptance(output$shat,lTargPars,output$distance,output$delta[output$iteration])
+    acc<-Acceptance(output,lTargPars,output$delta)
     # Decrease the current ABC-threshold
-    output$delta[output$iteration+1L]<-quantile(output$distance[acc],(1-output$q_thresh[output$iteration+1L])) 
+    output$olddelta <- output$delta
+    output$delta <- quantile(output$distance[acc],(1-output$q_thresh)) 
     
     return(output)
   }
   
-  ABCconv<-function(output)  output$q_thresh[output$iteration]>0.99
+  ABCconv<-function(output)  output$q_thresh>0.99
   
 }
 
 CalcAltW<-function(output,lTargPars){
   output$weightings<-rep(0,length(output$weightings))
   # Calculate the number of accepted particles from current and previous ABC-threshold
-  acc<-Acceptance(output$shat,lTargPars,output$distance,output$delta[output$iteration])
-  accNext<-Acceptance(output$shat,lTargPars,output$distance,output$delta[output$iteration+1])
+  acc<-Acceptance(output,lTargPars,output$olddelta)
+  accNext<-Acceptance(output,lTargPars,output$delta)
   # Weights are the number of particles that made it through current thresholds over the previous iteration
   output$weightings[acc]<-sum(accNext,na.rm = T)/sum(acc,na.rm = T)
   # Return the normalised weights
@@ -1061,11 +1078,11 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
   # Setup shop for the full algorithm
   saveRDS(list(output),paste0("./Results/output_",namer)); converger=F
   # Store previous parameter space values
-  accPrev<-Acceptance(output$shat,lTargPars,output$distance,output$delta[output$iteration-1])
+  accPrev<-Acceptance(output,lTargPars,output$olddelta)
   xPrev<-output$theta[accPrev,]; rm(accPrev)
   # Show the goods!
-  print(paste0("Step = 1, No. samples = ",initSIR$Np*initSIR$k,", eps = ",signif(output$delta[output$iteration],3),
-               " with 1/c = ",signif(output$q_thresh[output$iteration],2)," and ESS = ",signif(CalcESS(output),3)))
+  print(paste0("Step = 1, No. samples = ",initSIR$Np*initSIR$k,", eps = ",signif(mean(output$delta),3),
+               " with 1/c = ",signif(output$q_thresh,2)," and ESS = ",signif(CalcESS(output),3)))
   # Run the algorithm!
   while(!(converger & it > 3)){ # & cycles <= initSIR$itermax & stepmax<=it){
     # Set the ABC-step number
@@ -1083,11 +1100,11 @@ ABCSIR<-function(initSIR, lTarg, lTargPars){
     # Save the output!
     prev<-readRDS(paste0("./Results/output_",namer)); saveRDS(c(prev,list(output)),paste0("./Results/output_",namer)); rm(prev)
     # Save previous parameter space samples
-    accPrev<-Acceptance(output$shat,lTargPars,output$distance,output$delta[output$iteration-1])
+    accPrev<-Acceptance(output,lTargPars,output$olddelta)
     xPrev<-output$theta[accPrev,]; rm(accPrev)
     # Tell me what's good... please, please, please
-    print(paste0("Step = ",it,", eps = ",signif(output$delta[output$iteration],3),
-                 " with 1/c = ",signif(output$q_thresh[it],2)," and ESS = ",signif(output$ESS,3))); print("")
+    print(paste0("Step = ",it,", eps = ",signif(mean(output$delta),3),
+                 " with 1/c = ",signif(output$q_thresh,2)," and ESS = ",signif(output$ESS,3))); print("")
     # Have we reached convergence yet?
     converger<-ABCconv(output)
   }
