@@ -213,7 +213,7 @@ TestPF<-function(x0,IPMLTP, samplez=10){
 }
 
 Perfy<-TestPF(x0,IPMLTP,samplez = 1)
-mean(Perfy$outperf$distance)
+Perfy$outperf%>%group_by(time)%>%summarise(avESS=mean(ESS),avDist=mean(distance))
 
 xxx<-x0
 xxx[2]<--xxx[2]

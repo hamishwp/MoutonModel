@@ -48,10 +48,10 @@ CombLogTargs<-function(lTargNew)  {
   # Get the right dimensionality
   dimmie<-c(length(lTargNew),length(lTargNew[[ids[1]]]$shat))
   # Template
-  outy<-list(d=rep(-Inf,length(lTargNew)),
+  outy<-list(distance=rep(-Inf,length(lTargNew)),
              shat=array(NA,dim=dimmie))
   # Fill it up!
-  outy$d[ids]     <- vapply(ids,function(i) lTargNew[[i]]$d,1)
+  outy$distance[ids]     <- vapply(ids,function(i) lTargNew[[i]]$distance,1)
   outy$shat[ids,] <- t(sapply(ids,function(i) c(lTargNew[[i]]$shat)))
   
   return(outy)
