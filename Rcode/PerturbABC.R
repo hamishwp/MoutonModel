@@ -48,9 +48,15 @@ pert_GlobSkewCov<-function(outin,lTargPars){
       thth[!acc,]<-theta[sample(1:nrow(theta),sum(!acc),T,prob = wewei),]
       if(sum(!acc)>1){
         thth[!acc,]<-t(apply(thth[!acc,],1,function(tt) sn::rmsn(1, xi = tt, Omega = disty$Omega, alpha = disty$alpha)))
+        # Just in case we want to keep some values constant
+        if(!is.null(lTargPars$fixies)) thth[,lTargPars$fixies]<-lTargPars$initX0[lTargPars$fixies]
+        # Check the Higher Level Priors
         acc[!acc]<-lTargPars$HLP(thth[!acc,],lTargPars)
       } else {
         thth[!acc,]<-as.numeric(t(sn::rmsn(1, xi = thth[!acc,], Omega = disty$Omega, alpha = disty$alpha)))
+        # Just in case we want to keep some values constant
+        if(!is.null(lTargPars$fixies)) thth[,lTargPars$fixies]<-lTargPars$initX0[lTargPars$fixies]
+        # Check the Higher Level Priors
         acc<-lTargPars$HLP(thth,lTargPars)
       }
     }

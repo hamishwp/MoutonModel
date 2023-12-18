@@ -1,7 +1,7 @@
 # warning("Please run 'sudo apt-get install libgsl-dev' in terminal (Linux, Mac only)")
 
 list.of.packages <- c("xtable","magrittr","doParallel","Rfast", "tidyverse",
-                      "abind","R.utils","sn", "boot")
+                      "abind","R.utils","sn", "boot","mc2d")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 
 if(length(new.packages)>0) {

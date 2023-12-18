@@ -130,6 +130,8 @@ initSIR<-list(ProposalDist=ProposalDist,
               Np=ABCNP,
               k=ABCk) 
 
+if(!is.null(fixies)) IPMLTP$fixies<-fixies
+IPMLTP$initX0<-PropN$x0
 
 if(NpCheck){
   print("Checking that number of samples per ABC-step is more than the minimum for the adaptive ABC threshold algorithm")

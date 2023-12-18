@@ -905,7 +905,11 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
   
   while (particles>0){
     # Generate the particles
-    xNew<-initSIR$ProposalDist(initSIR)[1:max(particles,lTargPars$cores),]; SIR<-list(theta=xNew,weightings=rep(1,nrow(xNew)))
+    xNew<-initSIR$ProposalDist(initSIR)[1:max(particles,lTargPars$cores),]
+    # Just in case we want to keep some values constant
+    if(!is.null(lTargPars$fixies)) xNew[,lTargPars$fixies]<-lTargPars$initX0[lTargPars$fixies]
+    # Save these values for later
+    SIR<-list(theta=xNew,weightings=rep(1,nrow(xNew)))
     # Sample from the target distribution
     lTargNew <- mclapply(X = 1:nrow(xNew),
                          FUN = function(c) {

@@ -12,9 +12,9 @@ oneSex<-T
 # Is the observation probability an empirically-based fixed value or sampled as a R.V.?
 fixedObsProb<-T
 # Number of MCMC simulations
-itermax <- 60000
+itermax <- 10000
 stepmax <- 10
-ABCNP<-2500L  # this is the number of particles to pass the ABC threshold
+ABCNP<-1000L  # this is the number of particles to pass the ABC threshold
 ABCk<-1.2 # this sets the number of particles to trial in ABC as N_trial=k*N (see table 2, U. Simola, et al, Bayesian Analysis (2021) 16, Number 2, Adaptive Approximate Bayesian Computation
 # Do we need to calculate the minimum number of particles required for the adaptive-epsilon algorithm?
 calcParts<-F
@@ -52,10 +52,14 @@ perturber<-"pert_GlobSkewCov"
 pNNs<-50
 # Check the minimum number of ABCSMC particles for the adaptive epsilon threshold function
 NpCheck<-F
+# Fixed values - must be integers that represent the order of the parameterisation (theta)
+fixies<-4:12
 # Use these parameters to create a name for the output file from the simjulation
 namer<-paste0(ifelse(simulation,paste0("SIM_pop",poptot,"_yr",yearing),"REAL"),
               "_",algorithm,"_",perturber,"_",ifelse(fixedObsProb,"fixed","beta"),"_",muModel,"Mu_",obsModel,
-              "Obs_",itermax,"_",nbks,"brks_","regbinspace",regbinspace,"_",normsampler,"_",ifelse(manshift,"manshift","autoshift"),"_rand",round(runif(1,max = 1000)))
+              "Obs_",itermax,"_",nbks,"brks_","regbinspace",regbinspace,"_",
+              normsampler,"_",ifelse(manshift,"manshift","autoshift"),
+              ifelse(is.null(fixies),"",paste0("_fixies",paste0(fixies,collapse = ":"))),"_rand",round(runif(1,max = 1000)))
 
 ###################################################################################
 ###################################################################################
