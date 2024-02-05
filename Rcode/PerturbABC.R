@@ -31,38 +31,39 @@ pert_GlobCov<-function(outin,lTargPars){
 pert_GlobSkewCov<-function(outin,lTargPars){
   # Make sure only successful samples contribute to the perturbation
   inds<-Acceptance(outin,lTargPars,outin$delta)
-  # Reduce ewights and previous parameter samples for computation
+  # Reduce weights and previous parameter samples for computation
   wewei<-outin$weightings[inds]; theta<-outin$theta[inds,]
+  if(is.null(lTargPars$fixies)) nfix <- 1:nrow(theta) else nfix <- (1:ncol(theta))[-lTargPars$fixies]
   # Calculate the global mean, skew and covariance matrix, weighted by the distance metric
-  disty<-sn::msn.mle(y = theta)$dp
+  disty<-sn::msn.mle(y = theta[,nfix])$dp
   # Adjust such that normally distributed values remain un-skewed
-  for (i in 1:ncol(theta)) if(!lTargPars$skew[i]) disty$alpha[i]<-0
+  for (i in 1:ncol(theta[,nfix])) if(!lTargPars$skew[nfix][i]) disty$alpha[i]<-0
   # Then sample from the MV-SN distribution
   ResampleSIR<-function(NN) {
     # First sample particles based on the distance function
     thth<-theta[sample(1:nrow(theta),NN,T,prob = wewei),]
     # Perturb the sample
-    thth<-t(apply(thth,1,function(tt) sn::rmsn(1, xi = tt, Omega = disty$Omega, alpha = disty$alpha)))
+    thth[,nfix]<-t(apply(thth[,nfix],1,function(tt) sn::rmsn(1, xi = tt, Omega = disty$Omega, alpha = disty$alpha)))
     acc<-lTargPars$HLP(thth,lTargPars)
     while(sum(!acc)>0){
-      thth[!acc,]<-theta[sample(1:nrow(theta),sum(!acc),T,prob = wewei),]
+      thth[!acc,nfix]<-theta[sample(1:nrow(theta),sum(!acc),T,prob = wewei),nfix]
       if(sum(!acc)>1){
-        thth[!acc,]<-t(apply(thth[!acc,],1,function(tt) sn::rmsn(1, xi = tt, Omega = disty$Omega, alpha = disty$alpha)))
+        thth[!acc,nfix]<-t(apply(thth[!acc,nfix],1,function(tt) sn::rmsn(1, xi = tt, Omega = disty$Omega, alpha = disty$alpha)))
         # Just in case we want to keep some values constant
         if(!is.null(lTargPars$fixies)) for (i in lTargPars$fixies) thth[,i]<-lTargPars$initX0[i]
         # Check the Higher Level Priors
         acc[!acc]<-lTargPars$HLP(thth[!acc,],lTargPars)
       } else {
-        thth[!acc,]<-as.numeric(t(sn::rmsn(1, xi = thth[!acc,], Omega = disty$Omega, alpha = disty$alpha)))
+        thth[!acc,nfix]<-as.numeric(t(sn::rmsn(1, xi = thth[!acc,nfix], Omega = disty$Omega, alpha = disty$alpha)))
         # Just in case we want to keep some values constant
-        if(!is.null(lTargPars$fixies)) thth[,lTargPars$fixies]<-lTargPars$initX0[lTargPars$fixies]
+        if(!is.null(lTargPars$fixies)) for (i in lTargPars$fixies) thth[,i]<-lTargPars$initX0[i]
         # Check the Higher Level Priors
         acc<-lTargPars$HLP(thth,lTargPars)
       }
     }
     # Transition kernel K(theta_i | theta_j) for j = 1,..,N of old particles
     # NOTE WE RELY ON SYMMETRY OF MVN(theta1, theta2, COV) = MVN(theta2, theta1, COV)
-    ptrans<-apply(thth,1,function(tt) sn::dmsn(theta, xi = tt, Omega = disty$Omega, alpha=disty$alpha)%*%wewei)
+    ptrans<-apply(thth[,nfix],1,function(tt) sn::dmsn(theta[,nfix], xi = tt, Omega = disty$Omega, alpha=disty$alpha)%*%wewei)
     # Priors
     prpr<-exp(apply(thth,1,function(tt) lTargPars$priorF(tt)))
     # Associated weights NOTE THAT NORMALISATION IS DONE LATER

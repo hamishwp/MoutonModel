@@ -49,7 +49,7 @@ altWeights<-T
 # Which perturbation function to the aSMC resampler?
 perturber<-"pert_GlobSkewCov"
 # If using a nearest neighbour perturbation, how many neighbours are required?
-pNNs<-50
+# pNNs<-50
 # Check the minimum number of ABCSMC particles for the adaptive epsilon threshold function
 NpCheck<-F
 # Fixed values - must be integers that represent the order of the parameterisation (theta)
