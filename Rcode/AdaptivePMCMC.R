@@ -907,7 +907,7 @@ InitABCSIR<-function(lTarg, lTargPars, initSIR){
     # Generate the particles
     xNew<-initSIR$ProposalDist(initSIR)[1:max(particles,lTargPars$cores),]
     # Just in case we want to keep some values constant
-    if(!is.null(lTargPars$fixies)) xNew[,lTargPars$fixies]<-lTargPars$initX0[lTargPars$fixies]
+    if(!is.null(lTargPars$fixies)) for (i in lTargPars$fixies) xNew[,i]<-lTargPars$initX0[i]
     # Save these values for later
     SIR<-list(theta=xNew,weightings=rep(1,nrow(xNew)))
     # Sample from the target distribution

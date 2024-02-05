@@ -49,7 +49,7 @@ pert_GlobSkewCov<-function(outin,lTargPars){
       if(sum(!acc)>1){
         thth[!acc,]<-t(apply(thth[!acc,],1,function(tt) sn::rmsn(1, xi = tt, Omega = disty$Omega, alpha = disty$alpha)))
         # Just in case we want to keep some values constant
-        if(!is.null(lTargPars$fixies)) thth[,lTargPars$fixies]<-lTargPars$initX0[lTargPars$fixies]
+        if(!is.null(lTargPars$fixies)) for (i in lTargPars$fixies) thth[,i]<-lTargPars$initX0[i]
         # Check the Higher Level Priors
         acc[!acc]<-lTargPars$HLP(thth[!acc,],lTargPars)
       } else {
